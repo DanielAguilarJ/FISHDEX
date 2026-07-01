@@ -50,6 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       
       if (mounted) {
         final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('has_active_session', true);
         final profileSetupCompleted =
             prefs.getBool('profile_setup_completed') ?? false;
         if (profileSetupCompleted) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -55,11 +56,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return;
     }
 
-    // 2. Verificar si está autenticado
+    // 2. Verificar si está autenticado (con timeout de 6s)
     try {
-      final authState = await ref.read(authStateProvider.future);
+      final authState = await ref
+          .read(authStateProvider.future)
+          .timeout(const Duration(seconds: 6));
+
       if (authState != null) {
-        // Autenticado → verificar si completó el setup de perfil
+        // Autenticado → marcar sesión activa y verificar profile setup
+        await prefs.setBool('has_active_session', true);
         final profileSetupCompleted =
             prefs.getBool('profile_setup_completed') ?? false;
         if (!profileSetupCompleted) {
@@ -68,12 +73,42 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           if (mounted) context.go('/map');
         }
       } else {
-        // No autenticado → Login
+        // Definitivamente no autenticado (servidor respondió 401)
+        await prefs.setBool('has_active_session', false);
         if (mounted) context.go('/login');
       }
+    } on NetworkAuthException catch (e) {
+      // Error de red/timeout → verificar si tenía sesión previa
+      debugPrint('⚠️ Splash NetworkAuthException: $e');
+      _handleNetworkError(prefs);
+    } on TimeoutException {
+      // Timeout extra por si el Future no respeta el timeout interno
+      debugPrint('⚠️ Splash TimeoutException');
+      _handleNetworkError(prefs);
     } catch (e) {
-      // Error de conexión → ir a login (tiene modo demo)
-      if (mounted) context.go('/login');
+      // Cualquier otro error → verificar sesión previa
+      debugPrint('⚠️ Splash error genérico: $e');
+      _handleNetworkError(prefs);
+    }
+  }
+
+  /// Maneja errores de red: si el usuario tenía sesión activa, dejarlo pasar.
+  void _handleNetworkError(SharedPreferences prefs) {
+    if (!mounted) return;
+
+    final hadActiveSession = prefs.getBool('has_active_session') ?? false;
+    if (hadActiveSession) {
+      // El usuario tenía sesión antes → es error de red, dejarlo entrar
+      final profileSetupCompleted =
+          prefs.getBool('profile_setup_completed') ?? false;
+      if (!profileSetupCompleted) {
+        context.go('/profile-setup');
+      } else {
+        context.go('/map');
+      }
+    } else {
+      // Nunca tuvo sesión → ir a login
+      context.go('/login');
     }
   }
 

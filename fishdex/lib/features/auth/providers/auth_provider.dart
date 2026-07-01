@@ -1,16 +1,50 @@
+import 'dart:async';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../data/repositories/auth_repository.dart';
 
+/// Excepción personalizada para errores de red/timeout
+class NetworkAuthException implements Exception {
+  final String message;
+  const NetworkAuthException(this.message);
+  @override
+  String toString() => 'NetworkAuthException: $message';
+}
+
 /// Estado de autenticación - observa la sesión actual del usuario
+/// Maneja timeout de 6s y diferencia entre error 401 (sin sesión) vs error de red.
 final authStateProvider = FutureProvider<models.User?>((ref) async {
   final authRepo = ref.watch(authRepositoryProvider);
   try {
-    return await authRepo.getCurrentUser();
+    final user = await authRepo.getCurrentUser().timeout(
+      const Duration(seconds: 6),
+      onTimeout: () {
+        throw const NetworkAuthException(
+          'Timeout al verificar sesión (6s)',
+        );
+      },
+    );
+    return user;
+  } on AppwriteException catch (e) {
+    debugPrint('🔐 Auth check AppwriteException: [${e.code}] ${e.message}');
+    if (e.code == 401) {
+      // 401 = El servidor respondió pero no hay sesión activa
+      return null;
+    }
+    // Otros códigos (500, etc.) → posible error de red/servidor
+    throw NetworkAuthException('Appwrite error [${e.code}]: ${e.message}');
+  } on NetworkAuthException {
+    // Re-lanzar para que Splash la maneje diferente
+    rethrow;
+  } on TimeoutException {
+    throw const NetworkAuthException('Timeout al contactar servidor');
   } catch (e) {
-    return null;
+    debugPrint('🔐 Auth check error inesperado: $e');
+    // Errores de red (SocketException, etc.) → lanzar NetworkAuthException
+    throw NetworkAuthException('Error de conexión: $e');
   }
 });
 
