@@ -1,0 +1,31 @@
+# Ignorar archivos sensibles y generados
+.env
+ai-server/model/*.pt
+ai-server/model/*.pth
+ai-server/model/*.onnx
+
+# Flutter
+fishdex/.dart_tool/
+fishdex/build/
+fishdex/.flutter-plugins
+fishdex/.flutter-plugins-dependencies
+fishdex/.packages
+fishdex/pubspec.lock
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes locales
+mariadb-data/
+redis-data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

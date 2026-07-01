@@ -1,0 +1,26 @@
+# =============================================================================
+# requirements.txt - Dependencias del pipeline de reentrenamiento FishDex
+#
+# Instalar con: pip install -r requirements.txt
+# Se recomienda usar un entorno virtual:
+#   python -m venv venv
+#   source venv/bin/activate
+#   pip install -r requirements.txt
+# =============================================================================
+
+# --- Exportacion de datos (export_data.py) ---
+httpx>=0.27.0
+
+# --- Preprocesamiento (preprocess.py) ---
+opencv-python>=4.9.0
+numpy>=1.26.0
+
+# --- Entrenamiento y evaluacion (train.py, evaluate.py) ---
+torch>=2.2.0
+torchvision>=0.17.0
+tensorboard>=2.16.0
+scikit-learn>=1.4.0
+Pillow>=10.2.0
+
+# --- Utilidades generales ---
+tqdm>=4.66.0

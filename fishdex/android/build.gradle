@@ -1,0 +1,33 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = "../build"
+
+// Fix: Definir la extensión 'flutter' SOLO para plugins de librería
+// que la necesitan (geolocator_android, camera_android, etc.)
+// NO se aplica al módulo :app (que tiene su propia configuración)
+subprojects { subproject ->
+    if (subproject.name != "app") {
+        subproject.ext.set("flutter", [
+            compileSdkVersion: 34,
+            minSdkVersion: 24,
+            targetSdkVersion: 34,
+            ndkVersion: "25.1.8937393",
+            versionCode: 1,
+            versionName: "1.0.0"
+        ])
+    }
+    subproject.buildDir = "${rootProject.buildDir}/${subproject.name}"
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
