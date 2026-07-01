@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
-import '../../features/auth/providers/auth_provider.dart';
+import '../../features/onboarding/presentation/onboarding_screen.dart';
+import '../../features/onboarding/presentation/profile_setup_screen.dart';
 import '../shell/main_shell.dart';
 import '../../features/map/presentation/map_screen.dart';
 import '../../features/camera/presentation/camera_screen.dart';
@@ -14,22 +14,38 @@ import '../../features/profile/presentation/profile_screen.dart';
 
 /// Provider del router de la aplicación
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
-
   return GoRouter(
     initialLocation: '/splash',
     debugLogDiagnostics: true,
     
     // Redirigir según estado de autenticación
-    // NOTA: Desactivado temporalmente para permitir modo demo sin backend
+    // NOTA: Se permite navegación libre en rutas de auth/onboarding y modo demo
     redirect: (context, state) {
-      // Permitir navegación libre en modo demo
+      final currentPath = state.uri.path;
+
+      // Rutas que no requieren autenticación
+      const publicRoutes = [
+        '/splash',
+        '/login',
+        '/register',
+        '/onboarding',
+        '/profile-setup',
+      ];
+
+      // Permitir navegación libre en rutas públicas
+      if (publicRoutes.contains(currentPath)) {
+        return null;
+      }
+
+      // Para rutas protegidas, verificar auth state
+      // En modo demo (authState es error/null) permitimos navegación
+      // porque el usuario puede haber entrado vía "MODO DEMO"
       return null;
     },
 
     routes: [
       // =====================================================================
-      // RUTAS DE AUTENTICACIÓN
+      // RUTAS DE AUTENTICACIÓN Y ONBOARDING
       // =====================================================================
       GoRoute(
         path: '/splash',
@@ -45,6 +61,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/register',
         name: 'register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding',
+        builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/profile-setup',
+        name: 'profile-setup',
+        builder: (context, state) => const ProfileSetupScreen(),
       ),
 
       // =====================================================================

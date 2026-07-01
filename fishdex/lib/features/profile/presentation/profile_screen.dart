@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../achievements/presentation/achievements_screen.dart';
+import '../providers/profile_setup_provider.dart';
 
 /// Pantalla de Perfil completa del usuario
 /// Incluye avatar, nivel, XP, estadísticas, logros recientes y timeline
@@ -13,16 +15,32 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
+    final profileAsync = ref.watch(userProfileProvider);
 
     return Scaffold(
       body: authState.when(
         data: (user) {
-          if (user == null) return const SizedBox();
+          final profile = profileAsync.valueOrNull;
+          final displayName =
+              profile?.username.isNotEmpty == true
+                  ? profile!.username
+                  : (user?.name ?? 'Pescador');
+          final displayEmail = user?.email ?? 'Modo Demo';
+          final displayCity = profile?.city ?? '';
+          final avatarPath = profile?.avatarPath;
+
           return CustomScrollView(
             slivers: [
               // Header con avatar y nivel
               SliverToBoxAdapter(
-                child: _buildProfileHeader(context, ref, user.name, user.email),
+                child: _buildProfileHeader(
+                  context,
+                  ref,
+                  displayName,
+                  displayEmail,
+                  displayCity,
+                  avatarPath,
+                ),
               ),
               // Stats grid
               SliverToBoxAdapter(
@@ -44,7 +62,35 @@ class ProfileScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Error: $error')),
+        error: (error, _) {
+          // En modo demo, authState da error → mostrar perfil con datos locales
+          final profile = profileAsync.valueOrNull;
+          final displayName =
+              profile?.username.isNotEmpty == true
+                  ? profile!.username
+                  : 'Pescador';
+          final displayCity = profile?.city ?? '';
+          final avatarPath = profile?.avatarPath;
+
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _buildProfileHeader(
+                  context,
+                  ref,
+                  displayName,
+                  'Modo Demo',
+                  displayCity,
+                  avatarPath,
+                ),
+              ),
+              SliverToBoxAdapter(child: _buildStatsGrid()),
+              SliverToBoxAdapter(child: _buildRecentAchievements(context)),
+              SliverToBoxAdapter(child: _buildActivityTimeline()),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
+          );
+        },
       ),
     );
   }
@@ -54,6 +100,8 @@ class ProfileScreen extends ConsumerWidget {
     WidgetRef ref,
     String name,
     String email,
+    String city,
+    String? avatarPath,
   ) {
     return Container(
       padding: EdgeInsets.only(
@@ -84,14 +132,17 @@ class ProfileScreen extends ConsumerWidget {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.settings, color: Colors.white54),
-                    onPressed: () {},
+                    icon: const Icon(Icons.edit, color: Colors.white54),
+                    tooltip: 'Editar perfil',
+                    onPressed: () => context.go('/profile-setup'),
                   ),
                   IconButton(
                     icon: const Icon(Icons.logout, color: Colors.white54),
                     onPressed: () async {
-                      final authRepo = ref.read(authRepositoryProvider);
-                      await authRepo.logout();
+                      try {
+                        final authRepo = ref.read(authRepositoryProvider);
+                        await authRepo.logout();
+                      } catch (_) {}
                       ref.invalidate(authStateProvider);
                       if (context.mounted) context.go('/login');
                     },
@@ -101,38 +152,14 @@ class ProfileScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 24),
-          
-          // Avatar grande
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: AppTheme.primaryGradient,
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.accentBlue.withOpacity(0.3),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : 'P',
-                style: const TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
+
+          // Avatar — muestra foto real si existe
+          _buildAvatar(name, avatarPath),
           const SizedBox(height: 16),
-          
+
           // Nombre
           Text(
-            name.isNotEmpty ? name : 'Pescador',
+            name,
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 4),
@@ -143,8 +170,29 @@ class ProfileScreen extends ConsumerWidget {
               fontSize: 14,
             ),
           ),
+
+          // Ciudad
+          if (city.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.location_on,
+                    color: AppTheme.teal.withOpacity(0.7), size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  city,
+                  style: TextStyle(
+                    color: AppTheme.teal.withOpacity(0.8),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ],
+
           const SizedBox(height: 20),
-          
+
           // Nivel y XP
           Container(
             padding: const EdgeInsets.all(16),
@@ -217,6 +265,46 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildAvatar(String name, String? avatarPath) {
+    // Intentar cargar foto real
+    final hasRealAvatar =
+        avatarPath != null && File(avatarPath).existsSync();
+
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: hasRealAvatar ? null : AppTheme.primaryGradient,
+        image: hasRealAvatar
+            ? DecorationImage(
+                image: FileImage(File(avatarPath)),
+                fit: BoxFit.cover,
+              )
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentBlue.withOpacity(0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: hasRealAvatar
+          ? null
+          : Center(
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : 'P',
+                style: const TextStyle(
+                  fontSize: 40,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+    );
+  }
+
   Widget _buildStatsGrid() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -235,25 +323,36 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildStatTile(Icons.remove_red_eye, '0', 'Avistamientos')),
+              Expanded(
+                  child: _buildStatTile(
+                      Icons.remove_red_eye, '0', 'Avistamientos')),
               const SizedBox(width: 10),
-              Expanded(child: _buildStatTile(Icons.phishing, '0', 'Especies')),
+              Expanded(
+                  child: _buildStatTile(Icons.phishing, '0', 'Especies')),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _buildStatTile(Icons.straighten, '-- cm', 'Pez más grande')),
+              Expanded(
+                  child: _buildStatTile(
+                      Icons.straighten, '-- cm', 'Pez más grande')),
               const SizedBox(width: 10),
-              Expanded(child: _buildStatTile(Icons.location_on, '0', 'Ubicaciones')),
+              Expanded(
+                  child:
+                      _buildStatTile(Icons.location_on, '0', 'Ubicaciones')),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _buildStatTile(Icons.calendar_today, '1', 'Días activos')),
+              Expanded(
+                  child: _buildStatTile(
+                      Icons.calendar_today, '1', 'Días activos')),
               const SizedBox(width: 10),
-              Expanded(child: _buildStatTile(Icons.local_fire_department, '0', 'Racha actual')),
+              Expanded(
+                  child: _buildStatTile(
+                      Icons.local_fire_department, '0', 'Racha actual')),
             ],
           ),
         ],
@@ -337,7 +436,6 @@ class ProfileScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          // Logro desbloqueado de ejemplo
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -386,7 +484,8 @@ class ProfileScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.check_circle, color: AppTheme.successGreen, size: 20),
+                const Icon(Icons.check_circle,
+                    color: AppTheme.successGreen, size: 20),
               ],
             ),
           ),
@@ -411,7 +510,6 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Timeline vacía
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(

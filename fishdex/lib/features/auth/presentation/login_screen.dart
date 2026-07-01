@@ -2,6 +2,7 @@ import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../providers/auth_provider.dart';
@@ -48,7 +49,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ref.invalidate(authStateProvider);
       
       if (mounted) {
-        context.go('/map');
+        final prefs = await SharedPreferences.getInstance();
+        final profileSetupCompleted =
+            prefs.getBool('profile_setup_completed') ?? false;
+        if (profileSetupCompleted) {
+          context.go('/map');
+        } else {
+          context.go('/profile-setup');
+        }
       }
     } catch (e) {
       setState(() {
@@ -285,7 +293,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     width: double.infinity,
                     height: 48,
                     child: OutlinedButton.icon(
-                      onPressed: () => context.go('/map'),
+                      onPressed: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        final profileSetupCompleted =
+                            prefs.getBool('profile_setup_completed') ?? false;
+                        if (mounted) {
+                          if (profileSetupCompleted) {
+                            context.go('/map');
+                          } else {
+                            context.go('/profile-setup');
+                          }
+                        }
+                      },
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('MODO DEMO (sin servidor)'),
                       style: OutlinedButton.styleFrom(

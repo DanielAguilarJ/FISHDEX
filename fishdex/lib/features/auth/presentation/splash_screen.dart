@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -42,10 +43,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     });
   }
 
-  void _checkAuth() {
-    // Ir directo al login (modo demo disponible ahí)
-    if (mounted) {
-      context.go('/login');
+  Future<void> _checkAuth() async {
+    if (!mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. Verificar si ya completó el onboarding informativo
+    final onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+    if (!onboardingCompleted) {
+      if (mounted) context.go('/onboarding');
+      return;
+    }
+
+    // 2. Verificar si está autenticado
+    try {
+      final authState = await ref.read(authStateProvider.future);
+      if (authState != null) {
+        // Autenticado → verificar si completó el setup de perfil
+        final profileSetupCompleted =
+            prefs.getBool('profile_setup_completed') ?? false;
+        if (!profileSetupCompleted) {
+          if (mounted) context.go('/profile-setup');
+        } else {
+          if (mounted) context.go('/map');
+        }
+      } else {
+        // No autenticado → Login
+        if (mounted) context.go('/login');
+      }
+    } catch (e) {
+      // Error de conexión → ir a login (tiene modo demo)
+      if (mounted) context.go('/login');
     }
   }
 
