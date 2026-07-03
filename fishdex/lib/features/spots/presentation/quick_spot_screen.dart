@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../data/repositories/fishing_spots_repository.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../map/providers/map_providers.dart';
 
 /// Pantalla de marcado rápido de spot de pesca al estilo acción rápida
@@ -79,6 +81,41 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
     setState(() => _isSaving = true);
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
+
+      if (isDemoMode) {
+        // MODO DEMO: simular guardado y mostrar éxito sin llamar a Appwrite
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '¡Spot "$name" marcado (modo demo)!\nRegistra una cuenta para guardarlo permanentemente.',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.successGreen,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        context.go('/map');
+        return;
+      }
+
+      // MODO REAL: obtener userId del usuario autenticado
+      final authUser = await ref.read(authStateProvider.future);
+      final userId = authUser?.$id ?? 'anonymous';
+
       final databases = ref.read(appwriteDatabasesProvider);
       final repo = FishingSpotsRepository(databases: databases);
 
@@ -87,7 +124,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
         latitude: location.latitude,
         longitude: location.longitude,
         waterType: _selectedWaterType,
-        createdBy: 'user',
+        createdBy: userId,
         description: _descController.text.trim().isEmpty
             ? null
             : _descController.text.trim(),

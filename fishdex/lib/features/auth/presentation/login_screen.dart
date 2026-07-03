@@ -51,6 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('has_active_session', true);
+        await prefs.setBool('is_demo_mode', false); // limpiar flag demo al hacer login real
         final profileSetupCompleted =
             prefs.getBool('profile_setup_completed') ?? false;
         if (profileSetupCompleted) {
@@ -296,15 +297,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () async {
                         final prefs = await SharedPreferences.getInstance();
-                        final profileSetupCompleted =
-                            prefs.getBool('profile_setup_completed') ?? false;
-                        if (mounted) {
-                          if (profileSetupCompleted) {
-                            context.go('/map');
-                          } else {
-                            context.go('/profile-setup');
-                          }
-                        }
+                        await prefs.setBool('is_demo_mode', true);
+                        await prefs.setBool('onboarding_completed', true);
+                        if (context.mounted) context.go('/map');
                       },
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('MODO DEMO (sin servidor)'),

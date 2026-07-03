@@ -56,7 +56,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       return;
     }
 
-    // 2. Verificar si está autenticado (con timeout de 6s)
+    // 2. Verificar si el usuario eligió modo demo anteriormente
+    final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
+    if (isDemoMode) {
+      if (mounted) context.go('/map');
+      return;
+    }
+
+    // 3. Intentar verificar sesión de Appwrite
     try {
       final authState = await ref
           .read(authStateProvider.future)
@@ -65,6 +72,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       if (authState != null) {
         // Autenticado → marcar sesión activa y verificar profile setup
         await prefs.setBool('has_active_session', true);
+        await prefs.setBool('is_demo_mode', false);
         final profileSetupCompleted =
             prefs.getBool('profile_setup_completed') ?? false;
         if (!profileSetupCompleted) {
@@ -73,41 +81,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
           if (mounted) context.go('/map');
         }
       } else {
-        // Definitivamente no autenticado (servidor respondió 401)
+        // Servidor respondió 401: no hay sesión activa → ir a login
         await prefs.setBool('has_active_session', false);
         if (mounted) context.go('/login');
       }
     } on NetworkAuthException catch (e) {
-      // Error de red/timeout → verificar si tenía sesión previa
       debugPrint('⚠️ Splash NetworkAuthException: $e');
       _handleNetworkError(prefs);
     } on TimeoutException {
-      // Timeout extra por si el Future no respeta el timeout interno
       debugPrint('⚠️ Splash TimeoutException');
       _handleNetworkError(prefs);
     } catch (e) {
-      // Cualquier otro error → verificar sesión previa
       debugPrint('⚠️ Splash error genérico: $e');
       _handleNetworkError(prefs);
     }
   }
 
-  /// Maneja errores de red: si el usuario tenía sesión activa, dejarlo pasar.
+  /// Maneja errores de red/timeout.
+  /// Si el usuario estaba en demo o tenía sesión previa, lo deja entrar.
   void _handleNetworkError(SharedPreferences prefs) {
     if (!mounted) return;
 
+    final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
     final hadActiveSession = prefs.getBool('has_active_session') ?? false;
-    if (hadActiveSession) {
-      // El usuario tenía sesión antes → es error de red, dejarlo entrar
+
+    if (isDemoMode || hadActiveSession) {
+      // Demo mode o sesión previa → error de red, dejarlo pasar
       final profileSetupCompleted =
           prefs.getBool('profile_setup_completed') ?? false;
-      if (!profileSetupCompleted) {
-        context.go('/profile-setup');
-      } else {
-        context.go('/map');
-      }
+      context.go(profileSetupCompleted ? '/map' : '/profile-setup');
     } else {
-      // Nunca tuvo sesión → ir a login
+      // Nunca tuvo sesión ni eligió demo → ir a login
       context.go('/login');
     }
   }
