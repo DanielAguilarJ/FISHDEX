@@ -48,9 +48,10 @@ class IdentifyService {
         request.fields['user_id'] = userId;
       }
 
-      // Enviar request
+      // Enviar request — timeout 90s porque HF Spaces gratuitos
+      // pueden tardar ~30s en despertar tras 48h de inactividad
       final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 60),
+        const Duration(seconds: 90),
       );
       final response = await http.Response.fromStream(streamedResponse);
 
