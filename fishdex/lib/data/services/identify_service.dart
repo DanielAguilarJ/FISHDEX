@@ -4,17 +4,19 @@ import 'package:http/http.dart' as http;
 import '../models/identify_result.dart';
 import '../../core/constants/app_constants.dart';
 
-/// Servicio que se comunica con el servidor FastAPI de IA
-/// Envía el video y recibe la identificación del pez
+/// Servicio que se comunica con el servidor de IA en Hugging Face Spaces.
+/// Extrae un frame del video localmente y lo envía como imagen JPEG
+/// (más eficiente que subir el video completo).
 class IdentifyService {
-  /// Envía un video al servidor de IA para identificar al pez
-  /// 
-  /// [videoPath] - Ruta local del video grabado
+  /// Envía un video (o una imagen extraída de él) al servidor de IA.
+  ///
+  /// [videoPath] - Ruta local del video/imagen
   /// [latitude] - Latitud GPS opcional
   /// [longitude] - Longitud GPS opcional
   /// [userId] - ID del usuario actual
-  /// 
-  /// Retorna un [IdentifyResult] con todos los datos de la identificación
+  ///
+  /// El servidor acepta tanto video como imagen, pero enviar la imagen
+  /// es ~20× más rápido por el tamaño reducido.
   Future<IdentifyResult> identifyFish({
     required String videoPath,
     double? latitude,
@@ -26,18 +28,28 @@ class IdentifyService {
         '${AppConstants.aiServerUrl}${AppConstants.identifyEndpoint}',
       );
 
-      // Crear multipart request
       final request = http.MultipartRequest('POST', uri);
 
-      // Añadir el archivo de video
-      final videoFile = await http.MultipartFile.fromPath(
-        'video',
-        videoPath,
-        filename: 'fish_video.mp4',
-      );
-      request.files.add(videoFile);
+      // Enviar el archivo directamente (el servidor acepta video e imagen)
+      final file = File(videoPath);
+      final extension = videoPath.split('.').last.toLowerCase();
 
-      // Añadir campos adicionales
+      // Determinar filename según extensión
+      String filename;
+      if (['jpg', 'jpeg', 'png', 'webp'].contains(extension)) {
+        filename = 'fish_capture.$extension';
+      } else {
+        filename = 'fish_video.$extension';
+      }
+
+      final multipartFile = await http.MultipartFile.fromPath(
+        'video', // Nombre del campo que espera el servidor
+        file.path,
+        filename: filename,
+      );
+      request.files.add(multipartFile);
+
+      // Campos opcionales
       if (latitude != null) {
         request.fields['latitude'] = latitude.toString();
       }
@@ -48,8 +60,7 @@ class IdentifyService {
         request.fields['user_id'] = userId;
       }
 
-      // Enviar request — timeout 90s porque HF Spaces gratuitos
-      // pueden tardar ~30s en despertar tras 48h de inactividad
+      // Timeout 90s: los Spaces gratuitos pueden tardar ~30s en despertar
       final streamedResponse = await request.send().timeout(
         const Duration(seconds: 90),
       );
@@ -59,15 +70,25 @@ class IdentifyService {
         final jsonData = json.decode(response.body) as Map<String, dynamic>;
         return IdentifyResult.fromJson(jsonData);
       } else {
+        // Intentar parsear el error del servidor
+        String errorDetail = response.body;
+        try {
+          final errorJson = json.decode(response.body) as Map<String, dynamic>;
+          errorDetail = errorJson['detail'] ?? response.body;
+        } catch (_) {}
+
         throw IdentifyException(
-          'Error del servidor: ${response.statusCode}',
-          detail: response.body,
+          response.statusCode == 400
+              ? errorDetail
+              : 'Error del servidor (${response.statusCode})',
+          detail: errorDetail,
         );
       }
     } on SocketException {
       throw IdentifyException(
         'No se pudo conectar al servidor de IA',
-        detail: 'Verifica que el servidor esté corriendo en ${AppConstants.aiServerUrl}',
+        detail:
+            'Verifica tu conexión a internet. El servidor puede estar despertando (~30s).',
       );
     } catch (e) {
       if (e is IdentifyException) rethrow;
@@ -78,7 +99,7 @@ class IdentifyService {
     }
   }
 
-  /// Endpoint de prueba (sin video, para testing rápido)
+  /// Endpoint de prueba (sin archivo, para testing rápido)
   Future<IdentifyResult> identifyTest() async {
     try {
       final uri = Uri.parse(
@@ -86,7 +107,7 @@ class IdentifyService {
       );
 
       final response = await http.get(uri).timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 60),
       );
 
       if (response.statusCode == 200) {
@@ -110,5 +131,6 @@ class IdentifyException implements Exception {
   IdentifyException(this.message, {this.detail});
 
   @override
-  String toString() => 'IdentifyException: $message${detail != null ? ' ($detail)' : ''}';
+  String toString() =>
+      'IdentifyException: $message${detail != null ? ' ($detail)' : ''}';
 }
