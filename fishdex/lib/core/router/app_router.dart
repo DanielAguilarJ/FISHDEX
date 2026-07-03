@@ -11,6 +11,8 @@ import '../../features/camera/presentation/camera_screen.dart';
 import '../../features/collection/presentation/collection_screen.dart';
 import '../../features/ranking/presentation/ranking_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/gallery/presentation/gallery_screen.dart';
+import '../../features/spots/presentation/quick_spot_screen.dart';
 
 /// Provider del router de la aplicación
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -112,6 +114,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             name: 'profile',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: ProfileScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/gallery',
+            name: 'gallery',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: GalleryScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/quick-spot',
+            name: 'quick-spot',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: QuickSpotScreen(),
             ),
           ),
         ],
