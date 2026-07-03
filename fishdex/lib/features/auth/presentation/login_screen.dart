@@ -61,9 +61,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Email o contraseña incorrectos';
-      });
+      String errorMsg = 'Error al iniciar sesión';
+      if (e is AppwriteException) {
+        switch (e.code) {
+          case 401:
+            errorMsg = 'Email o contraseña incorrectos';
+          case 429:
+            errorMsg = 'Demasiados intentos. Espera un momento';
+          case 500:
+            errorMsg = 'Error del servidor. Inténtalo más tarde';
+          default:
+            errorMsg = e.message ?? 'Error al iniciar sesión';
+        }
+      } else {
+        errorMsg = 'Sin conexión. Verifica tu internet';
+      }
+      setState(() => _errorMessage = errorMsg);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

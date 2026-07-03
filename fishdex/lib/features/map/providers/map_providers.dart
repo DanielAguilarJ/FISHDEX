@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/providers/appwrite_providers.dart';
 
 // =============================================================================
 // MODELO DE DATOS - Fishing Spot
@@ -87,19 +88,58 @@ final userLocationProvider = StreamProvider<LatLng?>((ref) async* {
 // PROVIDER DE FISHING SPOTS
 // =============================================================================
 
-/// Provider que carga los fishing spots desde Appwrite
-/// NOTA: Por ahora usa datos simulados. Se conectará a Appwrite en la integración.
+/// Provider que carga los fishing spots desde Appwrite.
+/// Usa datos reales de la base de datos; si falla, devuelve spots de ejemplo.
 final fishingSpotsProvider = FutureProvider<List<FishingSpotData>>((ref) async {
-  // TODO: Conectar con Appwrite Databases cuando esté configurado
-  // final databases = ref.watch(appwriteDatabasesProvider);
-  // final response = await databases.listDocuments(
-  //   databaseId: AppConstants.databaseId,
-  //   collectionId: AppConstants.fishingSpotsCollection,
-  // );
-  
-  // Por ahora, devolver datos simulados para testing
-  return _generateMockSpots(ref);
+  try {
+    final databases = ref.read(appwriteDatabasesProvider);
+    final response = await databases.listDocuments(
+      databaseId: AppConstants.databaseId,
+      collectionId: AppConstants.fishingSpotsCollection,
+    );
+
+    if (response.documents.isEmpty) return _generateMockSpots(ref);
+
+    return response.documents.map((doc) {
+      final data = doc.data;
+      return FishingSpotData(
+        id: doc.$id,
+        name: data['name'] ?? '',
+        latitude: (data['latitude'] as num).toDouble(),
+        longitude: (data['longitude'] as num).toDouble(),
+        waterType: data['water_type'] ?? 'rio',
+        totalCatches: (data['total_catches'] as num?)?.toInt() ?? 0,
+        commonSpecies: _parseSpecies(data['common_species']),
+        hasRareFish: data['has_rare_fish'] ?? false,
+        lastCatchPhoto: data['last_catch_photo'] as String?,
+        lastCatchDate: data['last_catch_date'] != null
+            ? DateTime.tryParse(data['last_catch_date'] as String)
+            : null,
+        description: data['description'] as String?,
+      );
+    }).toList();
+  } catch (e) {
+    // Si falla Appwrite (sin autenticación, red, etc.) devolver spots de ejemplo
+    return _generateMockSpots(ref);
+  }
 });
+
+/// Parsea el campo common_species que puede ser List o String JSON
+List<String> _parseSpecies(dynamic data) {
+  if (data == null) return [];
+  if (data is List) return data.cast<String>();
+  if (data is String) {
+    return data
+        .replaceAll('[', '')
+        .replaceAll(']', '')
+        .replaceAll('"', '')
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+  return [];
+}
 
 /// Genera spots de prueba cerca de la ubicación del usuario
 List<FishingSpotData> _generateMockSpots(Ref ref) {

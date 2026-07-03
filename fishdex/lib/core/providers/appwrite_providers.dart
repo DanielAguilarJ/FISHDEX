@@ -5,8 +5,7 @@ import '../constants/app_constants.dart';
 /// Cliente Appwrite global (para acceso rápido como ping)
 final Client appwriteClient = Client()
     .setEndpoint(AppConstants.appwriteEndpoint)
-    .setProject(AppConstants.appwriteProjectId)
-    .setSelfSigned(status: true);
+    .setProject(AppConstants.appwriteProjectId);
 
 /// Provider del cliente Appwrite (singleton)
 final appwriteClientProvider = Provider<Client>((ref) {

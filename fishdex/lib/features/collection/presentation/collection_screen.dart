@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../data/models/identify_result.dart';
+import '../../auth/providers/auth_provider.dart';
 
 /// Datos de un pez en la colección del usuario
 class CollectionFish {
@@ -26,74 +29,114 @@ class CollectionFish {
   });
 }
 
-/// Provider de la colección del usuario (mock por ahora)
-final collectionProvider = Provider<List<CollectionFish>>((ref) {
-  // TODO: Conectar con Appwrite cuando esté configurado
-  // Datos de ejemplo para mostrar la UI
-  return [
-    CollectionFish(
-      fishId: 'FISH-1234',
-      species: 'Trucha Arcoíris',
-      rarity: 'common',
-      sizeCm: 35.2,
-      timesSpotted: 3,
-      firstSeen: DateTime.now().subtract(const Duration(days: 15)),
-    ),
-    CollectionFish(
-      fishId: 'FISH-5678',
-      species: 'Lucio',
-      rarity: 'uncommon',
-      sizeCm: 72.0,
-      timesSpotted: 1,
-      firstSeen: DateTime.now().subtract(const Duration(days: 7)),
-    ),
-    CollectionFish(
-      fishId: 'FISH-9012',
-      species: 'Siluro',
-      rarity: 'rare',
-      sizeCm: 145.5,
-      timesSpotted: 1,
-      firstSeen: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-    // Peces no descubiertos (siluetas)
-    CollectionFish(
-      fishId: 'FISH-????',
-      species: '???',
-      rarity: 'common',
-      sizeCm: 0,
-      timesSpotted: 0,
-      firstSeen: DateTime.now(),
-      isDiscovered: false,
-    ),
-    CollectionFish(
-      fishId: 'FISH-????',
-      species: '???',
-      rarity: 'uncommon',
-      sizeCm: 0,
-      timesSpotted: 0,
-      firstSeen: DateTime.now(),
-      isDiscovered: false,
-    ),
-    CollectionFish(
-      fishId: 'FISH-????',
-      species: '???',
-      rarity: 'rare',
-      sizeCm: 0,
-      timesSpotted: 0,
-      firstSeen: DateTime.now(),
-      isDiscovered: false,
-    ),
-    CollectionFish(
-      fishId: 'FISH-????',
-      species: '???',
-      rarity: 'legendary',
-      sizeCm: 0,
-      timesSpotted: 0,
-      firstSeen: DateTime.now(),
-      isDiscovered: false,
-    ),
-  ];
+/// Provider de la colección del usuario — carga desde fish_individuals de Appwrite.
+/// Fallback a datos de ejemplo si no hay sesión o falla la conexión.
+final collectionProvider = FutureProvider<List<CollectionFish>>((ref) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
+    if (isDemoMode) return _mockCollection();
+
+    final authUser = ref.read(authStateProvider).valueOrNull;
+    if (authUser == null) return _mockCollection();
+
+    final databases = ref.read(appwriteDatabasesProvider);
+    final response = await databases.listDocuments(
+      databaseId: AppConstants.databaseId,
+      collectionId: AppConstants.fishIndividualsCollection,
+      queries: [
+        // Peces vistos por este usuario (como primer descubridor)
+        'equal("first_seen_by", ["${authUser.$id}"])',
+        'orderDesc("\$createdAt")',
+        'limit(100)',
+      ],
+    );
+
+    if (response.documents.isEmpty) return _mockCollection();
+
+    return response.documents.map((doc) {
+      final data = doc.data;
+      return CollectionFish(
+        fishId: doc.$id,
+        species: data['species'] as String? ?? 'Desconocido',
+        rarity: data['rarity'] as String? ?? 'common',
+        sizeCm: (data['estimated_size_cm'] as num?)?.toDouble() ?? 0.0,
+        timesSpotted: (data['total_sightings'] as num?)?.toInt() ?? 1,
+        firstSeen: data['first_seen_date'] != null
+            ? DateTime.tryParse(data['first_seen_date'] as String) ??
+                DateTime.now()
+            : DateTime.now(),
+        isDiscovered: true,
+      );
+    }).toList();
+  } catch (e) {
+    return _mockCollection();
+  }
 });
+
+/// Datos de ejemplo (usados en demo mode y como fallback)
+List<CollectionFish> _mockCollection() => [
+      CollectionFish(
+        fishId: 'FISH-1234',
+        species: 'Trucha Arcoíris',
+        rarity: 'common',
+        sizeCm: 35.2,
+        timesSpotted: 3,
+        firstSeen: DateTime.now().subtract(const Duration(days: 15)),
+      ),
+      CollectionFish(
+        fishId: 'FISH-5678',
+        species: 'Lucio',
+        rarity: 'uncommon',
+        sizeCm: 72.0,
+        timesSpotted: 1,
+        firstSeen: DateTime.now().subtract(const Duration(days: 7)),
+      ),
+      CollectionFish(
+        fishId: 'FISH-9012',
+        species: 'Siluro',
+        rarity: 'rare',
+        sizeCm: 145.5,
+        timesSpotted: 1,
+        firstSeen: DateTime.now().subtract(const Duration(days: 3)),
+      ),
+      CollectionFish(
+        fishId: 'FISH-????',
+        species: '???',
+        rarity: 'common',
+        sizeCm: 0,
+        timesSpotted: 0,
+        firstSeen: DateTime.now(),
+        isDiscovered: false,
+      ),
+      CollectionFish(
+        fishId: 'FISH-????',
+        species: '???',
+        rarity: 'uncommon',
+        sizeCm: 0,
+        timesSpotted: 0,
+        firstSeen: DateTime.now(),
+        isDiscovered: false,
+      ),
+      CollectionFish(
+        fishId: 'FISH-????',
+        species: '???',
+        rarity: 'rare',
+        sizeCm: 0,
+        timesSpotted: 0,
+        firstSeen: DateTime.now(),
+        isDiscovered: false,
+      ),
+      CollectionFish(
+        fishId: 'FISH-????',
+        species: '???',
+        rarity: 'legendary',
+        sizeCm: 0,
+        timesSpotted: 0,
+        firstSeen: DateTime.now(),
+        isDiscovered: false,
+      ),
+    ];
 
 /// Pantalla de Colección - Pokédex de Peces
 /// Grid de cartas coleccionables, peces descubiertos a color y no descubiertos como silueta
@@ -102,7 +145,10 @@ class CollectionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final collection = ref.watch(collectionProvider);
+    // FutureProvider: valueOrNull devuelve datos cuando están listos,
+    // o null mientras carga / si hay error → fallback a lista vacía
+    final collection =
+        ref.watch(collectionProvider).valueOrNull ?? _mockCollection();
     final discovered = collection.where((f) => f.isDiscovered).length;
     final total = collection.length;
 

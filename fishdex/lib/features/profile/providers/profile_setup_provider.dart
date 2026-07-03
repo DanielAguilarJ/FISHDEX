@@ -377,7 +377,10 @@ class ProfileSetupNotifier extends StateNotifier<ProfileSetupState> {
           filename: 'avatar_${user.$id}.jpg',
         ),
       );
-      avatarUrl = file.$id;
+      // Construir URL completa de visualización (no solo el ID)
+      avatarUrl =
+          '${AppConstants.appwriteEndpoint}/storage/buckets/${AppConstants.userAvatarsBucket}'
+          '/files/${file.$id}/view?project=${AppConstants.appwriteProjectId}';
     }
 
     // Intentar actualizar primero, si no existe crear
@@ -407,6 +410,14 @@ class ProfileSetupNotifier extends StateNotifier<ProfileSetupState> {
             'avatarUrl': avatarUrl ?? '',
             'shareLocation': state.shareLocation,
             'createdAt': DateTime.now().toIso8601String(),
+            // Campos de gamificación requeridos por sightings_repository y ranking
+            'total_xp': 0,
+            'level': 1,
+            'total_sightings': 0,
+            'unique_species': 0,
+            'rare_fish_count': 0,
+            'legendary_fish_count': 0,
+            'last_activity': DateTime.now().toIso8601String(),
           },
         );
       } else {

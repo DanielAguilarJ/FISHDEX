@@ -1,9 +1,11 @@
-import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/identify_result.dart';
+import '../../../data/repositories/sightings_repository.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../widgets/fish_card.dart';
 import '../widgets/confetti_overlay.dart';
 import '../widgets/xp_animation.dart';
@@ -70,6 +72,9 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
   }
 
   Future<void> _startAnimationSequence() async {
+    // Guardar el avistamiento en Appwrite en background (sin bloquear animaciones)
+    _saveSighting();
+
     // 1. Mostrar confeti si es nuevo
     if (widget.result.isNew) {
       await Future.delayed(const Duration(milliseconds: 200));
@@ -91,6 +96,33 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
     // 5. Mostrar detalles
     await Future.delayed(const Duration(milliseconds: 500));
     setState(() => _showDetails = true);
+  }
+
+  /// Guarda el avistamiento en Appwrite sin bloquear la UI.
+  /// En modo demo o sin sesión, no hace nada.
+  Future<void> _saveSighting() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('is_demo_mode') ?? false) return;
+
+      final authUser = ref.read(authStateProvider).valueOrNull;
+      if (authUser == null) return;
+
+      final databases = ref.read(appwriteDatabasesProvider);
+      final repo = SightingsRepository(databases: databases);
+
+      await repo.saveSighting(
+        userId: authUser.$id,
+        fishId: widget.result.fishId,
+        species: widget.result.species,
+        rarity: widget.result.rarity,
+        confidence: widget.result.confidence,
+        isNew: widget.result.isNew,
+        estimatedSizeCm: widget.result.estimatedSizeCm,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Error guardando avistamiento: $e');
+    }
   }
 
   @override

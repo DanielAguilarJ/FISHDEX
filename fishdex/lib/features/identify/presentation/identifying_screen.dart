@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/identify_service.dart';
-import '../../../data/models/identify_result.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../map/providers/map_providers.dart';
 import 'result_screen.dart';
 
 /// Pantalla de carga mientras se identifica el pez
@@ -64,10 +65,15 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       await Future.delayed(const Duration(milliseconds: 600));
       if (mounted) setState(() => _statusText = 'Analizando con IA...');
 
-      // Llamar al servicio de identificación
+      // Llamar al servicio de identificación con userId y ubicación GPS
       final service = IdentifyService();
+      final authUser = ref.read(authStateProvider).valueOrNull;
+      final location = ref.read(userLocationProvider).valueOrNull;
       final result = await service.identifyFish(
         videoPath: widget.videoPath,
+        userId: authUser?.$id,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
       );
 
       await Future.delayed(const Duration(milliseconds: 500));

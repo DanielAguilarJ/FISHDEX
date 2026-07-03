@@ -374,7 +374,7 @@ class RankingRepository {
         try {
           final result = await _databases.listDocuments(
             databaseId: AppConstants.databaseId,
-            collectionId: 'profiles',
+            collectionId: AppConstants.usersCollection,
             queries: [
               Query.equal('\$id', batch),
               Query.limit(25),

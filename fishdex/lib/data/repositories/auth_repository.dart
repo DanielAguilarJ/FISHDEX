@@ -7,12 +7,14 @@ class AuthRepository {
 
   AuthRepository({required Account account}) : _account = account;
 
-  /// Obtener el usuario actual (null si no hay sesión)
+  /// Obtener el usuario actual (null si no hay sesión).
+  /// Lanza excepción si el error NO es 401 (problemas de red o servidor).
   Future<models.User?> getCurrentUser() async {
     try {
       return await _account.get();
-    } on AppwriteException {
-      return null;
+    } on AppwriteException catch (e) {
+      if (e.code == 401) return null; // Sin sesión activa — respuesta esperada
+      rethrow; // Otro error (500, red) → auth_provider lo convierte en NetworkAuthException
     }
   }
 
