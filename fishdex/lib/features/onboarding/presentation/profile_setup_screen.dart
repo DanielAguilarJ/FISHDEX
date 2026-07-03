@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../profile/providers/profile_setup_provider.dart';
 
@@ -47,9 +48,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
       CurvedAnimation(parent: _celebrationController, curve: Curves.elasticOut),
     );
 
-    // Auto-detectar ubicación al iniciar
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(profileSetupProvider.notifier).autoDetectLocation();
+    // Auto-detectar ubicación solo si no hay ciudad guardada
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      final existingCity = prefs.getString('profile_city') ?? '';
+      if (existingCity.isEmpty) {
+        ref.read(profileSetupProvider.notifier).autoDetectLocation();
+      } else {
+        // Precargar la ciudad existente en el controller
+        _cityController.text = existingCity;
+      }
     });
   }
 
@@ -147,6 +155,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
   }
 
   Future<void> _completeSetup() async {
+    final setupState = ref.read(profileSetupProvider);
+
+    // Si el username está vacío (saltaron el paso), poner uno por defecto
+    if (setupState.username.isEmpty) {
+      ref.read(profileSetupProvider.notifier).setUsername(
+            'Pescador_${DateTime.now().millisecondsSinceEpoch % 10000}',
+          );
+    }
+
     final notifier = ref.read(profileSetupProvider.notifier);
     final success = await notifier.saveProfile();
     if (success && mounted) {
@@ -932,6 +949,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
   // ===========================================================================
 
   Widget _buildNavigationButtons() {
+    // Paso 3 (índice 3) = Permisos = último paso con botones de navegación
+    final isLastStep = _currentStep == _totalSteps - 2;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
       child: Row(
@@ -958,7 +978,18 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             child: SizedBox(
               height: 52,
               child: ElevatedButton(
-                onPressed: _nextStep,
+                onPressed: isLastStep
+                    ? () {
+                        // Avanzar al paso de completado y disparar animación
+                        setState(() => _currentStep++);
+                        _pageController.nextPage(
+                          duration: const Duration(milliseconds: 350),
+                          curve: Curves.easeInOut,
+                        );
+                        _celebrationController.forward();
+                        // _completeSetup() se llama desde el botón "EMPEZAR A PESCAR!"
+                      }
+                    : _nextStep,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.accentBlue,
                   shape: RoundedRectangleBorder(
@@ -966,7 +997,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                   ),
                 ),
                 child: Text(
-                  _currentStep == _totalSteps - 2 ? 'Finalizar' : 'Siguiente',
+                  isLastStep ? 'Ver mi perfil' : 'Siguiente',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

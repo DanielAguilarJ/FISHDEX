@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/appwrite_providers.dart';
 
 // =============================================================================
@@ -44,15 +45,26 @@ class UserProfile {
 final userProfileProvider = FutureProvider<UserProfile>((ref) async {
   final prefs = await SharedPreferences.getInstance();
 
-  // Primero intentar cargar de Appwrite
+  // Si está en modo demo, cargar SOLO de SharedPreferences (sin tocar Appwrite)
+  final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
+  if (isDemoMode) {
+    return UserProfile(
+      username: prefs.getString('profile_username') ?? 'Demo User',
+      city: prefs.getString('profile_city') ?? '',
+      avatarPath: prefs.getString('profile_avatar_path'),
+      shareLocation: false,
+    );
+  }
+
+  // No demo: intentar cargar de Appwrite primero
   try {
     final account = ref.read(appwriteAccountProvider);
     final databases = ref.read(appwriteDatabasesProvider);
     final user = await account.get();
 
     final doc = await databases.getDocument(
-      databaseId: 'fishdex_db',
-      collectionId: 'profiles',
+      databaseId: AppConstants.databaseId,
+      collectionId: AppConstants.usersCollection,
       documentId: user.$id,
     );
 
@@ -308,30 +320,41 @@ class ProfileSetupNotifier extends StateNotifier<ProfileSetupState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      // Intentar guardar en Appwrite
-      await _saveToAppwrite();
-      await _saveToPreferences();
-      await _markSetupCompleted();
-      state = state.copyWith(isLoading: false);
-      // Invalidar el provider del perfil para que se recargue
-      _ref.invalidate(userProfileProvider);
-      return true;
-    } on AppwriteException catch (e) {
-      debugPrint('⚠️ Appwrite error al guardar perfil: ${e.message}');
-      // Fallback: guardar solo en SharedPreferences (modo demo)
+      final prefs = await SharedPreferences.getInstance();
+      final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
+
+      if (isDemoMode) {
+        // Demo: guardar SOLO localmente, sin tocar Appwrite
+        await _saveToPreferences();
+        await _markSetupCompleted();
+        state = state.copyWith(isLoading: false);
+        _ref.invalidate(userProfileProvider);
+        return true;
+      }
+
+      // Usuario real: intentar Appwrite + fallback local
+      try {
+        await _saveToAppwrite();
+      } on AppwriteException catch (e) {
+        debugPrint('⚠️ Appwrite error al guardar perfil: ${e.message}');
+        // Continuar con guardado local como fallback
+      } catch (e) {
+        debugPrint('⚠️ Error al guardar perfil en Appwrite: $e');
+        // Continuar con guardado local como fallback
+      }
+
       await _saveToPreferences();
       await _markSetupCompleted();
       state = state.copyWith(isLoading: false);
       _ref.invalidate(userProfileProvider);
       return true;
     } catch (e) {
-      debugPrint('⚠️ Error al guardar perfil: $e');
-      // Fallback: guardar solo en SharedPreferences
-      await _saveToPreferences();
-      await _markSetupCompleted();
-      state = state.copyWith(isLoading: false);
-      _ref.invalidate(userProfileProvider);
-      return true;
+      debugPrint('⚠️ Error crítico al guardar perfil: $e');
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Error al guardar el perfil',
+      );
+      return false;
     }
   }
 
@@ -347,7 +370,7 @@ class ProfileSetupNotifier extends StateNotifier<ProfileSetupState> {
       // Subir avatar a Appwrite Storage
       final storage = _ref.read(appwriteStorageProvider);
       final file = await storage.createFile(
-        bucketId: 'avatars',
+        bucketId: AppConstants.userAvatarsBucket,
         fileId: ID.unique(),
         file: InputFile.fromPath(
           path: state.avatarFile!.path,
@@ -360,8 +383,8 @@ class ProfileSetupNotifier extends StateNotifier<ProfileSetupState> {
     // Intentar actualizar primero, si no existe crear
     try {
       await databases.updateDocument(
-        databaseId: 'fishdex_db',
-        collectionId: 'profiles',
+        databaseId: AppConstants.databaseId,
+        collectionId: AppConstants.usersCollection,
         documentId: user.$id,
         data: {
           'username': state.username.trim(),
@@ -374,8 +397,8 @@ class ProfileSetupNotifier extends StateNotifier<ProfileSetupState> {
       if (e.code == 404) {
         // No existe, crear nuevo
         await databases.createDocument(
-          databaseId: 'fishdex_db',
-          collectionId: 'profiles',
+          databaseId: AppConstants.databaseId,
+          collectionId: AppConstants.usersCollection,
           documentId: user.$id,
           data: {
             'userId': user.$id,

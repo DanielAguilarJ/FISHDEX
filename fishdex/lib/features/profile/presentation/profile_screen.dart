@@ -49,13 +49,48 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   Future<void> _handleLogout() async {
+    // Mostrar diálogo de confirmación
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0D2137),
+        title: const Text('Cerrar sesión',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+          '¿Seguro que quieres cerrar sesión?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Cerrar sesión',
+                style: TextStyle(color: Colors.red.shade400)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
       final authRepo = ref.read(authRepositoryProvider);
       await authRepo.logout();
     } catch (_) {}
+
     final prefs = await SharedPreferences.getInstance();
+    // Limpiar TODAS las flags de sesión y demo
     await prefs.setBool('has_active_session', false);
+    await prefs.setBool('is_demo_mode', false);
+    await prefs.setBool('profile_setup_completed', false);
+
     ref.invalidate(authStateProvider);
+    ref.invalidate(userProfileProvider);
+
     if (mounted) context.go('/login');
   }
 
@@ -65,12 +100,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final profileAsync = ref.watch(userProfileProvider);
     final profile = profileAsync.valueOrNull;
 
+    // Detectar modo demo: sin sesión Appwrite y perfil cargado de SharedPreferences
+    final isDemoMode = authState.valueOrNull == null &&
+        (profile?.username == 'Demo User' ||
+            (authState is AsyncData && authState.valueOrNull == null));
+
     // Datos de display
     final String displayName = profile?.username.isNotEmpty == true
         ? profile!.username
         : (authState.valueOrNull?.name ?? 'Pescador');
-    final String displayEmail =
-        authState.valueOrNull?.email ?? 'Modo Demo';
+    final String displayEmail = authState.valueOrNull?.email ??
+        (isDemoMode ? '⚡ Modo Demo — sin cuenta' : 'Sin sesión');
     final String? avatarPath = profile?.avatarPath;
 
     return Scaffold(
@@ -98,6 +138,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               child: Container(),
             ),
           ),
+
+          // ═══════════════════════════════════════════════════════════════════
+          // BANNER MODO DEMO (solo visible en modo demo)
+          // ═══════════════════════════════════════════════════════════════════
+          if (isDemoMode)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.gold.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.gold.withOpacity(0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: AppTheme.gold, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Modo demo activo. Crea una cuenta para guardar tu progreso.',
+                        style: TextStyle(
+                          color: AppTheme.gold.withOpacity(0.9),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => context.go('/register'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        'Crear cuenta',
+                        style: TextStyle(
+                          color: AppTheme.gold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // ═══════════════════════════════════════════════════════════════════
           // SECCIÓN 2: BARRA NIVEL/XP
@@ -434,49 +523,65 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String label,
     required String subtitle,
     required List<Color> gradientColors,
+    VoidCallback? onTap,
   }) {
-    return Column(
-      children: [
-        Container(
-          width: 70,
-          height: 70,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: gradientColors,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: gradientColors.first.withOpacity(0.4),
-                blurRadius: 12,
-                spreadRadius: 2,
+    return GestureDetector(
+      onTap: onTap ??
+          () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$label — Próximamente 🎣'),
+                duration: const Duration(seconds: 1),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                backgroundColor: const Color(0xFF0D2137),
               ),
-            ],
+            );
+          },
+      child: Column(
+        children: [
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gradientColors,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: gradientColors.first.withOpacity(0.4),
+                  blurRadius: 12,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 32),
           ),
-          child: Icon(icon, color: Colors.white, size: 32),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            height: 1.2,
+          const SizedBox(height: 8),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              height: 1.2,
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          subtitle,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
-            fontSize: 10,
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 10,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
