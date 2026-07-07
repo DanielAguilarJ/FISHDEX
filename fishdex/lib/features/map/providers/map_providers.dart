@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/enums/user_role.dart';
 import '../../../core/providers/appwrite_providers.dart';
+import '../../../data/repositories/captures_repository.dart';
+import '../../../data/services/role_guard_service.dart';
 
 // =============================================================================
 // MODELO DE DATOS - Fishing Spot
@@ -247,6 +250,136 @@ final nearbyRareSpotProvider = Provider<FishingSpotData?>((ref) {
   }
 
   return null;
+});
+
+// =============================================================================
+// CAPTURAS EN EL MAPA (FILTRADAS POR ROL)
+// =============================================================================
+
+/// Datos de una captura para mostrar en el mapa
+class MapCaptureData {
+  final String captureId;
+  final String fishId;
+  final String species;
+  final String rarity;
+  final double latitude;
+  final double longitude;
+  final DateTime capturedAt;
+  final String? userId;
+  final bool isOwn;          // Si la captura es del usuario actual
+  final bool isAnonymous;    // Si debe mostrarse como marker anónimo
+
+  const MapCaptureData({
+    required this.captureId,
+    required this.fishId,
+    required this.species,
+    required this.rarity,
+    required this.latitude,
+    required this.longitude,
+    required this.capturedAt,
+    this.userId,
+    required this.isOwn,
+    required this.isAnonymous,
+  });
+}
+
+/// Provider que carga las capturas filtradas según el rol del usuario actual.
+/// - Fisherman: solo sus capturas + markers anónimos donde hay coincidencias
+/// - Researcher/Admin: todas las capturas con datos completos
+final mapCapturesProvider = FutureProvider<List<MapCaptureData>>((ref) async {
+  try {
+    final roleAsync = ref.watch(currentUserRoleProvider);
+    final roleModel = roleAsync.valueOrNull;
+
+    if (roleModel == null) return [];
+
+    final databases = ref.read(appwriteDatabasesProvider);
+    final functions = ref.read(appwriteFunctionsProvider);
+    final capturesRepo = CapturesRepository(
+      databases: databases,
+      functions: functions,
+    );
+
+    final role = roleModel.role;
+    final userId = roleModel.userId;
+
+    if (role == UserRole.fisherman) {
+      // Fisherman: obtener solo sus capturas
+      final myCaptures = await capturesRepo.getCapturesForUser(
+        userId: userId,
+        role: UserRole.fisherman,
+        limit: 100,
+      );
+
+      final mapData = <MapCaptureData>[];
+
+      for (final capture in myCaptures) {
+        mapData.add(MapCaptureData(
+          captureId: capture.captureId,
+          fishId: capture.fishId,
+          species: capture.species,
+          rarity: capture.rarity,
+          latitude: capture.latitude,
+          longitude: capture.longitude,
+          capturedAt: capture.capturedAt,
+          userId: capture.userId,
+          isOwn: true,
+          isAnonymous: false,
+        ));
+      }
+
+      // Buscar fish_ids que también fueron capturados por otros
+      // para mostrar markers anónimos
+      final othersFishIds =
+          await capturesRepo.getOtherUsersFishIds(userId);
+
+      for (final fishId in othersFishIds) {
+        // Solo agregar un marker anónimo si no tenemos ya un marker
+        // propio en la misma ubicación
+        final existing = mapData.where((m) => m.fishId == fishId);
+        if (existing.isNotEmpty) {
+          // Agregar un marker anónimo cerca del propio (offset aleatorio)
+          final own = existing.first;
+          mapData.add(MapCaptureData(
+            captureId: 'anon_$fishId',
+            fishId: fishId,
+            species: own.species,
+            rarity: own.rarity,
+            // Offset ligeramente las coordenadas para no superponer
+            latitude: own.latitude + (Random().nextDouble() - 0.5) * 0.005,
+            longitude: own.longitude + (Random().nextDouble() - 0.5) * 0.005,
+            capturedAt: own.capturedAt,
+            isOwn: false,
+            isAnonymous: true,
+          ));
+        }
+      }
+
+      return mapData;
+    } else {
+      // Researcher/Admin: todas las capturas
+      final allCaptures = await capturesRepo.getCapturesForUser(
+        userId: userId,
+        role: role,
+        limit: 200,
+      );
+
+      return allCaptures.map((capture) => MapCaptureData(
+        captureId: capture.captureId,
+        fishId: capture.fishId,
+        species: capture.species,
+        rarity: capture.rarity,
+        latitude: capture.latitude,
+        longitude: capture.longitude,
+        capturedAt: capture.capturedAt,
+        userId: capture.userId,
+        isOwn: capture.userId == userId,
+        isAnonymous: false,
+      )).toList();
+    }
+  } catch (e) {
+    return [];
+  }
 });
 
 /// Calcula la distancia en metros entre dos coordenadas (fórmula de Haversine)

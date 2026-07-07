@@ -41,6 +41,7 @@ async def identify_fish(
     longitude: Optional[float] = Form(None, description="Longitud GPS"),
     user_id: Optional[str] = Form(None, description="ID del usuario"),
     notes: Optional[str] = Form(None, description="Notas del pescador"),
+    confidence_threshold: float = Form(0.70, description="Umbral de confianza para input manual"),
 ):
     """
     Endpoint principal de identificación de peces.
@@ -105,6 +106,9 @@ async def identify_fish(
         # Ejecutar inferencia
         service = get_inference_service()
         result = service.identify_fish(best_frame)
+        
+        # Determinar si requiere input manual basado en el umbral
+        result["requires_manual_input"] = result.get("confidence", 0) < confidence_threshold
         
         # Codificar el frame usado en base64 (para preview en la app)
         import cv2

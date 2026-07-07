@@ -1,0 +1,9 @@
+{
+  "name": "get-captures-by-role",
+  "version": "1.0.0",
+  "description": "Returns fish captures filtered by user role permissions",
+  "main": "src/main.js",
+  "dependencies": {
+    "node-appwrite": "^12.0.0"
+  }
+}

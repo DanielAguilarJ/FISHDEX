@@ -35,3 +35,9 @@ final appwriteRealtimeProvider = Provider<Realtime>((ref) {
   final client = ref.watch(appwriteClientProvider);
   return Realtime(client);
 });
+
+/// Provider del servicio de Functions (Cloud Functions)
+final appwriteFunctionsProvider = Provider<Functions>((ref) {
+  final client = ref.watch(appwriteClientProvider);
+  return Functions(client);
+});

@@ -64,6 +64,36 @@ class NewFishingSpotEvent {
   });
 }
 
+/// Evento de cambio de estado de aprobación
+class ApprovalStatusEvent {
+  final String userId;
+  final String newStatus; // 'approved', 'rejected'
+  final DateTime timestamp;
+
+  const ApprovalStatusEvent({
+    required this.userId,
+    required this.newStatus,
+    required this.timestamp,
+  });
+}
+
+/// Evento de nueva solicitud de aprobación (para admins)
+class NewApprovalRequestEvent {
+  final String requestId;
+  final String userId;
+  final String username;
+  final String institution;
+  final DateTime requestedAt;
+
+  const NewApprovalRequestEvent({
+    required this.requestId,
+    required this.userId,
+    required this.username,
+    required this.institution,
+    required this.requestedAt,
+  });
+}
+
 // =============================================================================
 // SERVICIO REALTIME
 // =============================================================================
@@ -78,11 +108,17 @@ class RealtimeService {
   final _rankingController = StreamController<RankingUpdateEvent>.broadcast();
   final _fishSpottedController = StreamController<FishSpottedEvent>.broadcast();
   final _newSpotController = StreamController<NewFishingSpotEvent>.broadcast();
+  final _approvalStatusController =
+      StreamController<ApprovalStatusEvent>.broadcast();
+  final _newApprovalRequestController =
+      StreamController<NewApprovalRequestEvent>.broadcast();
 
   // Suscripciones activas de Appwrite
   RealtimeSubscription? _rankingSub;
   RealtimeSubscription? _sightingsSub;
   RealtimeSubscription? _spotsSub;
+  RealtimeSubscription? _approvalSub;
+  RealtimeSubscription? _approvalRequestsSub;
 
   // Estado de conexión
   bool _isConnected = false;
@@ -108,6 +144,14 @@ class RealtimeService {
   /// Stream de nuevos spots de pesca
   Stream<NewFishingSpotEvent> get newFishingSpots => _newSpotController.stream;
 
+  /// Stream de cambio de estado de aprobación (para researcher pendiente)
+  Stream<ApprovalStatusEvent> get approvalStatusChanges =>
+      _approvalStatusController.stream;
+
+  /// Stream de nuevas solicitudes de aprobación (para admin)
+  Stream<NewApprovalRequestEvent> get newApprovalRequests =>
+      _newApprovalRequestController.stream;
+
   // ===========================================================================
   // SUSCRIPCIONES
   // ===========================================================================
@@ -118,6 +162,8 @@ class RealtimeService {
     _subscribeToRankingUpdates();
     _subscribeToFishSightings();
     _subscribeToNewSpots();
+    _subscribeToApprovalStatus();
+    _subscribeToNewApprovalRequests();
   }
 
   /// Suscribirse a cambios en la colección de leaderboards
@@ -248,6 +294,83 @@ class RealtimeService {
   }
 
   // ===========================================================================
+  // SUSCRIPCIÓN A APROBACIONES (PARA RESEARCHER PENDIENTE)
+  // ===========================================================================
+
+  /// Escucha cambios en el documento del usuario actual para detectar aprobación
+  void _subscribeToApprovalStatus() {
+    if (_currentUserId.isEmpty) return;
+    try {
+      final channel =
+          'databases.${AppConstants.databaseId}.collections.${AppConstants.usersCollection}.documents.$_currentUserId';
+
+      _approvalSub = _realtime.subscribe([channel]);
+
+      _approvalSub!.stream.listen(
+        (event) {
+          try {
+            final data = event.payload;
+            final status = data['approval_status'] as String?;
+
+            if (status == 'approved' || status == 'rejected') {
+              _approvalStatusController.add(ApprovalStatusEvent(
+                userId: _currentUserId,
+                newStatus: status!,
+                timestamp: DateTime.now(),
+              ));
+            }
+          } catch (e) {
+            // Error al parsear evento de aprobación
+          }
+        },
+        onError: (_) {},
+      );
+    } catch (e) {
+      // No se pudo suscribir a cambios de aprobación
+    }
+  }
+
+  // ===========================================================================
+  // SUSCRIPCIÓN A NUEVAS SOLICITUDES (PARA ADMIN)
+  // ===========================================================================
+
+  /// Escucha nuevas solicitudes de aprobación en la colección approval_requests
+  void _subscribeToNewApprovalRequests() {
+    try {
+      final channel =
+          'databases.${AppConstants.databaseId}.collections.${AppConstants.approvalRequestsCollection}.documents';
+
+      _approvalRequestsSub = _realtime.subscribe([channel]);
+
+      _approvalRequestsSub!.stream.listen(
+        (event) {
+          try {
+            final events = event.events;
+            final isCreate = events.any((e) => e.contains('.create'));
+            if (!isCreate) return;
+
+            final data = event.payload;
+            _newApprovalRequestController.add(NewApprovalRequestEvent(
+              requestId: data['\$id'] ?? '',
+              userId: data['user_id'] ?? '',
+              username: data['username'] ?? 'Usuario',
+              institution: data['institution'] ?? '',
+              requestedAt: data['requested_at'] != null
+                  ? DateTime.tryParse(data['requested_at']) ?? DateTime.now()
+                  : DateTime.now(),
+            ));
+          } catch (e) {
+            // Error al parsear nueva solicitud
+          }
+        },
+        onError: (_) {},
+      );
+    } catch (e) {
+      // No se pudo suscribir a solicitudes de aprobación
+    }
+  }
+
+  // ===========================================================================
   // LIMPIEZA
   // ===========================================================================
 
@@ -256,9 +379,13 @@ class RealtimeService {
     _rankingSub?.close();
     _sightingsSub?.close();
     _spotsSub?.close();
+    _approvalSub?.close();
+    _approvalRequestsSub?.close();
     _rankingController.close();
     _fishSpottedController.close();
     _newSpotController.close();
+    _approvalStatusController.close();
+    _newApprovalRequestController.close();
     _isConnected = false;
   }
 }
@@ -321,4 +448,17 @@ final fishSpottedByOthersProvider = StreamProvider<FishSpottedEvent>((ref) {
 final newFishingSpotsProvider = StreamProvider<NewFishingSpotEvent>((ref) {
   final service = ref.watch(realtimeServiceProvider);
   return service.newFishingSpots;
+});
+
+/// Provider del stream de cambios de aprobación (para researcher pendiente)
+final approvalStatusProvider = StreamProvider<ApprovalStatusEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.approvalStatusChanges;
+});
+
+/// Provider del stream de nuevas solicitudes (para admin)
+final newApprovalRequestsProvider =
+    StreamProvider<NewApprovalRequestEvent>((ref) {
+  final service = ref.watch(realtimeServiceProvider);
+  return service.newApprovalRequests;
 });

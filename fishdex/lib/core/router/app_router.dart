@@ -5,6 +5,8 @@ import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/onboarding/presentation/profile_setup_screen.dart';
+import '../../features/pending_approval/presentation/pending_approval_screen.dart';
+import '../../features/admin/presentation/admin_panel_screen.dart';
 import '../shell/main_shell.dart';
 import '../../features/map/presentation/map_screen.dart';
 import '../../features/camera/presentation/camera_screen.dart';
@@ -32,6 +34,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         '/register',
         '/onboarding',
         '/profile-setup',
+        '/pending-approval',
       ];
 
       // Permitir navegación libre en rutas públicas
@@ -73,6 +76,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/profile-setup',
         name: 'profile-setup',
         builder: (context, state) => const ProfileSetupScreen(),
+      ),
+      GoRoute(
+        path: '/pending-approval',
+        name: 'pending-approval',
+        builder: (context, state) => const PendingApprovalScreen(),
+      ),
+
+      // =====================================================================
+      // PANEL DE ADMINISTRACIÓN
+      // =====================================================================
+      GoRoute(
+        path: '/admin',
+        name: 'admin',
+        builder: (context, state) => const AdminPanelScreen(),
       ),
 
       // =====================================================================

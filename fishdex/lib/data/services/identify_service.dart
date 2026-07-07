@@ -14,6 +14,7 @@ class IdentifyService {
   /// [latitude] - Latitud GPS opcional
   /// [longitude] - Longitud GPS opcional
   /// [userId] - ID del usuario actual
+  /// [confidenceThreshold] - Umbral de confianza para formulario manual
   ///
   /// El servidor acepta tanto video como imagen, pero enviar la imagen
   /// es ~20× más rápido por el tamaño reducido.
@@ -22,6 +23,7 @@ class IdentifyService {
     double? latitude,
     double? longitude,
     String? userId,
+    double? confidenceThreshold,
   }) async {
     try {
       final uri = Uri.parse(
@@ -59,6 +61,9 @@ class IdentifyService {
       if (userId != null) {
         request.fields['user_id'] = userId;
       }
+      // Enviar el umbral de confianza
+      request.fields['confidence_threshold'] =
+          (confidenceThreshold ?? AppConstants.aiConfidenceThreshold).toString();
 
       // Timeout 90s: los Spaces gratuitos pueden tardar ~30s en despertar
       final streamedResponse = await request.send().timeout(

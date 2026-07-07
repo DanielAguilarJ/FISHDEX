@@ -87,4 +87,31 @@ class AppConstants {
   
   /// Zoom máximo
   static const double mapMaxZoom = 18.0;
+
+  // ===========================================================================
+  // SISTEMA DE ROLES
+  // ===========================================================================
+  
+  /// Radio máximo para matching de fish_id (metros) - 5km
+  static const double fishMatchRadiusMeters = 5000.0;
+
+  /// Umbral de confianza de IA para auto-rellenar campos
+  /// Si confidence < este valor, se muestra formulario manual
+  static const double aiConfidenceThreshold = 0.70;
+
+  /// Colección de solicitudes de aprobación
+  static const String approvalRequestsCollection = 'approval_requests';
+
+  // ===========================================================================
+  // APPWRITE FUNCTIONS
+  // ===========================================================================
+
+  /// ID de la función de matching de fish_id
+  static const String matchFishIdFunctionId = 'match-fish-id';
+
+  /// ID de la función de capturas filtradas por rol
+  static const String getCapturesByRoleFunctionId = 'get-captures-by-role';
+
+  /// ID de la función de gestión de aprobaciones
+  static const String manageApprovalFunctionId = 'manage-approval';
 }

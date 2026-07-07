@@ -19,20 +19,20 @@ from app.models.schemas import FishPreviousData
 # ESPECIES DE PECES (para simulación realista)
 # =============================================================================
 FISH_SPECIES = [
-    {"name": "Trucha Arcoíris", "rarity": "common", "size_range": (15, 60)},
-    {"name": "Trucha Marrón", "rarity": "common", "size_range": (20, 70)},
-    {"name": "Salmón Atlántico", "rarity": "uncommon", "size_range": (40, 120)},
-    {"name": "Lucio", "rarity": "uncommon", "size_range": (30, 130)},
-    {"name": "Carpa Común", "rarity": "common", "size_range": (20, 100)},
-    {"name": "Black Bass", "rarity": "uncommon", "size_range": (20, 60)},
-    {"name": "Barbo", "rarity": "common", "size_range": (15, 80)},
-    {"name": "Siluro", "rarity": "rare", "size_range": (50, 250)},
-    {"name": "Esturión", "rarity": "legendary", "size_range": (60, 300)},
-    {"name": "Tenca", "rarity": "common", "size_range": (15, 50)},
-    {"name": "Perca", "rarity": "common", "size_range": (10, 45)},
-    {"name": "Lucioperca", "rarity": "rare", "size_range": (30, 100)},
-    {"name": "Anguila", "rarity": "rare", "size_range": (30, 120)},
-    {"name": "Hucho", "rarity": "legendary", "size_range": (50, 150)},
+    {"name": "Trucha Arcoíris", "scientific": "Oncorhynchus mykiss", "family": "Salmonidae", "rarity": "common", "size_range": (15, 60)},
+    {"name": "Trucha Marrón", "scientific": "Salmo trutta", "family": "Salmonidae", "rarity": "common", "size_range": (20, 70)},
+    {"name": "Salmón Atlántico", "scientific": "Salmo salar", "family": "Salmonidae", "rarity": "uncommon", "size_range": (40, 120)},
+    {"name": "Lucio", "scientific": "Esox lucius", "family": "Esocidae", "rarity": "uncommon", "size_range": (30, 130)},
+    {"name": "Carpa Común", "scientific": "Cyprinus carpio", "family": "Cyprinidae", "rarity": "common", "size_range": (20, 100)},
+    {"name": "Black Bass", "scientific": "Micropterus salmoides", "family": "Centrarchidae", "rarity": "uncommon", "size_range": (20, 60)},
+    {"name": "Barbo", "scientific": "Barbus barbus", "family": "Cyprinidae", "rarity": "common", "size_range": (15, 80)},
+    {"name": "Siluro", "scientific": "Silurus glanis", "family": "Siluridae", "rarity": "rare", "size_range": (50, 250)},
+    {"name": "Esturión", "scientific": "Acipenser sturio", "family": "Acipenseridae", "rarity": "legendary", "size_range": (60, 300)},
+    {"name": "Tenca", "scientific": "Tinca tinca", "family": "Cyprinidae", "rarity": "common", "size_range": (15, 50)},
+    {"name": "Perca", "scientific": "Perca fluviatilis", "family": "Percidae", "rarity": "common", "size_range": (10, 45)},
+    {"name": "Lucioperca", "scientific": "Sander lucioperca", "family": "Percidae", "rarity": "rare", "size_range": (30, 100)},
+    {"name": "Anguila", "scientific": "Anguilla anguilla", "family": "Anguillidae", "rarity": "rare", "size_range": (30, 120)},
+    {"name": "Hucho", "scientific": "Hucho hucho", "family": "Salmonidae", "rarity": "legendary", "size_range": (50, 150)},
 ]
 
 # XP según rareza
@@ -101,6 +101,8 @@ class PlaceholderModel:
             # Guardarlo en nuestra "base de datos" local
             self._known_fish_db[fish_id] = {
                 "species": species_data["name"],
+                "scientific_name": species_data.get("scientific"),
+                "family": species_data.get("family"),
                 "rarity": species_data["rarity"],
                 "size": round(size, 1),
                 "first_seen": datetime.now().isoformat(),
@@ -144,6 +146,8 @@ class InferenceService:
         species = fish_data.get("species", "Especie Desconocida")
         rarity = fish_data.get("rarity", "common")
         estimated_size = fish_data.get("size", random.uniform(15, 80))
+        scientific_name = fish_data.get("scientific_name", None)
+        family = fish_data.get("family", None)
         
         # Calcular XP
         base_xp = XP_BY_RARITY.get(rarity, 10)
@@ -176,11 +180,15 @@ class InferenceService:
             "success": True,
             "fish_id": fish_id,
             "species": species,
+            "scientific_name": scientific_name,
+            "family": family,
+            "common_name": species,  # Mismo que species en placeholder
             "confidence": round(confidence, 3),
             "is_new": is_new,
             "estimated_size_cm": round(estimated_size, 1),
             "rarity": rarity,
             "xp_earned": xp_earned,
+            "requires_manual_input": False,  # Se calcula en el router con threshold
             "previous_data": previous_data,
             "message": message,
             "timestamp": datetime.now().isoformat(),

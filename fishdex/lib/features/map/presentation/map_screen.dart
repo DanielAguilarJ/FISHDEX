@@ -4,7 +4,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../data/services/role_guard_service.dart';
 import '../providers/map_providers.dart';
+import '../widgets/anonymous_marker.dart';
 import '../widgets/spot_bottom_sheet.dart';
 import '../widgets/spot_marker.dart';
 
@@ -24,15 +26,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final userLocation = ref.watch(userLocationProvider);
     final fishingSpots = ref.watch(fishingSpotsProvider);
+    final mapCaptures = ref.watch(mapCapturesProvider);
+    final currentRole = ref.watch(currentUserRoleProvider);
 
     return Scaffold(
       body: Stack(
         children: [
           // Mapa
-          _buildMap(userLocation, fishingSpots),
+          _buildMap(userLocation, fishingSpots, mapCaptures),
           
           // Header overlay con gradiente
-          _buildHeaderOverlay(context),
+          _buildHeaderOverlay(context, currentRole),
           
           // Info de ubicación
           Positioned(
@@ -94,6 +98,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget _buildMap(
     AsyncValue<LatLng?> userLocation,
     AsyncValue<List<FishingSpotData>> fishingSpots,
+    AsyncValue<List<MapCaptureData>> mapCaptures,
   ) {
     // Ubicación por defecto (Madrid, España) si no hay GPS
     final center = userLocation.valueOrNull ?? const LatLng(40.4168, -3.7038);
@@ -135,6 +140,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           loading: () => const MarkerLayer(markers: []),
           error: (_, __) => const MarkerLayer(markers: []),
         ),
+
+        // Marcadores de capturas (filtrados por rol)
+        mapCaptures.when(
+          data: (captures) => MarkerLayer(
+            markers: captures.map((c) => _buildCaptureMarker(c)).toList(),
+          ),
+          loading: () => const MarkerLayer(markers: []),
+          error: (_, __) => const MarkerLayer(markers: []),
+        ),
         
         // Marcador del usuario
         if (userLocation.valueOrNull != null)
@@ -149,6 +163,81 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ],
           ),
       ],
+    );
+  }
+
+  /// Construye un marker de captura según su tipo (propio, anónimo, o completo)
+  Marker _buildCaptureMarker(MapCaptureData capture) {
+    return Marker(
+      point: LatLng(capture.latitude, capture.longitude),
+      width: 40,
+      height: 40,
+      child: capture.isAnonymous
+          ? AnonymousMarker(
+              onTap: () => _showAnonymousBottomSheet(capture),
+            )
+          : GestureDetector(
+              onTap: () => _showCaptureInfo(capture),
+              child: _buildCaptureMarkerWidget(capture),
+            ),
+    );
+  }
+
+  /// Widget del marker de captura propia
+  Widget _buildCaptureMarkerWidget(MapCaptureData capture) {
+    Color markerColor;
+    switch (capture.rarity) {
+      case 'legendary':
+        markerColor = Colors.amber;
+        break;
+      case 'rare':
+        markerColor = Colors.purple;
+        break;
+      case 'uncommon':
+        markerColor = AppTheme.teal;
+        break;
+      default:
+        markerColor = Colors.green;
+    }
+
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: markerColor.withOpacity(0.8),
+        border: Border.all(
+          color: capture.isOwn ? Colors.white : markerColor,
+          width: capture.isOwn ? 2.5 : 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: markerColor.withOpacity(0.4),
+            blurRadius: 6,
+          ),
+        ],
+      ),
+      child: Icon(
+        Icons.phishing,
+        color: Colors.white,
+        size: capture.isOwn ? 16 : 14,
+      ),
+    );
+  }
+
+  void _showAnonymousBottomSheet(MapCaptureData capture) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AnonymousMarkerBottomSheet(species: capture.species),
+    );
+  }
+
+  void _showCaptureInfo(MapCaptureData capture) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _CaptureInfoSheet(capture: capture),
     );
   }
 
@@ -167,7 +256,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Widget _buildHeaderOverlay(BuildContext context) {
+  Widget _buildHeaderOverlay(BuildContext context, AsyncValue currentRole) {
+    final roleName = currentRole.valueOrNull?.role.displayName ?? '';
+    
     return Positioned(
       top: 0,
       left: 0,
@@ -197,6 +288,26 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                 ),
                 const Spacer(),
+                // Badge de rol
+                if (roleName.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.darkSurface.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      roleName,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
                 // Indicador de spots cercanos
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -380,5 +491,128 @@ class _UserLocationMarkerState extends State<UserLocationMarker>
         );
       },
     );
+  }
+}
+
+// =============================================================================
+// BOTTOM SHEET DE INFO DE CAPTURA
+// =============================================================================
+
+/// Bottom sheet con información de una captura en el mapa
+class _CaptureInfoSheet extends StatelessWidget {
+  final MapCaptureData capture;
+
+  const _CaptureInfoSheet({required this.capture});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.darkBackground,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Especie y rareza
+          Row(
+            children: [
+              Icon(
+                Icons.phishing,
+                color: _rarityColor(capture.rarity),
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  capture.species,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _rarityColor(capture.rarity).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  capture.rarity.toUpperCase(),
+                  style: TextStyle(
+                    color: _rarityColor(capture.rarity),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Info
+          _infoRow(Icons.calendar_today, 'Fecha',
+              '${capture.capturedAt.day}/${capture.capturedAt.month}/${capture.capturedAt.year}'),
+          const SizedBox(height: 8),
+          _infoRow(Icons.fingerprint, 'Fish ID',
+              capture.fishId.substring(0, 8)),
+          if (!capture.isOwn) ...[
+            const SizedBox(height: 8),
+            _infoRow(Icons.location_on, 'Coordenadas',
+                '${capture.latitude.toStringAsFixed(4)}, ${capture.longitude.toStringAsFixed(4)}'),
+          ],
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white38, size: 16),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: const TextStyle(color: Colors.white54, fontSize: 13),
+        ),
+        Text(
+          value,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+        ),
+      ],
+    );
+  }
+
+  Color _rarityColor(String rarity) {
+    switch (rarity) {
+      case 'legendary':
+        return Colors.amber;
+      case 'rare':
+        return Colors.purple;
+      case 'uncommon':
+        return AppTheme.teal;
+      default:
+        return Colors.green;
+    }
   }
 }

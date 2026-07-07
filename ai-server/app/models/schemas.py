@@ -27,18 +27,38 @@ class IdentifyRequest(BaseModel):
     longitude: Optional[float] = Field(None, description="Longitud GPS donde se capturó")
     user_id: Optional[str] = Field(None, description="ID del usuario que capturó el video")
     notes: Optional[str] = Field(None, description="Notas adicionales del pescador")
+    confidence_threshold: float = Field(
+        0.70,
+        description="Umbral de confianza. Si la identificación está por debajo, "
+                    "se marca como requires_manual_input=True",
+        ge=0.0,
+        le=1.0,
+    )
 
 
 class IdentifyResponse(BaseModel):
     """Response de identificación de un pez."""
     success: bool = Field(..., description="Si la identificación fue exitosa")
     fish_id: str = Field(..., description="ID único del pez identificado")
-    species: str = Field(..., description="Especie identificada")
+    species: str = Field(..., description="Especie identificada (nombre común)")
+    scientific_name: Optional[str] = Field(
+        None, description="Nombre científico de la especie"
+    )
+    family: Optional[str] = Field(
+        None, description="Familia taxonómica del pez"
+    )
+    common_name: Optional[str] = Field(
+        None, description="Nombre común alternativo"
+    )
     confidence: float = Field(..., description="Confianza de la identificación (0-1)")
     is_new: bool = Field(..., description="Si es un pez nuevo (primera vez identificado)")
     estimated_size_cm: float = Field(..., description="Tamaño estimado en centímetros")
     rarity: str = Field(..., description="Rareza del pez: common, uncommon, rare, legendary")
     xp_earned: int = Field(..., description="Puntos de XP ganados por este avistamiento")
+    requires_manual_input: bool = Field(
+        False,
+        description="Si True, la confianza fue baja y se necesita input manual del usuario"
+    )
     previous_data: Optional[FishPreviousData] = Field(
         None, description="Datos previos si el pez ya existía"
     )

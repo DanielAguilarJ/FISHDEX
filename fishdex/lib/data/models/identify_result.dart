@@ -3,11 +3,15 @@ class IdentifyResult {
   final bool success;
   final String fishId;
   final String species;
+  final String? scientificName;
+  final String? family;
+  final String? commonName;
   final double confidence;
   final bool isNew;
   final double estimatedSizeCm;
   final String rarity;
   final int xpEarned;
+  final bool requiresManualInput;
   final FishPreviousData? previousData;
   final String? frameUsed;
   final String message;
@@ -17,11 +21,15 @@ class IdentifyResult {
     required this.success,
     required this.fishId,
     required this.species,
+    this.scientificName,
+    this.family,
+    this.commonName,
     required this.confidence,
     required this.isNew,
     required this.estimatedSizeCm,
     required this.rarity,
     required this.xpEarned,
+    this.requiresManualInput = false,
     this.previousData,
     this.frameUsed,
     required this.message,
@@ -33,11 +41,15 @@ class IdentifyResult {
       success: json['success'] as bool,
       fishId: json['fish_id'] as String,
       species: json['species'] as String,
+      scientificName: json['scientific_name'] as String?,
+      family: json['family'] as String?,
+      commonName: json['common_name'] as String?,
       confidence: (json['confidence'] as num).toDouble(),
       isNew: json['is_new'] as bool,
       estimatedSizeCm: (json['estimated_size_cm'] as num).toDouble(),
       rarity: json['rarity'] as String,
       xpEarned: json['xp_earned'] as int,
+      requiresManualInput: json['requires_manual_input'] as bool? ?? false,
       previousData: json['previous_data'] != null
           ? FishPreviousData.fromJson(
               json['previous_data'] as Map<String, dynamic>)
@@ -52,11 +64,15 @@ class IdentifyResult {
         'success': success,
         'fish_id': fishId,
         'species': species,
+        'scientific_name': scientificName,
+        'family': family,
+        'common_name': commonName,
         'confidence': confidence,
         'is_new': isNew,
         'estimated_size_cm': estimatedSizeCm,
         'rarity': rarity,
         'xp_earned': xpEarned,
+        'requires_manual_input': requiresManualInput,
         'previous_data': previousData?.toJson(),
         'frame_used': frameUsed,
         'message': message,

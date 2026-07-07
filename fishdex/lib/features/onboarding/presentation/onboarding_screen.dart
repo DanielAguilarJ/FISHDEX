@@ -4,7 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Pantalla de onboarding para nuevos usuarios
-/// Se muestra solo la primera vez que abren la app
+/// Se muestra solo la primera vez que abren la app.
+/// Incluye 3 páginas de introducción + 1 página de selección de rol.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -21,8 +22,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late AnimationController _scanAnimationController;
   late Animation<double> _scanAnimation;
 
-  /// Datos de cada página del onboarding
-  final List<_OnboardingPageData> _pages = const [
+  /// Total de páginas: 3 intro + 1 selección de rol
+  static const int _totalPages = 4;
+
+  /// Datos de cada página del onboarding (solo las 3 de intro)
+  final List<_OnboardingPageData> _introPages = const [
     _OnboardingPageData(
       icon: Icons.phishing,
       title: 'Identifica Peces',
@@ -76,24 +80,32 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.dispose();
   }
 
-  /// Marca el onboarding como completado y navega al login
-  Future<void> _completeOnboarding() async {
+  /// Marca el onboarding como completado y navega al registro con rol seleccionado
+  Future<void> _completeOnboardingWithRole(String role) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_completed', true);
+    await prefs.setString('selected_role', role);
     if (mounted) {
-      context.go('/login');
+      context.go('/register');
     }
   }
 
-  /// Avanza a la siguiente página o completa el onboarding
+  /// Salta directamente a la selección de rol
+  void _skipToRoleSelection() {
+    _pageController.animateToPage(
+      _totalPages - 1,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  /// Avanza a la siguiente página
   void _nextPage() {
-    if (_currentPage < _pages.length - 1) {
+    if (_currentPage < _totalPages - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOut,
       );
-    } else {
-      _completeOnboarding();
     }
   }
 
@@ -104,7 +116,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // Botón saltar (arriba derecha)
+            // Botón saltar (arriba derecha) - solo en páginas de intro
             _buildSkipButton(),
 
             // Contenido de las páginas
@@ -114,9 +126,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 onPageChanged: (index) {
                   setState(() => _currentPage = index);
                 },
-                itemCount: _pages.length,
+                itemCount: _totalPages,
                 itemBuilder: (context, index) {
-                  return _buildPage(_pages[index], index);
+                  if (index < _introPages.length) {
+                    return _buildPage(_introPages[index], index);
+                  } else {
+                    return _buildRoleSelectionPage();
+                  }
                 },
               ),
             ),
@@ -126,8 +142,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
             const SizedBox(height: 24),
 
-            // Botón de acción
-            _buildActionButton(),
+            // Botón de acción (solo en páginas de intro)
+            if (_currentPage < _introPages.length) _buildActionButton(),
 
             const SizedBox(height: 40),
           ],
@@ -142,9 +158,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       alignment: Alignment.centerRight,
       child: Padding(
         padding: const EdgeInsets.only(right: 16, top: 8),
-        child: _currentPage < _pages.length - 1
+        child: _currentPage < _introPages.length
             ? TextButton(
-                onPressed: _completeOnboarding,
+                onPressed: _skipToRoleSelection,
                 child: Text(
                   'Saltar',
                   style: TextStyle(
@@ -255,7 +271,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _buildDotsIndicator() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_pages.length, (index) {
+      children: List.generate(_totalPages, (index) {
         final isActive = index == _currentPage;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
@@ -273,9 +289,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  /// Botón de acción (Siguiente o Comenzar)
+  /// Botón de acción (Siguiente - solo páginas intro)
   Widget _buildActionButton() {
-    final isLastPage = _currentPage == _pages.length - 1;
+    final isLastIntroPage = _currentPage == _introPages.length - 1;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -286,7 +302,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           onPressed: _nextPage,
           style: ElevatedButton.styleFrom(
             backgroundColor:
-                isLastPage ? AppTheme.successGreen : AppTheme.accentBlue,
+                isLastIntroPage ? AppTheme.successGreen : AppTheme.accentBlue,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -294,13 +310,173 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             elevation: 4,
           ),
           child: Text(
-            isLastPage ? 'COMENZAR' : 'Siguiente',
+            isLastIntroPage ? 'ELEGIR MI ROL' : 'Siguiente',
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
               letterSpacing: 1,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // PÁGINA DE SELECCIÓN DE ROL
+  // ===========================================================================
+
+  /// Construye la página de selección de rol (pescador o investigador)
+  Widget _buildRoleSelectionPage() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '¿Cuál es tu perfil?',
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Esto define qué datos puedes ver en la app',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Colors.white.withOpacity(0.6),
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 40),
+
+          // Tarjeta: Pescador
+          _buildRoleCard(
+            icon: Icons.phishing,
+            title: 'Soy Pescador',
+            description:
+                'Registra tus capturas, colecciona especies y compite '
+                'en el ranking. Acceso inmediato.',
+            gradient: AppTheme.primaryGradient,
+            onTap: () => _completeOnboardingWithRole('fisherman'),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Tarjeta: Investigador
+          _buildRoleCard(
+            icon: Icons.biotech,
+            title: 'Soy Investigador',
+            description:
+                'Accede a datos completos de ubicación, historial y '
+                'estadísticas. Requiere aprobación de un admin.',
+            gradient: AppTheme.legendaryGradient,
+            onTap: () => _completeOnboardingWithRole('researcher'),
+            badge: 'Requiere aprobación',
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Tarjeta de selección de rol
+  Widget _buildRoleCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required LinearGradient gradient,
+    required VoidCallback onTap,
+    String? badge,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: gradient.colors.first.withOpacity(0.4),
+            width: 1.5,
+          ),
+          color: Colors.white.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            // Ícono circular
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: gradient,
+              ),
+              child: Icon(icon, color: Colors.white, size: 30),
+            ),
+            const SizedBox(width: 16),
+
+            // Texto
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (badge != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.orange.withOpacity(0.5),
+                            ),
+                          ),
+                          child: Text(
+                            badge,
+                            style: const TextStyle(
+                              color: Colors.orange,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 13,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Flecha
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white.withOpacity(0.4),
+              size: 18,
+            ),
+          ],
         ),
       ),
     );

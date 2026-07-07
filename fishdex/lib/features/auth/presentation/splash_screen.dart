@@ -73,6 +73,23 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         // Autenticado → marcar sesión activa y verificar profile setup
         await prefs.setBool('has_active_session', true);
         await prefs.setBool('is_demo_mode', false);
+
+        // Verificar rol y estado de aprobación
+        final cachedRole = prefs.getString('cached_user_role') ?? 'fisherman';
+        final cachedStatus = prefs.getString('cached_approval_status') ?? 'approved';
+
+        // Si es researcher pendiente → ir a pantalla de espera
+        if (cachedRole == 'researcher' && cachedStatus == 'pending') {
+          if (mounted) context.go('/pending-approval');
+          return;
+        }
+
+        // Si es researcher rechazado → ir a login
+        if (cachedRole == 'researcher' && cachedStatus == 'rejected') {
+          if (mounted) context.go('/login');
+          return;
+        }
+
         final profileSetupCompleted =
             prefs.getBool('profile_setup_completed') ?? false;
         if (!profileSetupCompleted) {
