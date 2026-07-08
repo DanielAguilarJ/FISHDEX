@@ -2,6 +2,32 @@
 
 This document describes the structure of the **FISH APP** workspace from top to bottom, separating each module by responsibility and marking which parts are source code, which parts are configuration, and which parts are generated artifacts.
 
+## Project aim
+
+FishDex is a gamified fish identification platform. The goal of the project is to help anglers identify fish from short videos, keep a history of sightings, and turn each catch into a richer experience through progress, collection, ranking, and discovery.
+
+The system combines:
+
+- a Flutter mobile app for capture, identification, collection, and user progress,
+- a FastAPI AI backend for video processing and identification,
+- Appwrite as the backend service layer for data, auth, and storage,
+- a static web portal for cultural content,
+- and a training pipeline for model preparation and evaluation.
+
+## User groups and needs
+
+### Recreational anglers
+Need fast fish identification, a simple capture flow, location context, and a personal history of catches.
+
+### Competitive or gamified users
+Need progression, XP, rankings, achievements, and repeat-encounter tracking.
+
+### Curious explorers
+Need maps, nearby spots, species discovery, and a clear visual record of each identification.
+
+### Administrators and maintainers
+Need a structured backend, documented setup, reproducible training scripts, and clear deployment instructions.
+
 ## Overview
 
 The workspace is split into four main surfaces:
@@ -97,6 +123,53 @@ ai-server/
 3. `video.py` stores the temporary file and extracts frames.
 4. `inference.py` selects the result and builds the response.
 5. `main.py` exposes service health and the API under `/api/v1`.
+
+### Server file structure and fish storage behavior
+
+The current AI server is structured around code modules and temporary processing files. It does not currently create one permanent folder per fish inside the server filesystem.
+
+The important idea is this:
+
+- uploaded videos are stored temporarily,
+- frames are extracted in memory for inference,
+- the identification response is returned to the app,
+- and persistent history is expected to live in the backend data layer, not in local fish folders.
+
+If a new catch is recognized as an existing fish, the normal behavior is to reuse the same `fish_id` and register a new sighting instead of creating a separate fish folder.
+
+If the same fish is caught more than once, the description should be updated as a living record rather than duplicated. In practice, that means:
+
+- keep one canonical fish entity,
+- append new catch metadata to its history,
+- update the latest description or notes with the most recent catch context,
+- and keep previous sightings available in the timeline.
+
+If the product later needs per-fish media storage, the recommended approach is a logical structure such as:
+
+```text
+fish-media/
+└── {fish_id}/
+    ├── images/
+    ├── videos/
+    └── description.json
+```
+
+That structure would be a storage convention, not a current requirement of the existing backend code.
+
+### Notes on repeated recognition
+
+If a new fish is matched with an existing one, the system should not create a duplicate record by default. Instead, it should:
+
+1. reuse the existing fish identifier,
+2. attach the new images or frames to the same fish history,
+3. increment the sighting count,
+4. and decide whether the description should be merged, versioned, or appended.
+
+For two catches of the same fish, the description can be handled in one of three ways:
+
+- append a new sighting note to the same description,
+- keep a single latest description and preserve prior notes in history,
+- or store a versioned description trail if the product needs an audit log.
 
 ## Main Flutter app: `fishdex/`
 
@@ -263,6 +336,46 @@ lib/
 - Gallery: `gallery_screen.dart`.
 - Quick spots: `quick_spot_screen.dart`.
 - Achievements: `achievements_screen.dart`.
+
+### Screen image placeholders
+
+Add the mobile app screenshots here. These can be hand-drawn mockups if final screenshots are not available yet.
+
+#### Splash screen
+
+![Splash screen placeholder](./assets/screens/splash-screen.png)
+
+#### Login screen
+
+![Login screen placeholder](./assets/screens/login-screen.png)
+
+#### Register screen
+
+![Register screen placeholder](./assets/screens/register-screen.png)
+
+#### Onboarding screen
+
+![Onboarding screen placeholder](./assets/screens/onboarding-screen.png)
+
+#### Camera screen
+
+![Camera screen placeholder](./assets/screens/camera-screen.png)
+
+#### Identification result screen
+
+![Identification result screen placeholder](./assets/screens/result-screen.png)
+
+#### Map screen
+
+![Map screen placeholder](./assets/screens/map-screen.png)
+
+#### Collection screen
+
+![Collection screen placeholder](./assets/screens/collection-screen.png)
+
+#### Profile screen
+
+![Profile screen placeholder](./assets/screens/profile-screen.png)
 
 ### Notable widgets
 

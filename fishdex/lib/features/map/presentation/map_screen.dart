@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/enums/user_role.dart';
 import '../../../data/services/role_guard_service.dart';
 import '../providers/map_providers.dart';
 import '../widgets/anonymous_marker.dart';
+import '../widgets/capture_detail_sheet.dart';
 import '../widgets/spot_bottom_sheet.dart';
 import '../widgets/spot_marker.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -235,11 +237,24 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _showCaptureInfo(MapCaptureData capture) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _CaptureInfoSheet(capture: capture),
-    );
+    final role = ref.read(currentUserRoleProvider).valueOrNull?.role;
+
+    if (role == UserRole.researcher || role == UserRole.admin) {
+      // Researcher/Admin: popup detallado con historial ramificado
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => CaptureDetailSheet(capture: capture),
+      );
+    } else {
+      // Fisherman: popup básico
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _CaptureInfoSheet(capture: capture),
+      );
+    }
   }
 
   Marker _buildSpotMarker(FishingSpotData spot) {

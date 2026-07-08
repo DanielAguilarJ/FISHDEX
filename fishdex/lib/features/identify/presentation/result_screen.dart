@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
@@ -103,6 +104,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
 
   /// Guarda el avistamiento en Appwrite sin bloquear la UI.
   /// En modo demo o sin sesión, no hace nada.
+  /// Obtiene la ubicación GPS actual para guardarla con el avistamiento.
   Future<void> _saveSighting() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -110,6 +112,26 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
 
       final authUser = ref.read(authStateProvider).valueOrNull;
       if (authUser == null) return;
+
+      // Obtener ubicación GPS actual
+      Position? position;
+      try {
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (serviceEnabled) {
+          var permission = await Geolocator.checkPermission();
+          if (permission == LocationPermission.denied) {
+            permission = await Geolocator.requestPermission();
+          }
+          if (permission == LocationPermission.whileInUse ||
+              permission == LocationPermission.always) {
+            position = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high,
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ No se pudo obtener GPS: $e');
+      }
 
       final databases = ref.read(appwriteDatabasesProvider);
       final repo = SightingsRepository(databases: databases);
@@ -122,6 +144,8 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
         confidence: widget.result.confidence,
         isNew: widget.result.isNew,
         estimatedSizeCm: widget.result.estimatedSizeCm,
+        latitude: position?.latitude,
+        longitude: position?.longitude,
       );
     } catch (e) {
       debugPrint('Warning: Error saving sighting: $e');
