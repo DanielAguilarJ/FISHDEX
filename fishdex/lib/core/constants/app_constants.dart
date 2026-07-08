@@ -38,37 +38,12 @@ class AppConstants {
   static const String userAvatarsBucket = 'fish_photos';
 
   // ===========================================================================
-  // AI SERVER - LOCAL
+  // AI SERVER - LOCAL (PC Windows)
   // ===========================================================================
   
-  /// IP LAN de la computadora donde corre el servidor AI.
-  /// Cambiar a la IP de tu máquina si cambia la red WiFi.
-  static const String _serverLanIp = '192.168.103.145';
-  static const int _serverPort = 8000;
-
-  /// URL para emulador Android (10.0.2.2 redirige a localhost del host)
-  static const String _emulatorUrl = 'http://10.0.2.2:$_serverPort';
-
-  /// URL para teléfono físico en la misma red WiFi
-  static const String _physicalDeviceUrl = 'http://$_serverLanIp:$_serverPort';
-
-  /// Detección automática: si corre en emulador usa 10.0.2.2,
-  /// si corre en dispositivo físico usa la IP LAN del servidor.
-  /// Para forzar una u otra, cambia [_forcePhysicalDevice].
-  ///
-  /// NOTA: Pon esto en true para instalar en tu teléfono real.
-  static const bool _forcePhysicalDevice = true;
-
-  /// URL activa del servidor de IA (se resuelve según entorno)
-  static String get aiServerUrl {
-    if (_forcePhysicalDevice) return _physicalDeviceUrl;
-    // En Android podríamos detectar el emulador, pero como constante
-    // usamos la URL de dispositivo físico por defecto.
-    return _physicalDeviceUrl;
-  }
-
-  // PRODUCCIÓN (Hugging Face - descomentar para deploy remoto)
-  // static const String aiServerUrl = 'https://danielaguilarr-fishdex-fish-detector.hf.space';
+  /// IP de la PC Windows donde corre el servidor AI.
+  /// Esta IP es accesible desde esta Mac y desde el teléfono en la misma red.
+  static const String aiServerUrl = 'http://160.217.215.92:8000';
   
   /// Endpoint de identificación
   static const String identifyEndpoint = '/api/v1/identify';
