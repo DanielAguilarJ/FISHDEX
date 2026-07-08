@@ -29,3 +29,7 @@ redis-data/
 __pycache__/
 *.pyc
 .venv/
+venv/
+
+# AI Server runtime data
+server-data/

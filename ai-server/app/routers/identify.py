@@ -1,45 +1,60 @@
 """
 FishDex AI Server - Router de Identificación
 ==============================================
-Endpoint POST /identify que recibe un video, extrae frames,
-ejecuta el modelo y devuelve la identificación del pez.
-Also includes area search, species listing, and area species endpoints.
+POST /api/v1/identify — 7-step pipeline (video → frames → crop → subset → similarity → decision → response)
+GET  /api/v1/identify/test — test endpoint with dummy frame
+GET  /api/v1/areas/search — nearby area search
+GET  /api/v1/areas/{area_code}/species — species in area storage
+GET  /api/v1/areas/{area_code}/stats — area statistics
+GET  /api/v1/species — all Czech fish species
+GET  /api/v1/fish/{fish_id}/history — catch history for a fish
+GET  /api/v1/health/detailed — detailed server health info
 """
 
 import base64
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+import logging
 from typing import Optional
 
-from app.models.schemas import IdentifyResponse, ErrorResponse
-from app.services.inference import get_inference_service
+import cv2
+import numpy as np
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+
+from app.config import settings
+from app.models.schemas import ErrorResponse, IdentifyResponse
 from app.services.crop_service import get_crop_service
+from app.services.inference import get_inference_service
 from app.utils.video import (
-    save_temp_video,
-    extract_frames_from_video,
-    select_best_frame,
     cleanup_temp_file,
+    extract_frames_from_video,
     get_video_info,
+    save_temp_video,
+    select_best_n_frames,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Tamaño máximo de video: 50MB
-MAX_VIDEO_SIZE = 50 * 1024 * 1024  # 50MB en bytes
+# Tamaño máximo de video (from config)
+MAX_VIDEO_SIZE = settings.max_video_size_mb * 1024 * 1024
 
 
+# =========================================================================
+# POST /api/v1/identify — MAIN PIPELINE
+# =========================================================================
 @router.post(
     "/identify",
     response_model=IdentifyResponse,
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
-    summary="Identificar un pez a partir de un video",
+    summary="Identify a fish from a video",
     description="""
-    Recibe un video corto (5-10 segundos) de un pez, extrae los mejores frames,
-    ejecuta el modelo de IA y devuelve la identificación del pez con su historial.
-    Now supports full Czech area system with metadata fields.
+    Receives a short video (5-10 seconds) of a fish, extracts the best frames,
+    crops the fish body using the ONNX model, compares against existing fish
+    profiles in the same area, and returns identification with full history.
     """,
 )
 async def identify_fish(
-    video: UploadFile = File(..., description="Video del pez (MP4, MOV, AVI)"),
+    video: UploadFile = File(..., description="Video of the fish (MP4, MOV, AVI)"),
     area_code: str = Form(..., description="Czech fishing area code e.g. '401 001'"),
     fisherman_id: str = Form(..., description="UUID of the user (from Appwrite)"),
     user_role: str = Form("fisherman", description="'fisherman' or 'researcher'"),
@@ -49,76 +64,90 @@ async def identify_fish(
     weather: Optional[str] = Form(None, description="Weather conditions"),
     bite: Optional[str] = Form(None, description="Bait or lure used"),
     size: Optional[float] = Form(None, description="Measured size in cm"),
-    latitude: Optional[float] = Form(None, description="Latitud GPS"),
-    longitude: Optional[float] = Form(None, description="Longitud GPS"),
-    confidence_threshold: float = Form(0.70, description="Umbral de confianza para input manual"),
-):
+    latitude: Optional[float] = Form(None, description="GPS latitude"),
+    longitude: Optional[float] = Form(None, description="GPS longitude"),
+    confidence_threshold: float = Form(0.70, description="Confidence threshold for manual input flag"),
+) -> IdentifyResponse:
     """
-    Endpoint principal de identificación de peces.
+    7-step fish identification pipeline.
 
-    Flujo (7-step pipeline):
-    0. Receive video → extract frames → delete video
-    1. (Optional) Species classification if not provided by user
-    2. CROP using fin_detector_best.onnx to isolate fish body
-    3. SUBSET the database by filtering server-data/ by AreaCode
-    4. SIMILARITY SCORING between cropped fish and existing profiles
-    5. DECISION → new fish (new Fish_ID) or recapture (existing Fish_ID)
-    6. SEND BACK → researchers get full GPS history, fishermen get restricted
+    Steps:
+      0. Receive video → extract 10 frames → select best 5 → delete video
+      1. Species lookup (from user input or mark unknown)
+      2. CROP each of the 5 frames using ONNX fin_detector
+      3. SUBSET: find existing fish in this area/species for comparison
+      4. SIMILARITY: histogram comparison against subset
+      5. DECISION: new fish or recapture based on threshold
+      6. SAVE: cropped frames + data.json to server-data/
+      7. RESPOND: role-filtered history in IdentifyResponse
     """
-    temp_path = None
+    temp_path: Optional[str] = None
 
     try:
-        # Validar tipo de archivo
-        allowed_types = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/avi"]
+        # ── Validate file type ──
+        allowed_types = [
+            "video/mp4", "video/quicktime", "video/x-msvideo",
+            "video/avi", "video/webm",
+        ]
         if video.content_type and video.content_type not in allowed_types:
             raise HTTPException(
                 status_code=400,
-                detail=f"Formato de video no soportado: {video.content_type}. "
-                       f"Formatos permitidos: MP4, MOV, AVI"
+                detail=f"Unsupported video format: {video.content_type}. "
+                       f"Allowed: MP4, MOV, AVI, WebM",
             )
 
-        # Leer el contenido del video
+        # ── Read video bytes ──
         video_bytes = await video.read()
 
-        # Validar tamaño
         if len(video_bytes) > MAX_VIDEO_SIZE:
             raise HTTPException(
                 status_code=400,
-                detail=f"Video demasiado grande ({len(video_bytes) / 1024 / 1024:.1f}MB). "
-                       f"Máximo permitido: {MAX_VIDEO_SIZE / 1024 / 1024:.0f}MB"
+                detail=f"Video too large ({len(video_bytes) / 1024 / 1024:.1f}MB). "
+                       f"Max: {settings.max_video_size_mb}MB",
             )
 
-        # Guardar video temporalmente para procesarlo con OpenCV
+        # ── Step 0: Save temp → extract → select best 5 → delete ──
         temp_path = save_temp_video(video_bytes)
+        logger.info("[Step 0] Temp video saved: %s (%.1f MB)", temp_path, len(video_bytes) / 1024 / 1024)
 
-        # Obtener info del video
         video_info = get_video_info(temp_path)
-
-        # Validar duración (máximo 15 segundos)
-        if video_info.get("duration_seconds", 0) > 15:
+        if video_info.get("duration_seconds", 0) > settings.max_video_duration_seconds:
             raise HTTPException(
                 status_code=400,
-                detail="Video demasiado largo. Máximo 15 segundos."
+                detail=f"Video too long. Max {settings.max_video_duration_seconds} seconds.",
             )
 
-        # Step 0: Extraer frames del video
-        frames = extract_frames_from_video(temp_path, max_frames=10)
-
-        if not frames:
+        all_frames = extract_frames_from_video(temp_path, max_frames=settings.max_frames_to_extract)
+        if not all_frames:
             raise HTTPException(
                 status_code=400,
-                detail="No se pudieron extraer frames del video. "
-                       "Asegúrate de que el video no está corrupto."
+                detail="Could not extract frames from video. File may be corrupt.",
             )
 
-        # Seleccionar el mejor frame (más nítido)
-        best_frame = select_best_frame(frames)
+        best_frames = select_best_n_frames(all_frames, n=settings.max_frames_to_save)
+        logger.info("[Step 0] Extracted %d frames, selected best %d", len(all_frames), len(best_frames))
 
-        # Step 2: CROP using ONNX model
+        # Delete temp video immediately
+        cleanup_temp_file(temp_path)
+        temp_path = None  # prevent double-cleanup in finally
+
+        # ── Step 2: CROP each frame with ONNX model ──
         crop_service = get_crop_service()
-        cropped_frame = crop_service.crop_fish(best_frame)
+        cropped_frames: list[np.ndarray] = []
+        for i, frame in enumerate(best_frames):
+            try:
+                cropped = crop_service.crop_fish(frame)
+                cropped_frames.append(cropped)
+            except Exception as exc:
+                logger.warning("[Step 2] Crop failed on frame %d: %s — using center crop", i, exc)
+                # Fallback: center 70% crop
+                h, w = frame.shape[:2]
+                mx, my = int(w * 0.15), int(h * 0.15)
+                cropped_frames.append(frame[my:h - my, mx:w - mx])
 
-        # Build metadata dict
+        logger.info("[Step 2] Cropped %d frames", len(cropped_frames))
+
+        # ── Build metadata dict ──
         metadata = {
             "area_code": area_code,
             "fisherman_id": fisherman_id,
@@ -133,65 +162,185 @@ async def identify_fish(
             "longitude": longitude,
         }
 
-        # Ejecutar inferencia with full metadata
+        # ── Steps 3-7: Run inference pipeline ──
         service = get_inference_service()
         result = service.identify_fish(
-            frame=cropped_frame,
+            cropped_frames=cropped_frames,
             area_code=area_code,
             species=species,
             user_role=user_role,
             metadata=metadata,
         )
 
-        # Determinar si requiere input manual basado en el umbral
+        # ── Confidence threshold check ──
         result["requires_manual_input"] = result.get("confidence", 0) < confidence_threshold
 
-        # Codificar el frame usado en base64 (para preview en la app)
-        import cv2
-        _, buffer = cv2.imencode(".jpg", cropped_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        frame_base64 = base64.b64encode(buffer).decode("utf-8")
-        result["frame_used"] = frame_base64
+        # ── Encode first cropped frame as base64 preview ──
+        if cropped_frames:
+            _, buffer = cv2.imencode(
+                ".jpg", cropped_frames[0],
+                [cv2.IMWRITE_JPEG_QUALITY, 85],
+            )
+            result["frame_used"] = base64.b64encode(buffer).decode("utf-8")
+        else:
+            result["frame_used"] = None
 
         return IdentifyResponse(**result)
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error("identify_fish failed: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Error interno al procesar el video: {str(e)}"
+            detail=f"Internal error processing video: {str(e)}",
         )
     finally:
-        # Limpiar archivo temporal
         if temp_path:
             cleanup_temp_file(temp_path)
 
 
+# =========================================================================
+# GET /api/v1/identify/test — Test endpoint (no video needed)
+# =========================================================================
 @router.get(
     "/identify/test",
     response_model=IdentifyResponse,
-    summary="Test de identificación (sin video)",
-    description="Endpoint de prueba que devuelve una identificación simulada sin necesidad de video.",
+    summary="Test identification (no video)",
+    description="Returns a simulated identification without uploading a video.",
 )
-async def identify_test():
+async def identify_test() -> IdentifyResponse:
     """
-    Endpoint de prueba para verificar que el servicio funciona.
-    Devuelve una identificación simulada sin necesidad de subir un video.
-    Útil para testing de la app Flutter.
+    Test endpoint that runs the pipeline with dummy frames.
+    Useful for verifying the server is working from the Flutter app.
     """
-    import numpy as np
+    try:
+        # Create 5 dummy frames
+        dummy_frames = [
+            np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+            for _ in range(5)
+        ]
 
-    # Crear un frame dummy
-    dummy_frame = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+        service = get_inference_service()
+        result = service.identify_fish(
+            cropped_frames=dummy_frames,
+            area_code="401 001",
+            species="Common carp",
+            user_role="fisherman",
+            metadata={"fisherman_id": "test-user", "species": "Common carp"},
+        )
+        result["frame_used"] = None
+        return IdentifyResponse(**result)
+    except Exception as e:
+        logger.error("identify_test failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # Ejecutar inferencia con frame dummy
-    service = get_inference_service()
-    result = service.identify_fish(dummy_frame)
-    result["frame_used"] = None  # No hay frame real en test
 
-    return IdentifyResponse(**result)
+# =========================================================================
+# GET /api/v1/fish/{fish_id}/history — Fish catch history
+# =========================================================================
+@router.get(
+    "/fish/{fish_id}/history",
+    summary="Get catch history for a fish",
+    description="Returns full catch history for a specific fish. "
+                "Researchers get GPS coords; fishermen do not.",
+)
+async def get_fish_history_endpoint(
+    fish_id: str,
+    user_role: str = Query("fisherman", description="'fisherman' or 'researcher'"),
+) -> dict:
+    """
+    Look up a fish by its ID and return its complete catch history.
+
+    Args:
+        fish_id:   Unique fish identifier (e.g. "CZ-401001-CYPCA-0001").
+        user_role: Determines if GPS coordinates are included.
+
+    Returns:
+        Dict with fish_id, area_code, species_slug, total_catches, and history list.
+    """
+    from app.services.storage_service import get_fish_history_by_id, get_restricted_history
+
+    result = get_fish_history_by_id(fish_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Fish {fish_id} not found")
+
+    # Role-based filtering
+    if user_role != "researcher":
+        result["history"] = get_restricted_history(result["history"])
+
+    return result
 
 
+# =========================================================================
+# GET /api/v1/areas/{area_code}/stats — Area statistics
+# =========================================================================
+@router.get(
+    "/areas/{area_code}/stats",
+    summary="Get area statistics",
+    description="Returns total fish count, species breakdown, and most recent catch date for an area.",
+)
+async def get_area_stats_endpoint(area_code: str) -> dict:
+    """
+    Compute statistics for a fishing area's stored data.
+
+    Args:
+        area_code: Czech fishing area code (e.g. "401001" or "401 001").
+
+    Returns:
+        Dict with total_fish, species_breakdown, most_recent_catch, total_catches.
+    """
+    from app.services.storage_service import get_area_stats
+
+    stats = get_area_stats(area_code)
+
+    # Enrich with area name if available
+    try:
+        from app.data.czech_areas import find_area_by_code
+        area_info = find_area_by_code(area_code)
+        if area_info:
+            stats["area_name"] = area_info["name"]
+    except Exception:
+        pass
+
+    return stats
+
+
+# =========================================================================
+# GET /api/v1/health/detailed — Detailed health check
+# =========================================================================
+@router.get(
+    "/health/detailed",
+    summary="Detailed health check",
+    description="Returns model status, total fish in database, area count, and disk usage.",
+)
+async def health_detailed() -> dict:
+    """
+    Detailed health check with model status and database stats.
+
+    Returns:
+        Dict with status, model info, fish count, disk usage.
+    """
+    from app.services.crop_service import get_crop_service
+    from app.services.storage_service import get_disk_usage_mb, get_total_fish_count
+
+    crop = get_crop_service()
+
+    return {
+        "status": "healthy",
+        "service": "fishdex-ai-server",
+        "version": "2.0.0",
+        "onnx_model_loaded": crop.available,
+        "total_fish_in_database": get_total_fish_count(),
+        "disk_usage_mb": get_disk_usage_mb(),
+        "similarity_threshold": settings.similarity_threshold,
+        "nearby_area_radius_km": settings.nearby_area_radius_km,
+    }
+
+
+# =========================================================================
+# GET /api/v1/areas/search — Search nearby areas
+# =========================================================================
 @router.get(
     "/areas/search",
     summary="Search nearby fishing areas",
@@ -201,7 +350,7 @@ async def search_areas(
     lat: float = Query(..., description="Latitude of current position"),
     lon: float = Query(..., description="Longitude of current position"),
     radius_km: float = Query(10.0, description="Search radius in kilometers"),
-):
+) -> dict:
     """
     Search for fishing areas near the given GPS coordinates.
 
@@ -218,19 +367,22 @@ async def search_areas(
     if radius_km <= 0 or radius_km > 100:
         raise HTTPException(
             status_code=400,
-            detail="radius_km must be between 0 and 100"
+            detail="radius_km must be between 0 and 100",
         )
 
     areas = find_nearest_areas(lat, lon, max_distance_km=radius_km)
     return {"areas": areas, "count": len(areas), "radius_km": radius_km}
 
 
+# =========================================================================
+# GET /api/v1/areas/{area_code}/species — Species in area
+# =========================================================================
 @router.get(
     "/areas/{area_code}/species",
     summary="Get species found in an area",
     description="Returns list of unique species that have been recorded in storage for this area.",
 )
-async def get_area_species(area_code: str):
+async def get_area_species(area_code: str) -> dict:
     """
     Get list of species found in a specific fishing area's storage.
 
@@ -240,31 +392,32 @@ async def get_area_species(area_code: str):
     Returns:
         List of species found in that area.
     """
-    from app.services.storage_service import get_species_in_area
     from app.data.czech_species import find_species_by_name
+    from app.services.storage_service import get_species_in_area
 
     species_slugs = get_species_in_area(area_code)
 
-    # Enrich with species info
     species_list = []
     for slug in species_slugs:
-        # Convert slug back to readable name for lookup
         readable = slug.replace("_", " ").title()
         info = find_species_by_name(readable)
         if info:
             species_list.append(info)
         else:
-            species_list.append({"slug": slug, "english_name": slug.replace("_", " ").title()})
+            species_list.append({"slug": slug, "english_name": readable})
 
     return {"area_code": area_code, "species": species_list, "count": len(species_list)}
 
 
+# =========================================================================
+# GET /api/v1/species — All Czech species
+# =========================================================================
 @router.get(
     "/species",
     summary="Get all Czech fish species",
     description="Returns the complete list of 45 Czech fish species for dropdown population.",
 )
-async def get_all_species():
+async def get_all_species() -> dict:
     """
     Get the complete list of Czech fish species.
 

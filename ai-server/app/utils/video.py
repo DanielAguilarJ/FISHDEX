@@ -88,6 +88,36 @@ def select_best_frame(frames: List[np.ndarray]) -> np.ndarray:
     return frames[best_idx]
 
 
+def select_best_n_frames(frames: List[np.ndarray], n: int = 5) -> List[np.ndarray]:
+    """
+    Select the top-N sharpest frames from a list, ranked by Laplacian variance.
+
+    Args:
+        frames: List of BGR frames as NumPy arrays.
+        n:      Number of frames to return (default 5).
+
+    Returns:
+        List of the N sharpest frames (or all frames if fewer than N available).
+    """
+    if not frames:
+        return []
+
+    if len(frames) <= n:
+        return list(frames)
+
+    # Score every frame by Laplacian variance
+    scored: List[Tuple[float, int]] = []
+    for i, frame in enumerate(frames):
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        scored.append((score, i))
+
+    # Sort descending by score, pick top N
+    scored.sort(reverse=True)
+    top_indices = sorted(idx for _, idx in scored[:n])  # keep temporal order
+    return [frames[i] for i in top_indices]
+
+
 def save_temp_video(video_bytes: bytes, suffix: str = ".mp4") -> str:
     """
     Guarda bytes de video en un archivo temporal.
