@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/identify_service.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -24,7 +25,8 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
   late Animation<double> _scanAnimation;
   late Animation<double> _pulseAnimation;
 
-  String _statusText = 'Procesando video...';
+  String _statusText = '';
+  bool _statusInitialized = false;
   bool _hasError = false;
   String? _errorMessage;
 
@@ -56,14 +58,24 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
     _startIdentification();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_statusInitialized) {
+      _statusInitialized = true;
+      _statusText = context.l10n.identifyingProcessing;
+    }
+  }
+
   Future<void> _startIdentification() async {
+    final l10n = context.l10n;
     try {
       // Simular pasos del proceso con delays para UX
       await Future.delayed(const Duration(milliseconds: 800));
-      if (mounted) setState(() => _statusText = 'Extrayendo frames...');
+      if (mounted) setState(() => _statusText = l10n.identifyingExtractingFrames);
 
       await Future.delayed(const Duration(milliseconds: 600));
-      if (mounted) setState(() => _statusText = 'Analizando con IA...');
+      if (mounted) setState(() => _statusText = l10n.identifyingAnalyzing);
 
       // Llamar al servicio de identificación con userId y ubicación GPS
       final service = IdentifyService();
@@ -77,7 +89,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       );
 
       await Future.delayed(const Duration(milliseconds: 500));
-      if (mounted) setState(() => _statusText = '¡Pez identificado!');
+      if (mounted) setState(() => _statusText = l10n.identifyingSuccess);
 
       await Future.delayed(const Duration(milliseconds: 400));
 
@@ -101,8 +113,8 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
           _hasError = true;
           _errorMessage = e is IdentifyException
               ? e.message
-              : 'Error inesperado al identificar';
-          _statusText = 'Error';
+              : l10n.identifyingUnexpectedError;
+          _statusText = l10n.identifyingError;
         });
       }
     }
@@ -155,7 +167,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
               else ...[
                 const SizedBox(height: 8),
                 Text(
-                  _errorMessage ?? 'Error desconocido',
+                  _errorMessage ?? context.l10n.identifyingUnexpectedError,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.6),
                     fontSize: 14,
@@ -165,7 +177,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Volver a intentar'),
+                  child: Text(context.l10n.identifyingRetry),
                 ),
               ],
             ],
@@ -214,7 +226,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
                     child: Container(
                       width: 80,
                       height: 2,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
                             Colors.transparent,

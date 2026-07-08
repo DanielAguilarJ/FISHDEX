@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../widgets/ar_overlay.dart';
 import '../widgets/recording_controls.dart';
 import '../providers/camera_provider.dart';
@@ -61,7 +62,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        setState(() => _errorMessage = 'No se encontraron cámaras disponibles');
+        setState(() => _errorMessage = context.l10n.cameraNoCameras);
         return;
       }
 
@@ -91,7 +92,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error al inicializar la cámara: ${e.toString()}';
+        _errorMessage = context.l10n.cameraInitError(e.toString());
       });
     }
   }
@@ -126,7 +127,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _stopRecording,
       );
     } catch (e) {
-      setState(() => _errorMessage = 'Error al iniciar grabación');
+      setState(() => _errorMessage = context.l10n.cameraRecordError);
     }
   }
 
@@ -156,7 +157,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       setState(() {
         _isRecording = false;
         _recordingProgress = 0.0;
-        _errorMessage = 'Error al detener grabación';
+        _errorMessage = context.l10n.cameraStopError;
       });
     }
   }
@@ -203,15 +204,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (!_isInitialized || _controller == null) {
       return Container(
         color: Colors.black,
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(color: AppTheme.accentBlue),
-              SizedBox(height: 16),
+              const CircularProgressIndicator(color: AppTheme.accentBlue),
+              const SizedBox(height: 16),
               Text(
-                'Iniciando cámara...',
-                style: TextStyle(color: Colors.white70),
+                context.l10n.cameraLoading,
+                style: const TextStyle(color: Colors.white70),
               ),
             ],
           ),
@@ -330,7 +331,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _initializeCamera,
-                child: const Text('Reintentar'),
+                child: Text(context.l10n.cameraRetry),
               ),
             ],
           ),

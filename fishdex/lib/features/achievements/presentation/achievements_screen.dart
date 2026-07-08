@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 
 /// Datos de un logro
 class AchievementData {
@@ -96,7 +97,7 @@ class AchievementsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('LOGROS'),
+        title: Text(context.l10n.achievementsCategory),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -224,7 +225,10 @@ class AchievementsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${achievement.progress}/${achievement.target}',
+                context.l10n.achievementsProgressLabel(
+                  achievement.progress,
+                  achievement.target,
+                ),
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.3),
                   fontSize: 10,
@@ -234,7 +238,7 @@ class AchievementsScreen extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.star, color: AppTheme.gold, size: 12),
+                  const Icon(Icons.star, color: AppTheme.gold, size: 12),
                   const SizedBox(width: 4),
                   Text(
                     '+${achievement.xpReward} XP',

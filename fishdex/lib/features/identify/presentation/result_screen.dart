@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/identify_result.dart';
@@ -256,8 +257,8 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
                 // Título principal
                 Text(
                   widget.result.isNew
-                      ? '¡NUEVO DESCUBRIMIENTO!'
-                      : '¡REENCUENTRO!',
+                      ? context.l10n.resultNewDiscovery
+                      : context.l10n.resultReunion,
                   style: Theme.of(context).textTheme.displayMedium?.copyWith(
                         color: widget.result.isNew
                             ? AppTheme.successGreen
@@ -331,7 +332,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
               const Icon(Icons.info_outline, color: AppTheme.accentBlue, size: 18),
               const SizedBox(width: 8),
               Text(
-                'Detalles del avistamiento',
+                context.l10n.resultDetails,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.8),
                   fontSize: 14,
@@ -341,14 +342,14 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
             ],
           ),
           const SizedBox(height: 12),
-          _buildDetailRow('ID del pez', widget.result.fishId),
-          _buildDetailRow('Especie', widget.result.species),
+          _buildDetailRow(context.l10n.resultFishId, widget.result.fishId),
+          _buildDetailRow(context.l10n.resultSpecies, widget.result.species),
           _buildDetailRow(
-            'Tamaño estimado',
+            context.l10n.resultEstimatedSize,
             '${widget.result.estimatedSizeCm} cm',
           ),
           _buildDetailRow(
-            'Confianza IA',
+            context.l10n.resultAiConfidence,
             '${(widget.result.confidence * 100).toStringAsFixed(1)}%',
           ),
         ],
@@ -393,7 +394,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
               Navigator.of(context).popUntil((route) => route.isFirst);
             },
             icon: const Icon(Icons.collections_bookmark),
-            label: const Text('VER EN MI COLECCIÓN'),
+            label: Text(context.l10n.resultViewCollection),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.accentBlue,
               shape: RoundedRectangleBorder(
@@ -411,7 +412,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
               Navigator.of(context).popUntil((route) => route.isFirst);
             },
             icon: const Icon(Icons.map),
-            label: const Text('VOLVER AL MAPA'),
+            label: Text(context.l10n.resultBackToMap),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white70,
               side: const BorderSide(color: Colors.white24),

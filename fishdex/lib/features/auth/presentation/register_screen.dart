@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/user_role_model.dart';
@@ -60,6 +61,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Capture l10n before any await to avoid using context across async gaps
+    final l10n = context.l10n;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -68,14 +72,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     try {
       final authRepo = ref.read(authRepositoryProvider);
       final rolesRepo = ref.read(rolesRepositoryProvider);
-      
+
       // Registrar usuario en Appwrite Auth
       await authRepo.register(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         name: _nameController.text.trim(),
       );
-      
+
       // Auto-login
       await authRepo.login(
         email: _emailController.text.trim(),
@@ -140,15 +144,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       debugPrint('Error Appwrite: [${e.code}] ${e.type} - ${e.message}');
       setState(() {
         if (e.message != null && e.message!.contains('already exists')) {
-          _errorMessage = 'Este email ya está registrado';
+          _errorMessage = l10n.registerEmailAlreadyExists;
         } else {
-          _errorMessage = 'Error Appwrite [${e.code}]: ${e.message ?? "Error desconocido"}';
+          _errorMessage =
+              'Error Appwrite [${e.code}]: ${e.message ?? l10n.unknownError}';
         }
       });
     } catch (e) {
-      debugPrint('Error inesperado: $e');
+      debugPrint(l10n.error);
       setState(() {
-        _errorMessage = 'Error: $e';
+        _errorMessage = '${l10n.error}: $e';
       });
     } finally {
       if (mounted) {
@@ -179,7 +184,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 40),
-                  
+
                   // Logo
                   Container(
                     width: 80,
@@ -206,10 +211,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  
+
                   // Título
                   Text(
-                    'CREAR CUENTA',
+                    context.l10n.registerTitle,
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                           letterSpacing: 3,
                         ),
@@ -217,8 +222,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _isResearcherRole
-                        ? 'Registro como investigador'
-                        : 'Únete a la comunidad de pescadores',
+                        ? context.l10n.registerResearcherSubtitle
+                        : context.l10n.registerSubtitle,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
 
@@ -237,9 +242,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           color: Colors.orange.withOpacity(0.4),
                         ),
                       ),
-                      child: const Text(
-                        'Requiere aprobación de administrador',
-                        style: TextStyle(
+                      child: Text(
+                        context.l10n.registerApprovalRequired,
+                        style: const TextStyle(
                           color: Colors.orange,
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -249,7 +254,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ],
 
                   const SizedBox(height: 32),
-                  
+
                   // Error message
                   if (_errorMessage != null)
                     Container(
@@ -258,30 +263,33 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       decoration: BoxDecoration(
                         color: Colors.red.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        border:
+                            Border.all(color: Colors.red.withOpacity(0.3)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const Icon(Icons.error_outline,
+                              color: Colors.red, size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: Colors.red, fontSize: 14),
+                              style: const TextStyle(
+                                  color: Colors.red, fontSize: 14),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  
+
                   // Nombre
                   TextFormField(
                     controller: _nameController,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: _isResearcherRole
-                          ? 'Nombre completo'
-                          : 'Nombre de Pescador',
+                          ? context.l10n.fieldNameFull
+                          : context.l10n.fieldName,
                       prefixIcon: Icon(
                         Icons.person_outline,
                         color: Colors.white.withOpacity(0.5),
@@ -289,16 +297,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Ingresa tu nombre';
+                        return context.l10n.fieldNameEnter;
                       }
                       if (value.length < 3) {
-                        return 'Mínimo 3 caracteres';
+                        return context.l10n.fieldNameMin;
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Email
                   TextFormField(
                     controller: _emailController,
@@ -306,8 +314,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: _isResearcherRole
-                          ? 'Email institucional'
-                          : 'Email',
+                          ? context.l10n.fieldEmailInstitutional
+                          : context.l10n.fieldEmail,
                       prefixIcon: Icon(
                         Icons.email_outlined,
                         color: Colors.white.withOpacity(0.5),
@@ -315,10 +323,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Ingresa tu email';
+                        return context.l10n.fieldEmailEnter;
                       }
                       if (!value.contains('@')) {
-                        return 'Email no válido';
+                        return context.l10n.fieldEmailInvalid;
                       }
                       return null;
                     },
@@ -332,19 +340,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       controller: _institutionController,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        labelText: 'Institución / Universidad',
+                        labelText: context.l10n.fieldInstitution,
                         prefixIcon: Icon(
                           Icons.school_outlined,
                           color: Colors.white.withOpacity(0.5),
                         ),
-                        hintText: 'Ej: Universidad de Barcelona',
+                        hintText: context.l10n.fieldInstitutionHint,
                         hintStyle: TextStyle(
                           color: Colors.white.withOpacity(0.3),
                         ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Ingresa tu institución';
+                          return context.l10n.fieldInstitutionEnter;
                         }
                         return null;
                       },
@@ -357,7 +365,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       style: const TextStyle(color: Colors.white),
                       maxLines: 3,
                       decoration: InputDecoration(
-                        labelText: 'Motivo de uso',
+                        labelText: context.l10n.fieldReason,
                         prefixIcon: Padding(
                           padding: const EdgeInsets.only(bottom: 48),
                           child: Icon(
@@ -365,33 +373,31 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             color: Colors.white.withOpacity(0.5),
                           ),
                         ),
-                        hintText:
-                            'Describe brevemente para qué necesitas '
-                            'acceso a los datos completos',
+                        hintText: context.l10n.fieldReasonHint,
                         hintStyle: TextStyle(
                           color: Colors.white.withOpacity(0.3),
                         ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Describe el motivo de uso';
+                          return context.l10n.fieldReasonHint;
                         }
                         if (value.length < 20) {
-                          return 'Mínimo 20 caracteres';
+                          return context.l10n.fieldReasonMin;
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
                   ],
-                  
+
                   // Contraseña
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: 'Contraseña',
+                      labelText: context.l10n.fieldPassword,
                       prefixIcon: Icon(
                         Icons.lock_outline,
                         color: Colors.white.withOpacity(0.5),
@@ -404,29 +410,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           color: Colors.white.withOpacity(0.5),
                         ),
                         onPressed: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
+                          setState(
+                              () => _obscurePassword = !_obscurePassword);
                         },
                       ),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Ingresa una contraseña';
+                        return context.l10n.fieldPasswordEnter;
                       }
                       if (value.length < 8) {
-                        return 'Mínimo 8 caracteres';
+                        return context.l10n.fieldPasswordMin;
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Confirmar contraseña
                   TextFormField(
                     controller: _confirmPasswordController,
                     obscureText: true,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: 'Confirmar Contraseña',
+                      labelText: context.l10n.fieldPasswordConfirm,
                       prefixIcon: Icon(
                         Icons.lock_outline,
                         color: Colors.white.withOpacity(0.5),
@@ -434,13 +441,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     validator: (value) {
                       if (value != _passwordController.text) {
-                        return 'Las contraseñas no coinciden';
+                        return context.l10n.fieldPasswordMismatch;
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 32),
-                  
+
                   // Register button
                   SizedBox(
                     width: double.infinity,
@@ -464,8 +471,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             )
                           : Text(
                               _isResearcherRole
-                                  ? 'SOLICITAR ACCESO'
-                                  : 'CREAR CUENTA',
+                                  ? context.l10n.registerResearcherButton
+                                  : context.l10n.registerButton,
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -476,7 +483,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // XP de bienvenida (solo fisherman)
                   if (!_isResearcherRole)
                     Container(
@@ -488,14 +495,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         borderRadius: BorderRadius.circular(20),
                         gradient: AppTheme.goldGradient,
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.star, color: Colors.white, size: 16),
-                          SizedBox(width: 4),
+                          const Icon(Icons.star,
+                              color: Colors.white, size: 16),
+                          const SizedBox(width: 4),
                           Text(
-                            '+50 XP de bienvenida',
-                            style: TextStyle(
+                            context.l10n.registerWelcomeXp,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -505,22 +513,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                     ),
                   const SizedBox(height: 24),
-                  
+
                   // Link a login
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        '¿Ya tienes cuenta? ',
+                        context.l10n.registerHasAccount,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.6),
                         ),
                       ),
                       GestureDetector(
                         onTap: () => context.go('/login'),
-                        child: const Text(
-                          'Inicia Sesión',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.registerLogin,
+                          style: const TextStyle(
                             color: AppTheme.accentBlue,
                             fontWeight: FontWeight.bold,
                           ),

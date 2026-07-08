@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/roles_repository.dart';
@@ -42,7 +43,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Error al cargar solicitudes: $e';
+        _error = context.l10n.adminErrorLoading(e.toString());
         _isLoading = false;
       });
     }
@@ -80,8 +81,8 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(approve
-                ? 'Investigador aprobado correctamente'
-                : 'Solicitud rechazada'),
+                ? context.l10n.adminApproved
+                : context.l10n.adminRejected),
             backgroundColor: approve ? Colors.green : Colors.orange,
           ),
         );
@@ -106,9 +107,9 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'PANEL DE ADMIN',
-          style: TextStyle(
+        title: Text(
+          context.l10n.adminPanelTitle,
+          style: const TextStyle(
             color: Colors.white,
             letterSpacing: 2,
             fontWeight: FontWeight.bold,
@@ -144,7 +145,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: _loadPendingApprovals,
-            child: const Text('Reintentar'),
+            child: Text(context.l10n.retry),
           ),
         ],
       ),
@@ -159,7 +160,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
         children: [
           // Sección: Solicitudes Pendientes
           _buildSectionHeader(
-            'Solicitudes Pendientes',
+            context.l10n.adminPendingRequests,
             Icons.pending_actions,
             badge: _pendingApprovals.length,
           ),
@@ -173,7 +174,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
           const SizedBox(height: 32),
 
           // Sección: Stats rápidas
-          _buildSectionHeader('Estadísticas', Icons.analytics),
+          _buildSectionHeader(context.l10n.adminStats, Icons.analytics),
           const SizedBox(height: 12),
           _buildStatsGrid(),
         ],
@@ -234,7 +235,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'No hay solicitudes pendientes',
+            context.l10n.adminNoPending,
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
               fontSize: 14,
@@ -339,7 +340,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
                 child: OutlinedButton.icon(
                   onPressed: () => _handleApproval(request, false),
                   icon: const Icon(Icons.close, size: 18),
-                  label: const Text('Rechazar'),
+                  label: Text(context.l10n.adminReject),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red,
                     side: const BorderSide(color: Colors.red),
@@ -352,7 +353,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => _handleApproval(request, true),
                   icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Aprobar'),
+                  label: Text(context.l10n.adminApprove),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
@@ -376,14 +377,14 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       mainAxisSpacing: 12,
       childAspectRatio: 1.6,
       children: [
-        _buildStatCard('Pendientes', _pendingApprovals.length.toString(),
-            Icons.pending, Colors.orange),
+        _buildStatCard(context.l10n.adminStatsPending,
+            _pendingApprovals.length.toString(), Icons.pending, Colors.orange),
         _buildStatCard(
-            'Capturas Hoy', '-', Icons.phishing, AppTheme.accentBlue),
+            context.l10n.adminStatsCapturesDay, '-', Icons.phishing, AppTheme.accentBlue),
         _buildStatCard(
-            'Usuarios', '-', Icons.people, AppTheme.teal),
+            context.l10n.adminStatsUsers, '-', Icons.people, AppTheme.teal),
         _buildStatCard(
-            'Especies', '-', Icons.pets, Colors.green),
+            context.l10n.adminStatsSpecies, '-', Icons.pets, Colors.green),
       ],
     );
   }

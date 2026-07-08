@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/identify_result.dart';
 
@@ -40,10 +41,10 @@ class ReunionInfo extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Historial del pez',
-                  style: TextStyle(
+                  context.l10n.reunionHistory,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -57,7 +58,7 @@ class ReunionInfo extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${previousData.totalSightings}x visto',
+                  context.l10n.reunionTimesSeen(previousData.totalSightings),
                   style: const TextStyle(
                     color: AppTheme.energyOrange,
                     fontSize: 12,
@@ -72,19 +73,19 @@ class ReunionInfo extends StatelessWidget {
           // Datos del historial
           _buildHistoryRow(
             icon: Icons.calendar_today,
-            label: 'Primer avistamiento',
+            label: context.l10n.reunionFirstSighting,
             value: _formatDate(previousData.firstSeenDate),
           ),
           const SizedBox(height: 10),
           _buildHistoryRow(
             icon: Icons.location_on,
-            label: 'Primera ubicación',
-            value: previousData.firstSeenLocation ?? 'Desconocida',
+            label: context.l10n.reunionFirstLocation,
+            value: previousData.firstSeenLocation ?? context.l10n.reunionUnknown,
           ),
           const SizedBox(height: 10),
           _buildHistoryRow(
             icon: Icons.access_time,
-            label: 'Último avistamiento',
+            label: context.l10n.reunionLastSighting,
             value: _formatDate(previousData.lastSeenDate),
           ),
           
@@ -93,7 +94,7 @@ class ReunionInfo extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(color: Colors.white12),
             const SizedBox(height: 12),
-            _buildGrowthIndicator(),
+            _buildGrowthIndicator(context),
           ],
         ],
       ),
@@ -129,7 +130,7 @@ class ReunionInfo extends StatelessWidget {
     );
   }
 
-  Widget _buildGrowthIndicator() {
+  Widget _buildGrowthIndicator(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -151,9 +152,9 @@ class ReunionInfo extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '¡Ha crecido!',
-                  style: TextStyle(
+                Text(
+                  context.l10n.reunionGrown,
+                  style: const TextStyle(
                     color: AppTheme.successGreen,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -170,7 +171,7 @@ class ReunionInfo extends StatelessWidget {
             ),
           ),
           Text(
-            '+${previousData.growthCm.toStringAsFixed(1)} cm',
+            '+${previousData.growthCm.toStringAsFixed(1)} ${context.l10n.reunionGrowthLabel}',
             style: const TextStyle(
               color: AppTheme.successGreen,
               fontSize: 18,

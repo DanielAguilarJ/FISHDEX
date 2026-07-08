@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
 // =============================================================================
@@ -44,19 +45,19 @@ class CaptureFormFields extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // === ESPECIE ===
-        _buildSectionLabel('Especie / Descripción visual *'),
+        _buildSectionLabel(context.l10n.captureFieldSpecies),
         const SizedBox(height: 8),
         TextFormField(
           controller: speciesController,
           readOnly: speciesReadOnly,
           style: const TextStyle(color: Colors.white),
           decoration: _buildInputDecoration(
-            hint: 'Ej: Trucha Arcoíris, pez plateado con manchas...',
+            hint: context.l10n.captureFieldSpeciesHint,
             icon: Icons.pets,
           ),
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return 'Campo obligatorio';
+              return context.l10n.captureFieldSpeciesRequired;
             }
             return null;
           },
@@ -65,7 +66,7 @@ class CaptureFormFields extends StatelessWidget {
         const SizedBox(height: 20),
 
         // === LONGITUD ===
-        _buildSectionLabel('Longitud estimada (cm) *'),
+        _buildSectionLabel(context.l10n.captureFieldLength),
         const SizedBox(height: 8),
         TextFormField(
           controller: lengthController,
@@ -75,17 +76,17 @@ class CaptureFormFields extends StatelessWidget {
           ],
           style: const TextStyle(color: Colors.white),
           decoration: _buildInputDecoration(
-            hint: 'Ej: 35.5',
+            hint: context.l10n.captureFieldLengthHint,
             icon: Icons.straighten,
             suffix: 'cm',
           ),
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return 'Campo obligatorio';
+              return context.l10n.captureFieldLengthRequired;
             }
             final num = double.tryParse(value);
             if (num == null || num <= 0) {
-              return 'Ingresa un número válido';
+              return context.l10n.captureFieldLengthInvalid;
             }
             return null;
           },
@@ -94,7 +95,7 @@ class CaptureFormFields extends StatelessWidget {
         const SizedBox(height: 20),
 
         // === PESO (opcional) ===
-        _buildSectionLabel('Peso estimado (kg)'),
+        _buildSectionLabel(context.l10n.captureFieldWeight),
         const SizedBox(height: 8),
         TextFormField(
           controller: weightController,
@@ -104,7 +105,7 @@ class CaptureFormFields extends StatelessWidget {
           ],
           style: const TextStyle(color: Colors.white),
           decoration: _buildInputDecoration(
-            hint: 'Ej: 2.3',
+            hint: context.l10n.captureFieldWeightHint,
             icon: Icons.monitor_weight_outlined,
             suffix: 'kg',
           ),
@@ -113,13 +114,13 @@ class CaptureFormFields extends StatelessWidget {
         const SizedBox(height: 20),
 
         // === COLOR (opcional) ===
-        _buildSectionLabel('Color predominante'),
+        _buildSectionLabel(context.l10n.captureFieldColor),
         const SizedBox(height: 8),
         TextFormField(
           controller: colorController,
           style: const TextStyle(color: Colors.white),
           decoration: _buildInputDecoration(
-            hint: 'Ej: Plateado con reflejos azules',
+            hint: context.l10n.captureFieldColorHint,
             icon: Icons.color_lens_outlined,
           ),
         ),
@@ -127,21 +128,21 @@ class CaptureFormFields extends StatelessWidget {
         const SizedBox(height: 20),
 
         // === CONDICIÓN ===
-        _buildSectionLabel('Condición al momento de captura *'),
+        _buildSectionLabel(context.l10n.captureFieldCondition),
         const SizedBox(height: 8),
-        _buildConditionSelector(),
+        _buildConditionSelector(context),
 
         const SizedBox(height: 20),
 
         // === CARACTERÍSTICAS FÍSICAS (opcional) ===
-        _buildSectionLabel('Características físicas'),
+        _buildSectionLabel(context.l10n.captureFieldFeatures),
         const SizedBox(height: 8),
         TextFormField(
           controller: featuresController,
           maxLines: 2,
           style: const TextStyle(color: Colors.white),
           decoration: _buildInputDecoration(
-            hint: 'Ej: Aleta dorsal prominente, cola bifurcada...',
+            hint: context.l10n.captureFieldFeaturesHint,
             icon: Icons.description_outlined,
           ),
         ),
@@ -149,14 +150,14 @@ class CaptureFormFields extends StatelessWidget {
         const SizedBox(height: 20),
 
         // === NOTAS (opcional) ===
-        _buildSectionLabel('Notas adicionales'),
+        _buildSectionLabel(context.l10n.captureFieldNotes),
         const SizedBox(height: 8),
         TextFormField(
           controller: notesController,
           maxLines: 3,
           style: const TextStyle(color: Colors.white),
           decoration: _buildInputDecoration(
-            hint: 'Cualquier observación adicional...',
+            hint: context.l10n.captureFieldNotesHint,
             icon: Icons.note_outlined,
           ),
         ),
@@ -164,7 +165,7 @@ class CaptureFormFields extends StatelessWidget {
         // === UBICACIÓN ===
         if (showLocationFields) ...[
           const SizedBox(height: 20),
-          _buildSectionLabel('Ubicación GPS'),
+          _buildSectionLabel(context.l10n.captureFieldGps),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -175,7 +176,7 @@ class CaptureFormFields extends StatelessWidget {
                       const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: _buildInputDecoration(
-                    hint: 'Latitud',
+                    hint: context.l10n.captureFieldLatitude,
                     icon: Icons.location_on_outlined,
                   ),
                 ),
@@ -188,7 +189,7 @@ class CaptureFormFields extends StatelessWidget {
                       const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: _buildInputDecoration(
-                    hint: 'Longitud',
+                    hint: context.l10n.captureFieldLongitude,
                     icon: Icons.location_on_outlined,
                   ),
                 ),
@@ -201,21 +202,26 @@ class CaptureFormFields extends StatelessWidget {
   }
 
   /// Selector de condición (alive/released/dead)
-  Widget _buildConditionSelector() {
+  Widget _buildConditionSelector(BuildContext context) {
     return Row(
       children: [
-        _buildConditionChip('alive', 'Vivo', Icons.favorite, Colors.green),
+        _buildConditionChip(
+            context, 'alive', context.l10n.captureConditionAlive,
+            Icons.favorite, Colors.green),
         const SizedBox(width: 8),
         _buildConditionChip(
-            'released', 'Liberado', Icons.waves, Colors.blue),
+            context, 'released', context.l10n.captureConditionReleased,
+            Icons.waves, Colors.blue),
         const SizedBox(width: 8),
         _buildConditionChip(
-            'dead', 'Muerto', Icons.close, Colors.red),
+            context, 'dead', context.l10n.captureConditionDead,
+            Icons.close, Colors.red),
       ],
     );
   }
 
   Widget _buildConditionChip(
+    BuildContext context,
     String value,
     String label,
     IconData icon,

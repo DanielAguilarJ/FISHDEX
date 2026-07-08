@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/map_providers.dart';
 
@@ -52,9 +53,9 @@ class SpotBottomSheet extends StatelessWidget {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              _buildWaterTypeBadge(),
+                              _buildWaterTypeBadge(context),
                               const SizedBox(width: 8),
-                              if (spot.hasRareFish) _buildRareBadge(),
+                              if (spot.hasRareFish) _buildRareBadge(context),
                             ],
                           ),
                         ],
@@ -97,20 +98,20 @@ class SpotBottomSheet extends StatelessWidget {
                     _buildStatItem(
                       Icons.phishing,
                       '${spot.totalCatches}',
-                      'Capturas',
+                      context.l10n.spotCaptures,
                     ),
                     const SizedBox(width: 24),
                     _buildStatItem(
                       Icons.category,
                       '${spot.commonSpecies.length}',
-                      'Especies',
+                      context.l10n.spotSpecies,
                     ),
                     if (spot.lastCatchDate != null) ...[
                       const SizedBox(width: 24),
                       _buildStatItem(
                         Icons.access_time,
-                        _formatDate(spot.lastCatchDate!),
-                        'Última captura',
+                        _formatDate(context, spot.lastCatchDate!),
+                        context.l10n.spotLastCatch,
                       ),
                     ],
                   ],
@@ -119,7 +120,7 @@ class SpotBottomSheet extends StatelessWidget {
                 
                 // Especies comunes
                 Text(
-                  'ESPECIES COMUNES',
+                  context.l10n.spotCommonSpecies,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
                     fontSize: 12,
@@ -147,7 +148,7 @@ class SpotBottomSheet extends StatelessWidget {
                       // TODO: Navegar a la cámara con este spot seleccionado
                     },
                     icon: const Icon(Icons.camera_alt),
-                    label: const Text('PESCAR AQUÍ'),
+                    label: Text(context.l10n.spotFishHere),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.accentBlue,
                       shape: RoundedRectangleBorder(
@@ -164,12 +165,12 @@ class SpotBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildWaterTypeBadge() {
+  Widget _buildWaterTypeBadge(BuildContext context) {
     final label = switch (spot.waterType) {
-      'rio' => 'Río',
-      'lago' => 'Lago',
-      'mar' => 'Mar',
-      'embalse' => 'Embalse',
+      'rio' => context.l10n.spotWaterRiver,
+      'lago' => context.l10n.spotWaterLake,
+      'mar' => context.l10n.spotWaterSea,
+      'embalse' => context.l10n.spotWaterReservoir,
       _ => spot.waterType,
     };
 
@@ -191,7 +192,7 @@ class SpotBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildRareBadge() {
+  Widget _buildRareBadge(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -199,14 +200,14 @@ class SpotBottomSheet extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.legendaryPurple.withOpacity(0.3)),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star, color: AppTheme.legendaryPurple, size: 12),
-          SizedBox(width: 4),
+          const Icon(Icons.star, color: AppTheme.legendaryPurple, size: 12),
+          const SizedBox(width: 4),
           Text(
-            'Peces raros',
-            style: TextStyle(
+            context.l10n.spotRareFish,
+            style: const TextStyle(
               color: AppTheme.legendaryPurple,
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -273,12 +274,12 @@ class SpotBottomSheet extends StatelessWidget {
     };
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(BuildContext context, DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
-    if (diff.inDays == 0) return 'Hoy';
-    if (diff.inDays == 1) return 'Ayer';
-    if (diff.inDays < 7) return 'Hace ${diff.inDays}d';
+    if (diff.inDays == 0) return context.l10n.spotToday;
+    if (diff.inDays == 1) return context.l10n.spotYesterday;
+    if (diff.inDays < 7) return context.l10n.spotDaysAgo(diff.inDays);
     return '${date.day}/${date.month}';
   }
 }

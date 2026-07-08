@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../providers/auth_provider.dart';
+import '../../../core/l10n/l10n_extension.dart';
+import '../../../l10n/app_localizations.dart';
 
 /// Pantalla de Login con diseño gamificado
 class LoginScreen extends ConsumerStatefulWidget {
@@ -40,6 +42,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _errorMessage = null;
     });
 
+    // Capture l10n before async gap
+    final l10n = context.l10n;
+
     try {
       final authRepo = ref.read(authRepositoryProvider);
       await authRepo.login(
@@ -61,20 +66,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       }
     } catch (e) {
-      String errorMsg = 'Error al iniciar sesión';
+      String errorMsg = l10n.loginError;
       if (e is AppwriteException) {
         switch (e.code) {
           case 401:
-            errorMsg = 'Email o contraseña incorrectos';
+            errorMsg = l10n.loginWrongCredentials;
           case 429:
-            errorMsg = 'Demasiados intentos. Espera un momento';
+            errorMsg = l10n.loginTooManyAttempts;
           case 500:
-            errorMsg = 'Error del servidor. Inténtalo más tarde';
+            errorMsg = l10n.serverError;
           default:
-            errorMsg = e.message ?? 'Error al iniciar sesión';
+            errorMsg = e.message ?? l10n.loginError;
         }
       } else {
-        errorMsg = 'Sin conexión. Verifica tu internet';
+        errorMsg = l10n.noConnection;
       }
       setState(() => _errorMessage = errorMsg);
     } finally {
@@ -151,14 +156,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   
                   // Título
                   Text(
-                    'INICIAR SESIÓN',
+                    context.l10n.loginTitle,
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                           letterSpacing: 3,
                         ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Bienvenido de vuelta, pescador',
+                    context.l10n.loginSubtitle,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 40),
@@ -193,7 +198,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: 'Email',
+                      labelText: context.l10n.fieldEmail,
                       prefixIcon: Icon(
                         Icons.email_outlined,
                         color: Colors.white.withOpacity(0.5),
@@ -201,10 +206,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Ingresa tu email';
+                        return context.l10n.fieldEmailEnter;
                       }
                       if (!value.contains('@')) {
-                        return 'Email no válido';
+                        return context.l10n.fieldEmailInvalid;
                       }
                       return null;
                     },
@@ -217,7 +222,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     obscureText: _obscurePassword,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      labelText: 'Contraseña',
+                      labelText: context.l10n.fieldPassword,
                       prefixIcon: Icon(
                         Icons.lock_outline,
                         color: Colors.white.withOpacity(0.5),
@@ -236,10 +241,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Ingresa tu contraseña';
+                        return context.l10n.fieldPasswordEnter;
                       }
                       if (value.length < 8) {
-                        return 'Mínimo 8 caracteres';
+                        return context.l10n.fieldPasswordMin;
                       }
                       return null;
                     },
@@ -267,9 +272,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text(
-                              'ENTRAR',
-                              style: TextStyle(
+                          : Text(
+                              context.l10n.loginButton,
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 2,
@@ -284,16 +289,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        '¿No tienes cuenta? ',
+                        context.l10n.loginNoAccount,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.6),
                         ),
                       ),
                       GestureDetector(
                         onTap: () => context.go('/register'),
-                        child: const Text(
-                          'Regístrate',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.loginRegister,
+                          style: const TextStyle(
                             color: AppTheme.accentBlue,
                             fontWeight: FontWeight.bold,
                           ),
@@ -315,7 +320,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (context.mounted) context.go('/map');
                       },
                       icon: const Icon(Icons.play_arrow),
-                      label: const Text('MODO DEMO (sin servidor)'),
+                      label: Text(context.l10n.loginDemoMode),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.gold,
                         side: const BorderSide(color: AppTheme.gold),
@@ -343,7 +348,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             )
                           : const Icon(Icons.wifi_tethering),
-                      label: Text(_isPinging ? 'Pinging...' : 'Send a ping'),
+                      label: Text(_isPinging ? context.l10n.loginPinging : context.l10n.loginSendPing),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.accentBlue,
                         side: const BorderSide(color: AppTheme.accentBlue),

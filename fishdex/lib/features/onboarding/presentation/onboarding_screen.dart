@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 
 /// Pantalla de onboarding para nuevos usuarios
 /// Se muestra solo la primera vez que abren la app.
@@ -25,36 +26,40 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   /// Total de páginas: 3 intro + 1 selección de rol
   static const int _totalPages = 4;
 
-  /// Datos de cada página del onboarding (solo las 3 de intro)
+  /// Datos estáticos de cada página intro (icono y gradiente únicamente)
   final List<_OnboardingPageData> _introPages = const [
     _OnboardingPageData(
       icon: Icons.phishing,
-      title: 'Identifica Peces',
-      description:
-          'Usa la cámara para grabar peces en su hábitat natural. '
-          'Nuestra IA identifica cada pez individualmente, como una '
-          'huella dactilar submarina.',
       gradient: AppTheme.primaryGradient,
     ),
     _OnboardingPageData(
       icon: Icons.emoji_events,
-      title: 'Colecciona y Compite',
-      description:
-          'Construye tu FishDex como un Pokédex acuático. '
-          'Descubre especies raras, gana XP, sube de nivel y '
-          'compite en el ranking con otros exploradores.',
       gradient: AppTheme.goldGradient,
     ),
     _OnboardingPageData(
       icon: Icons.public,
-      title: 'Contribuye a la Ciencia',
-      description:
-          'Cada avistamiento ayuda a los investigadores a rastrear '
-          'migración, crecimiento y salud de los ecosistemas marinos. '
-          'Tus datos hacen la diferencia.',
       gradient: AppTheme.legendaryGradient,
     ),
   ];
+
+  /// Devuelve los textos localizados para cada página intro
+  List<({String title, String description})> _getIntroPageTexts(
+      BuildContext context) {
+    return [
+      (
+        title: context.l10n.onboardingPage1Title,
+        description: context.l10n.onboardingPage1Desc,
+      ),
+      (
+        title: context.l10n.onboardingPage2Title,
+        description: context.l10n.onboardingPage2Desc,
+      ),
+      (
+        title: context.l10n.onboardingPage3Title,
+        description: context.l10n.onboardingPage3Desc,
+      ),
+    ];
+  }
 
   @override
   void initState() {
@@ -129,7 +134,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 itemCount: _totalPages,
                 itemBuilder: (context, index) {
                   if (index < _introPages.length) {
-                    return _buildPage(_introPages[index], index);
+                    final texts = _getIntroPageTexts(context);
+                    return _buildPage(
+                      _introPages[index],
+                      index,
+                      texts[index].title,
+                      texts[index].description,
+                    );
                   } else {
                     return _buildRoleSelectionPage();
                   }
@@ -162,7 +173,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ? TextButton(
                 onPressed: _skipToRoleSelection,
                 child: Text(
-                  'Saltar',
+                  context.l10n.onboardingSkip,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.6),
                     fontSize: 16,
@@ -175,7 +186,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   /// Construye una página individual del onboarding
-  Widget _buildPage(_OnboardingPageData page, int index) {
+  Widget _buildPage(
+    _OnboardingPageData page,
+    int index,
+    String title,
+    String description,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40),
       child: Column(
@@ -188,7 +204,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
           // Título
           Text(
-            page.title,
+            title,
             style: Theme.of(context).textTheme.displayMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -200,7 +216,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
           // Descripción
           Text(
-            page.description,
+            description,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.white.withOpacity(0.7),
                   height: 1.5,
@@ -310,7 +326,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             elevation: 4,
           ),
           child: Text(
-            isLastIntroPage ? 'ELEGIR MI ROL' : 'Siguiente',
+            isLastIntroPage
+                ? context.l10n.onboardingChooseRole
+                : 'Siguiente',
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -334,7 +352,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            '¿Cuál es tu perfil?',
+            context.l10n.onboardingRoleTitle,
             style: Theme.of(context).textTheme.displayMedium?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -343,7 +361,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Esto define qué datos puedes ver en la app',
+            context.l10n.onboardingRoleSubtitle,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Colors.white.withOpacity(0.6),
                 ),
@@ -354,10 +372,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           // Tarjeta: Pescador
           _buildRoleCard(
             icon: Icons.phishing,
-            title: 'Soy Pescador',
-            description:
-                'Registra tus capturas, colecciona especies y compite '
-                'en el ranking. Acceso inmediato.',
+            title: context.l10n.onboardingFishermanTitle,
+            description: context.l10n.onboardingFishermanDesc,
             gradient: AppTheme.primaryGradient,
             onTap: () => _completeOnboardingWithRole('fisherman'),
           ),
@@ -367,13 +383,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           // Tarjeta: Investigador
           _buildRoleCard(
             icon: Icons.biotech,
-            title: 'Soy Investigador',
-            description:
-                'Accede a datos completos de ubicación, historial y '
-                'estadísticas. Requiere aprobación de un admin.',
+            title: context.l10n.onboardingResearcherTitle,
+            description: context.l10n.onboardingResearcherDesc,
             gradient: AppTheme.legendaryGradient,
             onTap: () => _completeOnboardingWithRole('researcher'),
-            badge: 'Requiere aprobación',
+            badge: context.l10n.onboardingRequiresApproval,
           ),
         ],
       ),
@@ -483,17 +497,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 }
 
-/// Datos inmutables para cada página del onboarding
+/// Datos inmutables para cada página del onboarding (icono y gradiente)
 class _OnboardingPageData {
   final IconData icon;
-  final String title;
-  final String description;
   final LinearGradient gradient;
 
   const _OnboardingPageData({
     required this.icon,
-    required this.title,
-    required this.description,
     required this.gradient,
   });
 }

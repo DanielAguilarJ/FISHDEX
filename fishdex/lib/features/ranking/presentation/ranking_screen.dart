@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/ranking_repository.dart';
 import '../providers/ranking_providers.dart';
@@ -116,7 +117,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
               const Icon(Icons.emoji_events, color: AppTheme.gold, size: 28),
               const SizedBox(width: 10),
               Text(
-                'RANKING',
+                context.l10n.rankingTitle,
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                       letterSpacing: 3,
                     ),
@@ -144,14 +145,14 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
       child: rankAsync.when(
         loading: () => _buildPositionShimmer(),
         error: (_, __) => Text(
-          'Inicia sesión para ver tu posición',
+          context.l10n.rankingLoginToSee,
           style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14),
           textAlign: TextAlign.center,
         ),
         data: (position) {
           if (position == null) {
             return Text(
-              'Inicia sesión para ver tu posición',
+              context.l10n.rankingLoginToSee,
               style: TextStyle(
                   color: Colors.white.withOpacity(0.4), fontSize: 14),
               textAlign: TextAlign.center,
@@ -170,15 +171,16 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
     switch (_currentType) {
       case 'xp':
         pos = position.xpPosition;
-        valueText = '${position.totalXp} XP';
+        valueText = context.l10n.rankingValueXp(position.totalXp);
         break;
       case 'species':
         pos = position.speciesPosition;
-        valueText = '${position.uniqueSpecies} especies';
+        valueText = context.l10n.rankingValueSpecies(position.uniqueSpecies);
         break;
       case 'biggest':
         pos = position.biggestPosition;
-        valueText = '${position.biggestFishCm.toStringAsFixed(1)} cm';
+        valueText = context.l10n.rankingValueBiggest(
+            position.biggestFishCm.toStringAsFixed(1));
         break;
       default:
         pos = -1;
@@ -192,9 +194,9 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
       children: [
         const Icon(Icons.person, color: AppTheme.accentBlue, size: 20),
         const SizedBox(width: 8),
-        const Text(
-          'Tu posición:',
-          style: TextStyle(color: Colors.white70, fontSize: 14),
+        Text(
+          context.l10n.rankingYourPosition,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
         ),
         const SizedBox(width: 12),
         Text(
@@ -260,11 +262,11 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildPeriodChip('Global', 'all_time'),
+          _buildPeriodChip(context.l10n.rankingPeriodGlobal, 'all_time'),
           const SizedBox(width: 8),
-          _buildPeriodChip('Semanal', 'weekly'),
+          _buildPeriodChip(context.l10n.rankingPeriodWeekly, 'weekly'),
           const SizedBox(width: 8),
-          _buildPeriodChip('Mensual', 'monthly'),
+          _buildPeriodChip(context.l10n.rankingPeriodMonthly, 'monthly'),
         ],
       ),
     );
@@ -316,10 +318,10 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
           fontWeight: FontWeight.bold,
           letterSpacing: 0.5,
         ),
-        tabs: const [
-          Tab(text: 'XP TOTAL'),
-          Tab(text: 'ESPECIES'),
-          Tab(text: 'PEZ MAYOR'),
+        tabs: [
+          Tab(text: context.l10n.rankingTabXp),
+          Tab(text: context.l10n.rankingTabSpecies),
+          Tab(text: context.l10n.rankingTabBiggest),
         ],
       ),
     );
@@ -375,7 +377,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            'Sé el primero en el ranking',
+            context.l10n.rankingEmpty,
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
               fontSize: 16,
@@ -384,7 +386,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
           ),
           const SizedBox(height: 4),
           Text(
-            'Identifica tu primer pez!',
+            context.l10n.rankingEmptySubtitle,
             style: TextStyle(
               color: Colors.white.withOpacity(0.3),
               fontSize: 14,
@@ -407,7 +409,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Sin conexión',
+            context.l10n.rankingNoConnection,
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
               fontSize: 16,
@@ -422,7 +424,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text('Reintentar'),
+            child: Text(context.l10n.retry),
           ),
         ],
       ),
@@ -514,9 +516,9 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
                           color: AppTheme.accentBlue,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text(
-                          'TÚ',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.rankingYouBadge,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
@@ -528,7 +530,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Nv. ${ranker.level}',
+                  context.l10n.rankingLevel(ranker.level),
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.4),
                     fontSize: 12,
@@ -619,11 +621,11 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
   String _formatValue(double value, String type) {
     switch (type) {
       case 'xp':
-        return '${value.toInt()} XP';
+        return context.l10n.rankingValueXp(value.toInt());
       case 'species':
-        return '${value.toInt()} spp';
+        return context.l10n.rankingValueSpecies(value.toInt());
       case 'biggest':
-        return '${value.toStringAsFixed(1)} cm';
+        return context.l10n.rankingValueBiggest(value.toStringAsFixed(1));
       default:
         return value.toString();
     }

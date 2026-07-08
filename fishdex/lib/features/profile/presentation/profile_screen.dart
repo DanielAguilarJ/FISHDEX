@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../app.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/enums/user_role.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/gamification_service.dart';
@@ -66,27 +68,82 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final GamificationService _gamification = GamificationService();
 
+  void _showLanguageDialog(BuildContext context) {
+    final currentLocale = ref.read(localeProvider);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0D2137),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.language, color: Colors.white70),
+            SizedBox(width: 10),
+            Text('Idioma / Language', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildLanguageTile(ctx, 'Español', '🇪🇸', const Locale('es'), currentLocale),
+            _buildLanguageTile(ctx, 'English', '🇬🇧', const Locale('en'), currentLocale),
+            _buildLanguageTile(ctx, 'Čeština', '🇨🇿', const Locale('cs'), currentLocale),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLanguageTile(
+    BuildContext ctx,
+    String name,
+    String flag,
+    Locale locale,
+    Locale current,
+  ) {
+    final isSelected = locale.languageCode == current.languageCode;
+    return ListTile(
+      leading: Text(flag, style: const TextStyle(fontSize: 24)),
+      title: Text(
+        name,
+        style: TextStyle(
+          color: isSelected ? AppTheme.accentBlue : Colors.white,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      trailing: isSelected
+          ? const Icon(Icons.check_circle, color: AppTheme.accentBlue)
+          : null,
+      onTap: () {
+        ref.read(localeProvider.notifier).state = locale;
+        Navigator.pop(ctx);
+      },
+    );
+  }
+
   Future<void> _handleLogout() async {
+    final l10n = context.l10n;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0D2137),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title:
-            const Text('Cerrar sesion', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Seguro que quieres cerrar sesion?',
-          style: TextStyle(color: Colors.white70),
+        title: Text(l10n.profileLogoutTitle,
+            style: const TextStyle(color: Colors.white)),
+        content: Text(
+          l10n.profileLogoutConfirm,
+          style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+            child: Text(l10n.cancel,
+                style: const TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Cerrar sesion',
+            child: Text(l10n.profileLogout,
                 style: TextStyle(color: Colors.red.shade400)),
           ),
         ],
@@ -166,11 +223,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             backgroundColor: const Color(0xFF0A1020),
             automaticallyImplyLeading: false,
             actions: [
+              // Botón selector de idioma
+              IconButton(
+                icon: const Icon(Icons.language, color: Colors.white70, size: 22),
+                onPressed: () => _showLanguageDialog(context),
+                tooltip: 'Idioma / Language',
+              ),
               // Botón editar perfil
               IconButton(
                 icon: const Icon(Icons.edit, color: Colors.white70, size: 22),
                 onPressed: () => context.go('/profile-setup'),
-                tooltip: 'Editar perfil',
+                tooltip: context.l10n.profileEditButton,
               ),
               // Botón admin (solo visible para admins)
               if (role == UserRole.admin)
@@ -178,13 +241,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   icon: const Icon(Icons.admin_panel_settings,
                       color: Colors.orange, size: 22),
                   onPressed: () => context.go('/admin'),
-                  tooltip: 'Panel Admin',
+                  tooltip: context.l10n.profileAdminPanel,
                 ),
               // Botón logout
               IconButton(
                 icon: const Icon(Icons.logout, color: Colors.white54, size: 22),
                 onPressed: _handleLogout,
-                tooltip: 'Cerrar sesion',
+                tooltip: context.l10n.profileLogout,
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -356,7 +419,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ],
           ),
           child: Text(
-            'Nv.$level',
+            context.l10n.levelTitle(level),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 11,
@@ -371,19 +434,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _buildRoleBadge(UserRole role) {
     Color badgeColor;
     IconData badgeIcon;
+    String roleName;
+
     switch (role) {
       case UserRole.admin:
         badgeColor = Colors.orange;
         badgeIcon = Icons.admin_panel_settings;
+        roleName = context.l10n.roleAdmin;
         break;
       case UserRole.researcher:
         badgeColor = Colors.purple;
         badgeIcon = Icons.biotech;
+        roleName = context.l10n.roleResearcher;
         break;
       case UserRole.fisherman:
       default:
         badgeColor = AppTheme.teal;
         badgeIcon = Icons.phishing;
+        roleName = context.l10n.roleFisherman;
     }
 
     return Container(
@@ -399,7 +467,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Icon(badgeIcon, color: badgeColor, size: 14),
           const SizedBox(width: 6),
           Text(
-            role.displayName,
+            roleName,
             style: TextStyle(
               color: badgeColor,
               fontSize: 12,
@@ -437,7 +505,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'NV. $level',
+                  context.l10n.levelTitle(level),
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -493,7 +561,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'ESTADISTICAS',
+            context.l10n.profileStatsTitle,
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
               fontSize: 12,
@@ -505,22 +573,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Row(
             children: [
               _buildStatCard(
-                  'Capturas', totalSightings.toString(), Icons.phishing,
+                  context.l10n.statsCaptures,
+                  totalSightings.toString(),
+                  Icons.phishing,
                   color: AppTheme.accentBlue),
               const SizedBox(width: 10),
               _buildStatCard(
-                  'Especies', uniqueSpecies.toString(), Icons.pets,
+                  context.l10n.statsSpecies,
+                  uniqueSpecies.toString(),
+                  Icons.pets,
                   color: Colors.green),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              _buildStatCard('Raros', rareFish.toString(), Icons.star,
+              _buildStatCard(
+                  context.l10n.statsRare,
+                  rareFish.toString(),
+                  Icons.star,
                   color: Colors.purple),
               const SizedBox(width: 10),
               _buildStatCard(
-                  'Legendarios', legendaryFish.toString(), Icons.auto_awesome,
+                  context.l10n.statsLegendary,
+                  legendaryFish.toString(),
+                  Icons.auto_awesome,
                   color: AppTheme.gold),
             ],
           ),
@@ -588,7 +665,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'ACCESOS RAPIDOS',
+            context.l10n.profileQuickAccess,
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
               fontSize: 12,
@@ -601,28 +678,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             children: [
               _buildActionButton(
                 icon: Icons.collections_bookmark,
-                label: 'Coleccion',
+                label: context.l10n.navCollection,
                 color: const Color(0xFF11998E),
                 onTap: () => context.go('/collection'),
               ),
               const SizedBox(width: 10),
               _buildActionButton(
                 icon: Icons.emoji_events,
-                label: 'Ranking',
+                label: context.l10n.navRanking,
                 color: const Color(0xFFF7971E),
                 onTap: () => context.go('/ranking'),
               ),
               const SizedBox(width: 10),
               _buildActionButton(
                 icon: Icons.map,
-                label: 'Mapa',
+                label: context.l10n.navMap,
                 color: const Color(0xFF2193B0),
                 onTap: () => context.go('/map'),
               ),
               const SizedBox(width: 10),
               _buildActionButton(
                 icon: Icons.camera_alt,
-                label: 'Captura',
+                label: context.l10n.navIdentify,
                 color: Colors.green,
                 onTap: () => context.go('/camera'),
               ),
@@ -636,7 +713,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: OutlinedButton.icon(
                 onPressed: () => context.go('/admin'),
                 icon: const Icon(Icons.admin_panel_settings, size: 18),
-                label: const Text('Panel de Administracion'),
+                label: Text(context.l10n.profileAdminPanel),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.orange,
                   side: BorderSide(color: Colors.orange.withOpacity(0.4)),
@@ -697,17 +774,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final totalSightings = (stats['total_sightings'] as num?)?.toInt() ?? 0;
     final uniqueSpecies = (stats['unique_species'] as num?)?.toInt() ?? 0;
     final lastActivity = stats['last_activity'] as String?;
-    String lastActiveText = 'Sin actividad reciente';
+    String lastActiveText = context.l10n.profileNoActivity;
     if (lastActivity != null) {
       try {
         final date = DateTime.parse(lastActivity);
         final diff = DateTime.now().difference(date);
         if (diff.inMinutes < 60) {
-          lastActiveText = 'Hace ${diff.inMinutes} min';
+          lastActiveText = context.l10n.profileMinutesAgo(diff.inMinutes);
         } else if (diff.inHours < 24) {
-          lastActiveText = 'Hace ${diff.inHours}h';
+          lastActiveText = context.l10n.profileHoursAgo(diff.inHours);
         } else {
-          lastActiveText = 'Hace ${diff.inDays} dias';
+          lastActiveText = context.l10n.profileDaysAgo(diff.inDays);
         }
       } catch (_) {}
     }
@@ -718,7 +795,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'RESUMEN',
+            context.l10n.profileSummary,
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
               fontSize: 12,
@@ -727,14 +804,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          _buildActivityRow(Icons.local_fire_department, 'Ultima actividad',
-              lastActiveText, Colors.orange),
+          _buildActivityRow(Icons.local_fire_department,
+              context.l10n.profileLastActivity, lastActiveText, Colors.orange),
+          _buildActivityRow(Icons.phishing, context.l10n.profileTotalCaptures,
+              '$totalSightings', AppTheme.accentBlue),
+          _buildActivityRow(Icons.pets, context.l10n.profileUniqueSpecies,
+              '$uniqueSpecies', Colors.green),
           _buildActivityRow(
-              Icons.phishing, 'Total capturas', '$totalSightings', AppTheme.accentBlue),
-          _buildActivityRow(
-              Icons.pets, 'Especies unicas', '$uniqueSpecies', Colors.green),
-          _buildActivityRow(
-              Icons.star, 'XP total', '$totalXp', AppTheme.gold),
+              Icons.star, context.l10n.profileTotalXp, '$totalXp', AppTheme.gold),
         ],
       ),
     );
@@ -785,14 +862,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   String _getLevelTitle(int level) {
-    if (level >= 50) return 'Maestro Legendario';
-    if (level >= 40) return 'Gran Maestro';
-    if (level >= 30) return 'Maestro';
-    if (level >= 20) return 'Experto';
-    if (level >= 15) return 'Veterano';
-    if (level >= 10) return 'Avanzado';
-    if (level >= 5) return 'Intermedio';
-    if (level >= 2) return 'Aprendiz';
-    return 'Principiante';
+    if (level >= 50) return context.l10n.levelLegendaryMaster;
+    if (level >= 40) return context.l10n.levelGrandMaster;
+    if (level >= 30) return context.l10n.levelMaster;
+    if (level >= 20) return context.l10n.levelExpert;
+    if (level >= 15) return context.l10n.levelVeteran;
+    if (level >= 10) return context.l10n.levelAdvanced;
+    if (level >= 5) return context.l10n.levelIntermediate;
+    if (level >= 2) return context.l10n.levelApprentice;
+    return context.l10n.levelBeginner;
   }
 }

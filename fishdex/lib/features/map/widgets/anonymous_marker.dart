@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Marker anónimo que indica que un pez fue registrado anteriormente
@@ -95,9 +96,9 @@ class AnonymousMarkerBottomSheet extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Título
-          const Text(
-            'Pez registrado anteriormente',
-            style: TextStyle(
+          Text(
+            context.l10n.mapAnonymousTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -108,9 +109,7 @@ class AnonymousMarkerBottomSheet extends StatelessWidget {
 
           // Descripción
           Text(
-            'Este pez ($species) ya fue registrado por otro '
-            'explorador en esta zona. La ubicación exacta no está '
-            'disponible para proteger la privacidad de otros usuarios.',
+            context.l10n.mapAnonymousDesc(species),
             style: TextStyle(
               color: Colors.white.withOpacity(0.6),
               fontSize: 14,
@@ -138,7 +137,7 @@ class AnonymousMarkerBottomSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Datos protegidos',
+                  context.l10n.mapDataProtected,
                   style: TextStyle(
                     color: Colors.grey.shade400,
                     fontSize: 12,

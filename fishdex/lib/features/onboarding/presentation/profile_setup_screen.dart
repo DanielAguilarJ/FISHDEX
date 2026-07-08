@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../profile/providers/profile_setup_provider.dart';
 
 /// Pantalla de configuración de perfil — flujo de 5 pasos
@@ -232,7 +233,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Paso ${_currentStep + 1} de $_totalSteps',
+                context.l10n.profileSetupStep(_currentStep + 1, _totalSteps),
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 14,
@@ -294,7 +295,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             ),
             const SizedBox(height: 32),
             Text(
-              'Elige tu nombre de pescador',
+              context.l10n.profileSetupUsername,
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     letterSpacing: 1,
                   ),
@@ -302,7 +303,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              'Este nombre te identificará en la comunidad',
+              context.l10n.profileSetupUsernameSubtitle,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.6),
                 fontSize: 16,
@@ -314,8 +315,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
               controller: _usernameController,
               style: const TextStyle(color: Colors.white, fontSize: 18),
               decoration: InputDecoration(
-                labelText: 'Nombre de usuario',
-                hintText: 'ej: PescadorPro123',
+                labelText: context.l10n.profileSetupUsernameLabel,
+                hintText: context.l10n.profileSetupUsernameHint,
                 prefixIcon: Icon(
                   Icons.alternate_email,
                   color: Colors.white.withOpacity(0.5),
@@ -323,20 +324,20 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Ingresa un nombre de usuario';
+                  return context.l10n.profileSetupUsernameRequired;
                 }
                 if (value.trim().length < 3) {
-                  return 'Mínimo 3 caracteres';
+                  return context.l10n.profileSetupUsernameMinChars;
                 }
                 if (value.contains(' ')) {
-                  return 'No se permiten espacios';
+                  return context.l10n.profileSetupUsernameNoSpaces;
                 }
                 return null;
               },
             ),
             const SizedBox(height: 12),
             Text(
-              'Mínimo 3 caracteres, sin espacios',
+              context.l10n.profileSetupUsernameHelper,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.4),
                 fontSize: 13,
@@ -360,7 +361,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
         children: [
           const SizedBox(height: 60),
           Text(
-            'Foto de perfil',
+            context.l10n.profileSetupAvatar,
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   letterSpacing: 1,
                 ),
@@ -369,8 +370,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           const SizedBox(height: 12),
           Text(
             _selectedImage != null
-                ? 'Se ve genial! Puedes cambiarla cuando quieras'
-                : 'Muestra tu mejor cara de pescador',
+                ? context.l10n.profileSetupAvatarSet
+                : context.l10n.profileSetupAvatarEmpty,
             style: TextStyle(
               color: Colors.white.withOpacity(0.6),
               fontSize: 16,
@@ -411,7 +412,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Toca para elegir',
+                          context.l10n.profileSetupAvatarTap,
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.5),
                             fontSize: 12,
@@ -429,13 +430,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             children: [
               _buildImageButton(
                 icon: Icons.photo_library,
-                label: 'Galería',
+                label: context.l10n.profileSetupAvatarGallery,
                 onTap: () => _pickImage(ImageSource.gallery),
               ),
               const SizedBox(width: 16),
               _buildImageButton(
                 icon: Icons.camera_alt,
-                label: 'Cámara',
+                label: context.l10n.profileSetupAvatarCamera,
                 onTap: () => _pickImage(ImageSource.camera),
               ),
             ],
@@ -450,7 +451,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
               icon: Icon(Icons.delete_outline,
                   color: Colors.red.withOpacity(0.7), size: 18),
               label: Text(
-                'Eliminar foto',
+                context.l10n.profileSetupAvatarRemove,
                 style: TextStyle(color: Colors.red.withOpacity(0.7)),
               ),
             ),
@@ -460,7 +461,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             TextButton(
               onPressed: _nextStep,
               child: Text(
-                'Omitir este paso',
+                context.l10n.profileSetupAvatarSkip,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.5),
                   fontSize: 16,
@@ -512,9 +513,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Seleccionar foto',
-              style: TextStyle(
+            Text(
+              context.l10n.profileSetupSelectPhoto,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -524,8 +525,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             ListTile(
               leading:
                   const Icon(Icons.photo_library, color: AppTheme.accentBlue),
-              title:
-                  const Text('Galería', style: TextStyle(color: Colors.white)),
+              title: Text(
+                context.l10n.profileSetupAvatarGallery,
+                style: const TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _pickImage(ImageSource.gallery);
@@ -534,8 +537,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             ListTile(
               leading:
                   const Icon(Icons.camera_alt, color: AppTheme.accentBlue),
-              title:
-                  const Text('Cámara', style: TextStyle(color: Colors.white)),
+              title: Text(
+                context.l10n.profileSetupAvatarCamera,
+                style: const TextStyle(color: Colors.white),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _pickImage(ImageSource.camera);
@@ -576,7 +581,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           ),
           const SizedBox(height: 32),
           Text(
-            'Tu ubicación',
+            context.l10n.profileSetupLocation,
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   letterSpacing: 1,
                 ),
@@ -584,7 +589,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Ayuda a otros pescadores cercanos a encontrarte',
+            context.l10n.profileSetupLocationSubtitle,
             style: TextStyle(
               color: Colors.white.withOpacity(0.6),
               fontSize: 16,
@@ -617,8 +622,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                   : const Icon(Icons.my_location, color: AppTheme.teal),
               label: Text(
                 setupState.isDetectingLocation
-                    ? 'Detectando...'
-                    : 'Detectar mi ubicación automáticamente',
+                    ? context.l10n.profileSetupDetectingLocation
+                    : context.l10n.profileSetupDetectLocation,
                 style: const TextStyle(fontSize: 14),
               ),
               style: OutlinedButton.styleFrom(
@@ -638,8 +643,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
             controller: _cityController,
             style: const TextStyle(color: Colors.white, fontSize: 18),
             decoration: InputDecoration(
-              labelText: 'Ciudad o región',
-              hintText: 'ej: Cancún, México',
+              labelText: context.l10n.profileSetupCityLabel,
+              hintText: context.l10n.profileSetupCityHint,
               prefixIcon: Icon(
                 Icons.location_city,
                 color: Colors.white.withOpacity(0.5),
@@ -694,7 +699,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                 ),
                 Expanded(
                   child: Text(
-                    'Compartir mi ubicación aproximada con la comunidad',
+                    context.l10n.profileSetupShareLocation,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.8),
                       fontSize: 14,
@@ -721,7 +726,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
         children: [
           const SizedBox(height: 40),
           Text(
-            'Permisos necesarios',
+            context.l10n.profileSetupPermissions,
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   letterSpacing: 1,
                 ),
@@ -729,7 +734,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Para brindarte la mejor experiencia, necesitamos algunos permisos',
+            context.l10n.profileSetupPermissionsSubtitle,
             style: TextStyle(
               color: Colors.white.withOpacity(0.6),
               fontSize: 16,
@@ -739,22 +744,22 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           const SizedBox(height: 32),
           _buildPermissionTile(
             icon: Icons.camera_alt,
-            title: 'Cámara',
-            description: 'Para identificar peces en tiempo real',
+            title: context.l10n.profileSetupPermCamera,
+            description: context.l10n.profileSetupPermCameraDesc,
             color: AppTheme.accentBlue,
           ),
           const SizedBox(height: 12),
           _buildPermissionTile(
             icon: Icons.location_on,
-            title: 'Ubicación',
-            description: 'Para registrar avistamientos en el mapa',
+            title: context.l10n.profileSetupPermLocation,
+            description: context.l10n.profileSetupPermLocationDesc,
             color: AppTheme.teal,
           ),
           const SizedBox(height: 12),
           _buildPermissionTile(
             icon: Icons.photo_library,
-            title: 'Fotos / Galería',
-            description: 'Para tu foto de perfil y galería de peces',
+            title: context.l10n.profileSetupPermGallery,
+            description: context.l10n.profileSetupPermGalleryDesc,
             color: AppTheme.energyOrange,
           ),
           const SizedBox(height: 32),
@@ -769,8 +774,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
               ),
               label: Text(
                 _permissionsGranted
-                    ? 'Permisos concedidos'
-                    : 'Conceder permisos',
+                    ? context.l10n.profileSetupPermissionsGranted
+                    : context.l10n.profileSetupGrantPermissions,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -791,7 +796,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           TextButton(
             onPressed: _nextStep,
             child: Text(
-              'Omitir por ahora',
+              context.l10n.profileSetupSkipForNow,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.5),
                 fontSize: 16,
@@ -891,7 +896,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           ),
           const SizedBox(height: 40),
           Text(
-            '!Todo listo!',
+            context.l10n.profileSetupDoneTitle,
             style: Theme.of(context).textTheme.displayMedium?.copyWith(
                   color: AppTheme.gold,
                   fontWeight: FontWeight.bold,
@@ -900,7 +905,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            'Tu perfil está configurado.\nEs hora de explorar el mundo acuático.',
+            context.l10n.profileSetupDoneSubtitle,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 18,
@@ -921,14 +926,14 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                 ),
                 elevation: 6,
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.phishing, color: Colors.white, size: 24),
-                  SizedBox(width: 12),
+                  const Icon(Icons.phishing, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
                   Text(
-                    'EMPEZAR A PESCAR!',
-                    style: TextStyle(
+                    context.l10n.profileSetupStartButton,
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 2,
@@ -969,7 +974,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text('Atrás', style: TextStyle(fontSize: 16)),
+                  child: Text(
+                    context.l10n.back,
+                    style: const TextStyle(fontSize: 16),
+                  ),
                 ),
               ),
             ),
@@ -997,7 +1005,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                   ),
                 ),
                 child: Text(
-                  isLastStep ? 'Ver mi perfil' : 'Siguiente',
+                  isLastStep
+                      ? context.l10n.profileSetupViewProfile
+                      : context.l10n.next,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

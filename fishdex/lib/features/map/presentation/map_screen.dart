@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/services/role_guard_service.dart';
@@ -9,6 +8,8 @@ import '../providers/map_providers.dart';
 import '../widgets/anonymous_marker.dart';
 import '../widgets/spot_bottom_sheet.dart';
 import '../widgets/spot_marker.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 /// Pantalla principal del Mapa Interactivo
 /// Muestra la ubicación del usuario y los fishing spots cercanos
@@ -282,7 +283,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             child: Row(
               children: [
                 Text(
-                  'MAPA DE PESCA',
+                  context.l10n.mapTitle,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         letterSpacing: 2,
                       ),
@@ -318,14 +319,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     color: AppTheme.darkSurface.withOpacity(0.8),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.place, color: AppTheme.teal, size: 16),
-                      SizedBox(width: 4),
+                      const Icon(Icons.place, color: AppTheme.teal, size: 16),
+                      const SizedBox(width: 4),
                       Text(
-                        'Spots',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                        context.l10n.mapSpots,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                     ],
                   ),
@@ -348,13 +349,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               color: AppTheme.darkSurface.withOpacity(0.9),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.location_off, color: Colors.orange, size: 18),
-                SizedBox(width: 8),
+                const Icon(Icons.location_off, color: Colors.orange, size: 18),
+                const SizedBox(width: 8),
                 Text(
-                  'Activar ubicación para ver spots cercanos',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                  context.l10n.mapActivateLocation,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
             ),
@@ -368,17 +369,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           color: AppTheme.darkSurface.withOpacity(0.9),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            SizedBox(
+            const SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text(
-              'Obteniendo ubicación...',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+              context.l10n.mapGettingLocation,
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ],
         ),
@@ -396,7 +397,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Error GPS: $e',
+                context.l10n.mapGpsError(e.toString()),
                 style: const TextStyle(color: Colors.red, fontSize: 12),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -570,14 +571,14 @@ class _CaptureInfoSheet extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Info
-          _infoRow(Icons.calendar_today, 'Fecha',
+          _infoRow(Icons.calendar_today, context.l10n.mapFishDate,
               '${capture.capturedAt.day}/${capture.capturedAt.month}/${capture.capturedAt.year}'),
           const SizedBox(height: 8),
-          _infoRow(Icons.fingerprint, 'Fish ID',
+          _infoRow(Icons.fingerprint, context.l10n.mapFishId,
               capture.fishId.substring(0, 8)),
           if (!capture.isOwn) ...[
             const SizedBox(height: 8),
-            _infoRow(Icons.location_on, 'Coordenadas',
+            _infoRow(Icons.location_on, context.l10n.mapCoordinates,
                 '${capture.latitude.toStringAsFixed(4)}, ${capture.longitude.toStringAsFixed(4)}'),
           ],
           const SizedBox(height: 16),

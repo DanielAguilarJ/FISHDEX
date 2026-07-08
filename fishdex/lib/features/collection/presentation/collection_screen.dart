@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -163,12 +164,12 @@ class CollectionScreen extends ConsumerWidget {
             flexibleSpace: FlexibleSpaceBar(
               background: _buildHeader(context, discovered, total),
             ),
-            title: const Text('MI COLECCIÓN'),
+            title: Text(context.l10n.collectionTitle),
           ),
 
           // Filtros
           SliverToBoxAdapter(
-            child: _buildFilters(),
+            child: _buildFilters(context),
           ),
 
           // Grid de peces
@@ -218,7 +219,7 @@ class CollectionScreen extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '$discovered especies descubiertas',
+                    context.l10n.collectionDiscovered(discovered),
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.8),
                       fontSize: 14,
@@ -252,17 +253,17 @@ class CollectionScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFilters() {
+  Widget _buildFilters(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildFilterChip('Todos', true),
-          _buildFilterChip('Comunes', false),
-          _buildFilterChip('Poco comunes', false),
-          _buildFilterChip('Raros', false),
-          _buildFilterChip('Legendarios', false),
+          _buildFilterChip(context.l10n.collectionFilterAll, true),
+          _buildFilterChip(context.l10n.collectionFilterCommon, false),
+          _buildFilterChip(context.l10n.collectionFilterUncommon, false),
+          _buildFilterChip(context.l10n.collectionFilterRare, false),
+          _buildFilterChip(context.l10n.collectionFilterLegendary, false),
         ],
       ),
     );
@@ -295,7 +296,7 @@ class CollectionScreen extends ConsumerWidget {
 
   Widget _buildCollectionCard(BuildContext context, CollectionFish fish) {
     if (!fish.isDiscovered) {
-      return _buildUndiscoveredCard(fish);
+      return _buildUndiscoveredCard(context, fish);
     }
     return _buildDiscoveredCard(context, fish);
   }
@@ -357,7 +358,7 @@ class CollectionScreen extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '${fish.timesSpotted}x',
+                          context.l10n.collectionTimesSpotted(fish.timesSpotted),
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 10,
@@ -443,7 +444,7 @@ class CollectionScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildUndiscoveredCard(CollectionFish fish) {
+  Widget _buildUndiscoveredCard(BuildContext context, CollectionFish fish) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
@@ -470,7 +471,7 @@ class CollectionScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'No descubierto',
+            context.l10n.collectionUndiscovered,
             style: TextStyle(
               color: Colors.white.withOpacity(0.1),
               fontSize: 11,
@@ -574,17 +575,17 @@ class _FishDetailSheet extends StatelessWidget {
                   // Stats
                   Row(
                     children: [
-                      _buildStat('Tamaño', '${fish.sizeCm} cm'),
-                      _buildStat('Avistamientos', '${fish.timesSpotted}'),
-                      _buildStat('Rareza', fish.rarity.toUpperCase()),
+                      _buildStat(context.l10n.collectionSizeLabel, '${fish.sizeCm} cm'),
+                      _buildStat(context.l10n.collectionSightingsLabel, '${fish.timesSpotted}'),
+                      _buildStat(context.l10n.collectionRarityLabel, fish.rarity.toUpperCase()),
                     ],
                   ),
                   const SizedBox(height: 24),
                   
                   // Timeline de avistamientos
-                  const Text(
-                    'HISTORIAL DE AVISTAMIENTOS',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.collectionHistoryTitle,
+                    style: const TextStyle(
                       color: Colors.white54,
                       fontSize: 12,
                       letterSpacing: 1,
@@ -595,7 +596,7 @@ class _FishDetailSheet extends StatelessWidget {
                   
                   // Avistamiento de ejemplo
                   _buildSightingEntry(
-                    'Primer avistamiento',
+                    context.l10n.collectionFirstSighting,
                     fish.firstSeen,
                     fish.sizeCm,
                   ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../camera/presentation/video_preview_screen.dart';
 
@@ -66,7 +67,7 @@ class _GalleryScreenState extends State<GalleryScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No se pudo acceder a la galería: $e'),
+          content: Text(context.l10n.galleryError(e.toString())),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -119,7 +120,7 @@ class _GalleryScreenState extends State<GalleryScreen>
 
                 // Texto de estado
                 Text(
-                  'Abriendo galería',
+                  context.l10n.galleryTitle,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 20,
@@ -129,7 +130,7 @@ class _GalleryScreenState extends State<GalleryScreen>
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Selecciona un video de tu pez\npara identificarlo con IA',
+                  context.l10n.gallerySubtitle,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.45),
@@ -154,7 +155,7 @@ class _GalleryScreenState extends State<GalleryScreen>
                 TextButton(
                   onPressed: () => Navigator.of(context).maybePop(),
                   child: Text(
-                    'Cancelar',
+                    context.l10n.galleryCancel,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.4),
                       fontSize: 14,

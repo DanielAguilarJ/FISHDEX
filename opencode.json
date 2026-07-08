@@ -13,6 +13,11 @@
         "APPWRITE_API_KEY": "standard_c078655ff8339af93f94921865c050f6a761119ab517b737f0a7d0d841196b1e9d4a9fd522323cee24625b003b2df37a4529b6a7a69b0b853041d0a2e957ab470439f8a7ecb3636720a5d972fcccf1f6bb013cd8c207801067c4d7f77d0b7ac82069c663a6c29c4d5227657e077208c562c6715d662076770c6cfa3466ab8b93",
         "APPWRITE_ENDPOINT": "https://fra.cloud.appwrite.io/v1"
       }
+    },
+    "browseros": {
+      "type": "http",
+      "url": "http://127.0.0.1:9000/mcp",
+      "enabled": true
     }
   }
 }

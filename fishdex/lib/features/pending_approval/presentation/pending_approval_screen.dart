@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -66,8 +67,8 @@ class _PendingApprovalScreenState
         if (status == 'approved' && mounted) {
           // Aprobado - navegar al setup de perfil
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Tu cuenta ha sido aprobada!'),
+            SnackBar(
+              content: Text(context.l10n.pendingApprovalApproved),
               backgroundColor: Colors.green,
             ),
           );
@@ -76,9 +77,8 @@ class _PendingApprovalScreenState
           // Rechazado - mostrar mensaje
           setState(() {});
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Tu solicitud ha sido rechazada. Contacta al administrador.'),
+            SnackBar(
+              content: Text(context.l10n.pendingApprovalRejected),
               backgroundColor: Colors.red,
             ),
           );
@@ -145,7 +145,7 @@ class _PendingApprovalScreenState
 
               // Título
               Text(
-                'Solicitud Enviada',
+                context.l10n.pendingApprovalTitle,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -157,8 +157,7 @@ class _PendingApprovalScreenState
 
               // Descripción
               Text(
-                'Tu solicitud como investigador está siendo revisada '
-                'por un administrador.',
+                context.l10n.pendingApprovalDesc,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white.withOpacity(0.7),
                       height: 1.5,
@@ -169,8 +168,7 @@ class _PendingApprovalScreenState
               const SizedBox(height: 12),
 
               Text(
-                'Te notificaremos automáticamente cuando sea aprobada. '
-                'No necesitas cerrar la app.',
+                context.l10n.pendingApprovalNote,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.white.withOpacity(0.5),
                       height: 1.4,
@@ -205,9 +203,9 @@ class _PendingApprovalScreenState
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Text(
-                      'Pendiente de aprobación',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.pendingApprovalStatus,
+                      style: const TextStyle(
                         color: Colors.orange,
                         fontWeight: FontWeight.w600,
                       ),
@@ -226,7 +224,7 @@ class _PendingApprovalScreenState
                   color: Colors.white.withOpacity(0.5),
                 ),
                 label: Text(
-                  'Cerrar sesión',
+                  context.l10n.pendingApprovalLogout,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
                   ),

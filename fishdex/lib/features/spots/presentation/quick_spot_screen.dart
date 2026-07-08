@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../data/repositories/fishing_spots_repository.dart';
@@ -28,12 +29,12 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
   late Animation<Offset> _slideAnim;
   late Animation<double> _fadeAnim;
 
-  // Opciones de tipo de agua: (id, etiqueta, ícono, color)
+  // Opciones de tipo de agua: (id, ícono, color)
   static const _waterTypes = [
-    ('rio', 'Río', Icons.water, Color(0xFF1565C0)),
-    ('embalse', 'Embalse', Icons.water_drop_rounded, Color(0xFF0097A7)),
-    ('lago', 'Lago', Icons.landscape_rounded, Color(0xFF2E7D32)),
-    ('mar', 'Mar', Icons.waves_rounded, Color(0xFF0D47A1)),
+    ('rio', Icons.water, Color(0xFF1565C0)),
+    ('embalse', Icons.water_drop_rounded, Color(0xFF0097A7)),
+    ('lago', Icons.landscape_rounded, Color(0xFF2E7D32)),
+    ('mar', Icons.waves_rounded, Color(0xFF0D47A1)),
   ];
 
   @override
@@ -64,17 +65,33 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
     super.dispose();
   }
 
+  String _waterTypeLabel(String type) {
+    switch (type) {
+      case 'rio':
+        return context.l10n.quickSpotWaterRiver;
+      case 'embalse':
+        return context.l10n.quickSpotWaterReservoir;
+      case 'lago':
+        return context.l10n.quickSpotWaterLake;
+      case 'mar':
+        return context.l10n.quickSpotWaterSea;
+      default:
+        return type;
+    }
+  }
+
   // ── Guardar el spot ────────────────────────────────────────────────────────────
   Future<void> _saveSpot() async {
+    final l10n = context.l10n;
     final location = ref.read(userLocationProvider).valueOrNull;
     if (location == null) {
-      _showError('No se pudo obtener tu ubicación GPS.\nActiva el GPS e inténtalo de nuevo.');
+      _showError(l10n.quickSpotErrorGps);
       return;
     }
 
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      _showError('Ponle un nombre al spot para poder guardarlo.');
+      _showError(l10n.quickSpotErrorName);
       return;
     }
 
@@ -96,7 +113,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '¡Spot "$name" marcado (modo demo)!\nRegistra una cuenta para guardarlo permanentemente.',
+                    l10n.quickSpotSavedDemo(name),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -141,7 +158,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '¡Spot "$name" guardado en el mapa!',
+                  l10n.quickSpotSaved(name),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -158,7 +175,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      _showError('Error al guardar el spot.\n$e');
+      _showError(context.l10n.quickSpotErrorSave(e.toString()));
     }
   }
 
@@ -193,15 +210,15 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
                     children: [
                       _buildLocationCard(),
                       const SizedBox(height: 24),
-                      _buildSectionLabel('Nombre del spot'),
+                      _buildSectionLabel(context.l10n.quickSpotNameLabel),
                       const SizedBox(height: 8),
                       _buildNameField(),
                       const SizedBox(height: 20),
-                      _buildSectionLabel('Tipo de agua'),
+                      _buildSectionLabel(context.l10n.quickSpotWaterType),
                       const SizedBox(height: 12),
                       _buildWaterTypeGrid(),
                       const SizedBox(height: 20),
-                      _buildSectionLabel('Descripción (opcional)'),
+                      _buildSectionLabel(context.l10n.quickSpotDescription),
                       const SizedBox(height: 8),
                       _buildDescField(),
                       const SizedBox(height: 32),
@@ -266,23 +283,23 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'MARCAR SPOT',
-                  style: TextStyle(
+                  context.l10n.quickSpotTitle,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  'Guarda este lugar de pesca en el mapa',
-                  style: TextStyle(
+                  context.l10n.quickSpotSubtitle,
+                  style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
                   ),
@@ -331,9 +348,9 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Ubicación GPS actual',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.quickSpotLocationCurrent,
+                          style: const TextStyle(
                             color: Colors.white54,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -351,17 +368,17 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
                         ),
                       ],
                     )
-                  : const Text(
-                      'Sin señal GPS',
-                      style: TextStyle(color: Colors.orange, fontSize: 14),
+                  : Text(
+                      context.l10n.quickSpotLocationNone,
+                      style: const TextStyle(color: Colors.orange, fontSize: 14),
                     ),
-              loading: () => const Text(
-                'Obteniendo GPS...',
-                style: TextStyle(color: Colors.white54, fontSize: 14),
+              loading: () => Text(
+                context.l10n.quickSpotLocationGetting,
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
               ),
-              error: (_, __) => const Text(
-                'Error al obtener ubicación',
-                style: TextStyle(color: Colors.redAccent, fontSize: 14),
+              error: (_, __) => Text(
+                context.l10n.quickSpotLocationError,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 14),
               ),
             ),
           ),
@@ -409,7 +426,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
       style: const TextStyle(color: Colors.white),
       textCapitalization: TextCapitalization.sentences,
       decoration: InputDecoration(
-        hintText: 'Ej: Río Lozoya - Poza norte',
+        hintText: context.l10n.quickSpotNameHint,
         hintStyle: const TextStyle(color: Colors.white24),
         filled: true,
         fillColor: AppTheme.darkSurface,
@@ -443,6 +460,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
       childAspectRatio: 2.8,
       children: _waterTypes.map((type) {
         final isSelected = _selectedWaterType == type.$1;
+        final label = _waterTypeLabel(type.$1);
         return GestureDetector(
           onTap: () => setState(() => _selectedWaterType = type.$1),
           child: AnimatedContainer(
@@ -450,11 +468,11 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: isSelected
-                  ? type.$4.withOpacity(0.18)
+                  ? type.$3.withOpacity(0.18)
                   : AppTheme.darkSurface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? type.$4 : Colors.white12,
+                color: isSelected ? type.$3 : Colors.white12,
                 width: isSelected ? 2 : 1,
               ),
             ),
@@ -462,16 +480,16 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  type.$3,
-                  color: isSelected ? type.$4 : Colors.white38,
+                  type.$2,
+                  color: isSelected ? type.$3 : Colors.white38,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    type.$2,
+                    label,
                     style: TextStyle(
-                      color: isSelected ? type.$4 : Colors.white38,
+                      color: isSelected ? type.$3 : Colors.white38,
                       fontWeight: isSelected
                           ? FontWeight.w700
                           : FontWeight.normal,
@@ -495,7 +513,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
       maxLines: 2,
       textCapitalization: TextCapitalization.sentences,
       decoration: InputDecoration(
-        hintText: 'Notas sobre este spot...',
+        hintText: context.l10n.quickSpotDescriptionHint,
         hintStyle: const TextStyle(color: Colors.white24),
         filled: true,
         fillColor: AppTheme.darkSurface,
@@ -531,7 +549,9 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
               )
             : const Icon(Icons.save_alt_rounded, size: 22),
         label: Text(
-          _isSaving ? 'Guardando...' : 'GUARDAR SPOT',
+          _isSaving
+              ? context.l10n.quickSpotSaving
+              : context.l10n.quickSpotSaveButton,
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,

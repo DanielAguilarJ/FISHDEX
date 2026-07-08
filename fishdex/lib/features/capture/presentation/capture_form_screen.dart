@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/identify_result.dart';
@@ -103,11 +104,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
   }
 
   Future<void> _handleSave() async {
+    final l10n = context.l10n;
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCondition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona la condición del pez'),
+        SnackBar(
+          content: Text(l10n.captureFormSelectCondition),
           backgroundColor: Colors.red,
         ),
       );
@@ -141,8 +143,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Captura guardada exitosamente!'),
+          SnackBar(
+            content: Text(l10n.captureFormSaved),
             backgroundColor: Colors.green,
           ),
         );
@@ -176,9 +178,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
         title: Text(
           isFromAI
               ? (lowConfidence
-                  ? 'Identificación Manual'
-                  : 'Completar Captura')
-              : 'Registrar Captura',
+                  ? context.l10n.captureFormTitle
+                  : context.l10n.captureFormTitleComplete)
+              : context.l10n.captureFormTitleRegister,
           style: const TextStyle(color: Colors.white),
         ),
         leading: IconButton(
@@ -256,9 +258,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text(
-                          'GUARDAR CAPTURA',
-                          style: TextStyle(
+                      : Text(
+                          context.l10n.captureFormSaveButton,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1,
@@ -278,6 +280,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
 
   /// Banner cuando la IA tiene baja confianza
   Widget _buildLowConfidenceBanner() {
+    final percent =
+        ((widget.aiResult?.confidence ?? 0) * 100).toInt();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -294,9 +298,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Identificación no concluyente',
-                  style: TextStyle(
+                Text(
+                  context.l10n.captureFormLowConfidence,
+                  style: const TextStyle(
                     color: Colors.orange,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -304,9 +308,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'La IA no pudo identificar el pez con suficiente confianza '
-                  '(${((widget.aiResult?.confidence ?? 0) * 100).toInt()}%). '
-                  'Por favor, completa la información manualmente.',
+                  context.l10n.captureFormLowConfidenceDesc(percent),
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 12,
@@ -322,6 +324,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
 
   /// Banner cuando la IA identificó correctamente
   Widget _buildAiResultBanner() {
+    final percent =
+        ((widget.aiResult?.confidence ?? 0) * 100).toInt();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -339,7 +343,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'IA: ${widget.aiResult?.species ?? ""}',
+                  context.l10n.captureFormAiBanner(
+                      widget.aiResult?.species ?? ''),
                   style: const TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
@@ -348,8 +353,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Confianza: ${((widget.aiResult?.confidence ?? 0) * 100).toInt()}% '
-                  '- Puedes agregar datos adicionales abajo.',
+                  context.l10n.captureFormAiBannerDesc(percent),
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 12,

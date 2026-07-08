@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../identify/presentation/identifying_screen.dart';
 
@@ -115,9 +116,9 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Título
-          const Text(
-            '¿Se ve bien tu captura?',
-            style: TextStyle(
+          Text(
+            context.l10n.videoPreviewTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -125,7 +126,7 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Asegúrate de que el pez se vea claramente',
+            context.l10n.videoPreviewSubtitle,
             style: TextStyle(
               color: Colors.white.withOpacity(0.6),
               fontSize: 14,
@@ -143,7 +144,7 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.refresh),
-                    label: const Text('REGRABAR'),
+                    label: Text(context.l10n.videoPreviewRetake),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
                       side: const BorderSide(color: Colors.white54),
@@ -163,7 +164,7 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () => _submitVideo(context),
                     icon: const Icon(Icons.search),
-                    label: const Text('IDENTIFICAR'),
+                    label: Text(context.l10n.videoPreviewIdentify),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.accentBlue,
                       foregroundColor: Colors.white,

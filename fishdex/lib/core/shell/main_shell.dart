@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../l10n/l10n_extension.dart';
 import '../theme/app_theme.dart';
 
 // ─── Modelo de cada acción del Speed Dial ─────────────────────────────────────
@@ -40,22 +41,23 @@ class _MainShellState extends ConsumerState<MainShell>
   late List<Animation<double>> _itemAnims;     // stagger por ítem
 
   // ── Las 3 sub-acciones ─────────────────────────────────────────────────────
+  // NOTE: labels are set dynamically in _buildDialButton using l10n
   static const _dialItems = [
     _DialItem(
       icon: Icons.photo_library_outlined,
-      label: 'Galería',
+      label: 'gallery',   // key for l10n lookup
       angle: 135.0,
       route: '/gallery',
     ),
     _DialItem(
       icon: Icons.camera_alt_outlined,
-      label: 'Identificar',
+      label: 'identify',
       angle: 90.0,
       route: '/camera',
     ),
     _DialItem(
       icon: Icons.location_on_outlined,
-      label: 'Spot',
+      label: 'spot',
       angle: 45.0,
       route: '/quick-spot',
     ),
@@ -269,6 +271,21 @@ class _MainShellState extends ConsumerState<MainShell>
   /// Un sub-botón individual del Speed Dial:
   /// label (encima) → gap → círculo estilo glass con ícono teal
   Widget _buildDialButton(BuildContext context, _DialItem item) {
+    final l10n = context.l10n;
+    String label;
+    switch (item.label) {
+      case 'gallery':
+        label = l10n.navGallery;
+        break;
+      case 'identify':
+        label = l10n.navIdentify;
+        break;
+      case 'spot':
+        label = l10n.navSpot;
+        break;
+      default:
+        label = item.label;
+    }
     return GestureDetector(
       onTap: () => _onDialAction(context, item.route),
       child: SizedBox(
@@ -292,7 +309,7 @@ class _MainShellState extends ConsumerState<MainShell>
                 ],
               ),
               child: Text(
-                item.label,
+                label,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 10,
@@ -417,6 +434,7 @@ class _MainShellState extends ConsumerState<MainShell>
   Widget _buildBottomNav(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     final currentIndex = _getIndexFromLocation(location);
+    final l10n = context.l10n;
 
     return Container(
       decoration: BoxDecoration(
@@ -449,7 +467,7 @@ class _MainShellState extends ConsumerState<MainShell>
                 context,
                 icon: Icons.map_outlined,
                 activeIcon: Icons.map,
-                label: 'Mapa',
+                label: l10n.navMap,
                 index: 0,
                 currentIndex: currentIndex,
               ),
@@ -457,7 +475,7 @@ class _MainShellState extends ConsumerState<MainShell>
                 context,
                 icon: Icons.collections_bookmark_outlined,
                 activeIcon: Icons.collections_bookmark,
-                label: 'Colección',
+                label: l10n.navCollection,
                 index: 1,
                 currentIndex: currentIndex,
               ),
@@ -466,7 +484,7 @@ class _MainShellState extends ConsumerState<MainShell>
                 context,
                 icon: Icons.leaderboard_outlined,
                 activeIcon: Icons.leaderboard,
-                label: 'Ranking',
+                label: l10n.navRanking,
                 index: 3,
                 currentIndex: currentIndex,
               ),
@@ -474,7 +492,7 @@ class _MainShellState extends ConsumerState<MainShell>
                 context,
                 icon: Icons.person_outline,
                 activeIcon: Icons.person,
-                label: 'Perfil',
+                label: l10n.navProfile,
                 index: 4,
                 currentIndex: currentIndex,
               ),

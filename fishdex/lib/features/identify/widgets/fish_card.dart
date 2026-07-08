@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 
 /// Carta coleccionable del pez estilo Pokémon TCG
@@ -54,10 +55,10 @@ class FishCard extends StatelessWidget {
           _buildFishImage(),
           
           // Info del pez
-          _buildFishInfo(),
+          _buildFishInfo(context),
           
           // Stats del pez
-          _buildStats(),
+          _buildStats(context),
         ],
       ),
     );
@@ -166,7 +167,7 @@ class FishCard extends StatelessWidget {
     );
   }
 
-  Widget _buildFishInfo() {
+  Widget _buildFishInfo(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
@@ -180,7 +181,7 @@ class FishCard extends StatelessWidget {
           // Confianza
           _buildInfoBadge(
             Icons.psychology,
-            '${(confidence * 100).toStringAsFixed(0)}% IA',
+            '${(confidence * 100).toStringAsFixed(0)}${context.l10n.fishCardAiConfidence}',
           ),
           const Spacer(),
           // Badge de nuevo
@@ -194,14 +195,14 @@ class FishCard extends StatelessWidget {
                   color: AppTheme.successGreen.withOpacity(0.5),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.new_releases, color: AppTheme.successGreen, size: 14),
-                  SizedBox(width: 4),
+                  const Icon(Icons.new_releases, color: AppTheme.successGreen, size: 14),
+                  const SizedBox(width: 4),
                   Text(
-                    'NUEVO',
-                    style: TextStyle(
+                    context.l10n.fishCardNew,
+                    style: const TextStyle(
                       color: AppTheme.successGreen,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -239,7 +240,7 @@ class FishCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStats() {
+  Widget _buildStats(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Row(
@@ -250,7 +251,7 @@ class FishCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'RAREZA',
+                  context.l10n.fishCardRarity,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.4),
                     fontSize: 10,
