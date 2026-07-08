@@ -1,15 +1,61 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../core/enums/user_role.dart';
+import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../data/services/gamification_service.dart';
+import '../../../data/services/role_guard_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_setup_provider.dart';
 
-/// Pantalla de Perfil — Diseño estilo Pokémon GO / Gaming
-/// Hero header con lago, avatar, tabs ME/FRIENDS/PARTY,
-/// barra de nivel, accesos rápidos circulares y Total Activity.
+// =============================================================================
+// PROVIDER DE STATS REALES DEL USUARIO
+// =============================================================================
+
+/// Carga las estadísticas reales del usuario desde Appwrite
+final userStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
+    if (isDemoMode) return _demoStats();
+
+    final account = ref.read(appwriteAccountProvider);
+    final user = await account.get();
+    final databases = ref.read(appwriteDatabasesProvider);
+
+    final doc = await databases.getDocument(
+      databaseId: AppConstants.databaseId,
+      collectionId: AppConstants.usersCollection,
+      documentId: user.$id,
+    );
+
+    return doc.data;
+  } catch (e) {
+    return _demoStats();
+  }
+});
+
+Map<String, dynamic> _demoStats() => {
+      'total_xp': 0,
+      'level': 1,
+      'total_sightings': 0,
+      'unique_species': 0,
+      'rare_fish_count': 0,
+      'legendary_fish_count': 0,
+      'role': 'fisherman',
+      'approval_status': 'approved',
+    };
+
+// =============================================================================
+// PANTALLA DE PERFIL
+// =============================================================================
+
+/// Pantalla de Perfil completa con datos reales, rol, stats y accesos rápidos
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -17,58 +63,30 @@ class ProfileScreen extends ConsumerStatefulWidget {
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends ConsumerState<ProfileScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        if (_tabController.index != 0) {
-          // FRIENDS y PARTY → mostrar "Próximamente"
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Próximamente'),
-              duration: Duration(seconds: 1),
-            ),
-          );
-          // Regresar al tab ME
-          _tabController.animateTo(0);
-        }
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final GamificationService _gamification = GamificationService();
 
   Future<void> _handleLogout() async {
-    // Mostrar diálogo de confirmación
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0D2137),
-        title: const Text('Cerrar sesión',
-            style: TextStyle(color: Colors.white)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title:
+            const Text('Cerrar sesion', style: TextStyle(color: Colors.white)),
         content: const Text(
-          '¿Seguro que quieres cerrar sesión?',
+          'Seguro que quieres cerrar sesion?',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Cerrar sesión',
+            child: Text('Cerrar sesion',
                 style: TextStyle(color: Colors.red.shade400)),
           ),
         ],
@@ -83,13 +101,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     } catch (_) {}
 
     final prefs = await SharedPreferences.getInstance();
-    // Limpiar TODAS las flags de sesión y demo
     await prefs.setBool('has_active_session', false);
     await prefs.setBool('is_demo_mode', false);
     await prefs.setBool('profile_setup_completed', false);
+    await prefs.remove('cached_user_role');
+    await prefs.remove('cached_approval_status');
 
     ref.invalidate(authStateProvider);
     ref.invalidate(userProfileProvider);
+    ref.invalidate(userStatsProvider);
 
     if (mounted) context.go('/login');
   }
@@ -98,112 +118,110 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final profileAsync = ref.watch(userProfileProvider);
+    final statsAsync = ref.watch(userStatsProvider);
+    final roleAsync = ref.watch(currentUserRoleProvider);
     final profile = profileAsync.valueOrNull;
-
-    // Detectar modo demo: sin sesión Appwrite y perfil cargado de SharedPreferences
-    final isDemoMode = authState.valueOrNull == null &&
-        (profile?.username == 'Demo User' ||
-            (authState is AsyncData && authState.valueOrNull == null));
+    final stats = statsAsync.valueOrNull ?? _demoStats();
+    final roleModel = roleAsync.valueOrNull;
 
     // Datos de display
     final String displayName = profile?.username.isNotEmpty == true
         ? profile!.username
         : (authState.valueOrNull?.name ?? 'Pescador');
-    final String displayEmail = authState.valueOrNull?.email ??
-        (isDemoMode ? '⚡ Modo Demo — sin cuenta' : 'Sin sesión');
+    final String displayEmail = authState.valueOrNull?.email ?? '';
     final String? avatarPath = profile?.avatarPath;
+    final String city = profile?.city ?? '';
+
+    // Stats
+    final int totalXp = (stats['total_xp'] as num?)?.toInt() ?? 0;
+    final int level = (stats['level'] as num?)?.toInt() ?? 1;
+    final int totalSightings =
+        (stats['total_sightings'] as num?)?.toInt() ?? 0;
+    final int uniqueSpecies =
+        (stats['unique_species'] as num?)?.toInt() ?? 0;
+    final int rareFish = (stats['rare_fish_count'] as num?)?.toInt() ?? 0;
+    final int legendaryFish =
+        (stats['legendary_fish_count'] as num?)?.toInt() ?? 0;
+
+    // XP progress
+    final int xpForNext = _gamification.xpForNextLevel(level);
+    final int xpInLevel = totalXp - _xpAccumulatedToLevel(level);
+    final double xpProgress =
+        xpForNext > 0 ? (xpInLevel / xpForNext).clamp(0.0, 1.0) : 0.0;
+
+    // Rol
+    final UserRole role = roleModel?.role ?? UserRole.fisherman;
+
+    // Nivel título
+    final String levelTitle = _getLevelTitle(level);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A1020),
       body: CustomScrollView(
         slivers: [
-          // ═══════════════════════════════════════════════════════════════════
-          // SECCIÓN 1: HERO HEADER (SliverAppBar)
-          // ═══════════════════════════════════════════════════════════════════
+          // HERO HEADER
           SliverAppBar(
-            expandedHeight: 420,
+            expandedHeight: 320,
             pinned: true,
             backgroundColor: const Color(0xFF0A1020),
             automaticallyImplyLeading: false,
-            flexibleSpace: FlexibleSpaceBar(
-              background: _buildHeroBackground(
-                displayName,
-                displayEmail,
-                avatarPath,
+            actions: [
+              // Botón editar perfil
+              IconButton(
+                icon: const Icon(Icons.edit, color: Colors.white70, size: 22),
+                onPressed: () => context.go('/profile-setup'),
+                tooltip: 'Editar perfil',
               ),
-            ),
-            // Tabs en la parte inferior del AppBar colapsado
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(0),
-              child: Container(),
+              // Botón admin (solo visible para admins)
+              if (role == UserRole.admin)
+                IconButton(
+                  icon: const Icon(Icons.admin_panel_settings,
+                      color: Colors.orange, size: 22),
+                  onPressed: () => context.go('/admin'),
+                  tooltip: 'Panel Admin',
+                ),
+              // Botón logout
+              IconButton(
+                icon: const Icon(Icons.logout, color: Colors.white54, size: 22),
+                onPressed: _handleLogout,
+                tooltip: 'Cerrar sesion',
+              ),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: _buildHeroSection(
+                name: displayName,
+                email: displayEmail,
+                city: city,
+                avatarPath: avatarPath,
+                level: level,
+                role: role,
+              ),
             ),
           ),
 
-          // ═══════════════════════════════════════════════════════════════════
-          // BANNER MODO DEMO (solo visible en modo demo)
-          // ═══════════════════════════════════════════════════════════════════
-          if (isDemoMode)
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppTheme.gold.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.gold.withOpacity(0.4)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline,
-                        color: AppTheme.gold, size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Modo demo activo. Crea una cuenta para guardar tu progreso.',
-                        style: TextStyle(
-                          color: AppTheme.gold.withOpacity(0.9),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => context.go('/register'),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'Crear cuenta',
-                        style: TextStyle(
-                          color: AppTheme.gold,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          // BARRA DE NIVEL/XP
+          SliverToBoxAdapter(
+            child: _buildXpBar(level, levelTitle, totalXp, xpForNext, xpProgress),
+          ),
+
+          // STATS GRID
+          SliverToBoxAdapter(
+            child: _buildStatsGrid(
+              totalSightings: totalSightings,
+              uniqueSpecies: uniqueSpecies,
+              rareFish: rareFish,
+              legendaryFish: legendaryFish,
+              totalXp: totalXp,
             ),
+          ),
 
-          // ═══════════════════════════════════════════════════════════════════
-          // SECCIÓN 2: BARRA NIVEL/XP
-          // ═══════════════════════════════════════════════════════════════════
-          SliverToBoxAdapter(child: _buildLevelBar()),
+          // ACCESOS RÁPIDOS
+          SliverToBoxAdapter(child: _buildQuickActions(role)),
 
-          // ═══════════════════════════════════════════════════════════════════
-          // SECCIÓN 3: ACCESOS RÁPIDOS (4 botones circulares)
-          // ═══════════════════════════════════════════════════════════════════
-          SliverToBoxAdapter(child: _buildQuickAccess()),
+          // ACTIVIDAD RECIENTE
+          SliverToBoxAdapter(child: _buildRecentActivity(stats)),
 
-          // ═══════════════════════════════════════════════════════════════════
-          // SECCIÓN 4: TOTAL ACTIVITY
-          // ═══════════════════════════════════════════════════════════════════
-          SliverToBoxAdapter(child: _buildTotalActivity()),
-
-          // Espacio final para bottom nav
+          // Espacio final
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
@@ -211,160 +229,72 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   // ===========================================================================
-  // HERO BACKGROUND — Gradiente de lago + avatar + tabs + nombre
+  // HERO SECTION
   // ===========================================================================
 
-  Widget _buildHeroBackground(
-    String name,
-    String email,
-    String? avatarPath,
-  ) {
+  Widget _buildHeroSection({
+    required String name,
+    required String email,
+    required String city,
+    required String? avatarPath,
+    required int level,
+    required UserRole role,
+  }) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Fondo: gradiente tipo lago con cielo
+        // Fondo gradiente
         Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0.0, 0.3, 0.6, 0.85, 1.0],
+              stops: [0.0, 0.4, 0.7, 1.0],
               colors: [
-                Color(0xFFE8A838), // Cielo dorado/atardecer arriba
-                Color(0xFF5BB3D0), // Cielo azul claro
-                Color(0xFF2E8B9A), // Agua superficie
-                Color(0xFF1A5F7A), // Agua profunda
-                Color(0xFF0A1020), // Fade a fondo oscuro
+                Color(0xFF1A3A5C),
+                Color(0xFF0F2A44),
+                Color(0xFF0C1E34),
+                Color(0xFF0A1020),
               ],
             ),
           ),
         ),
 
-        // Overlay de vegetación lateral (efecto decorativo)
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 120,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF2D7A3A).withOpacity(0.3),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        // Fade inferior para transición suave al contenido
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 150,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Color(0xFF0A1020),
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        // Contenido del hero
+        // Contenido centrado
         SafeArea(
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // TabBar + botón logout
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TabBar(
-                        controller: _tabController,
-                        indicatorColor: Colors.white,
-                        indicatorWeight: 3,
-                        labelColor: Colors.white,
-                        unselectedLabelColor: Colors.white60,
-                        labelStyle: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                        tabs: [
-                          const Tab(text: 'ME'),
-                          Tab(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text('FRIENDS'),
-                                const SizedBox(width: 4),
-                                // Punto verde de notificación
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: AppTheme.successGreen,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Tab(text: 'PARTY'),
-                        ],
-                      ),
-                    ),
-                    // Botón logout
-                    IconButton(
-                      icon: const Icon(Icons.logout, color: Colors.white),
-                      onPressed: _handleLogout,
-                    ),
-                  ],
-                ),
-              ),
+              const SizedBox(height: 40),
 
-              // Spacer flexible para centrar el avatar
-              const Spacer(flex: 2),
-
-              // Avatar del usuario
-              _buildHeroAvatar(name, avatarPath),
+              // Avatar
+              _buildAvatar(name, avatarPath, level),
               const SizedBox(height: 16),
 
-              // Nombre de usuario
+              // Nombre
               Text(
                 name,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(color: Colors.black54, blurRadius: 8),
-                  ],
                 ),
               ),
               const SizedBox(height: 4),
 
-              // Email
-              Text(
-                email,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 13,
+              // Email y ciudad
+              if (email.isNotEmpty || city.isNotEmpty)
+                Text(
+                  [email, city].where((s) => s.isNotEmpty).join(' · '),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 13,
+                  ),
                 ),
-              ),
+              const SizedBox(height: 10),
 
-              const Spacer(flex: 1),
+              // Badge de rol
+              _buildRoleBadge(role),
             ],
           ),
         ),
@@ -372,106 +302,173 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildHeroAvatar(String name, String? avatarPath) {
-    final hasRealAvatar =
-        avatarPath != null && File(avatarPath).existsSync();
+  Widget _buildAvatar(String name, String? avatarPath, int level) {
+    final hasAvatar = avatarPath != null && File(avatarPath).existsSync();
+
+    return Stack(
+      alignment: Alignment.bottomRight,
+      children: [
+        Container(
+          width: 100,
+          height: 100,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppTheme.accentBlue, width: 3),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.accentBlue.withOpacity(0.3),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
+            gradient: hasAvatar ? null : AppTheme.primaryGradient,
+            image: hasAvatar
+                ? DecorationImage(
+                    image: FileImage(File(avatarPath!)),
+                    fit: BoxFit.cover,
+                  )
+                : null,
+          ),
+          child: hasAvatar
+              ? null
+              : Center(
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : 'P',
+                    style: const TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+        ),
+        // Badge de nivel
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            gradient: AppTheme.goldGradient,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.gold.withOpacity(0.4),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+          child: Text(
+            'Nv.$level',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleBadge(UserRole role) {
+    Color badgeColor;
+    IconData badgeIcon;
+    switch (role) {
+      case UserRole.admin:
+        badgeColor = Colors.orange;
+        badgeIcon = Icons.admin_panel_settings;
+        break;
+      case UserRole.researcher:
+        badgeColor = Colors.purple;
+        badgeIcon = Icons.biotech;
+        break;
+      case UserRole.fisherman:
+      default:
+        badgeColor = AppTheme.teal;
+        badgeIcon = Icons.phishing;
+    }
 
     return Container(
-      width: 110,
-      height: 110,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 15,
-            spreadRadius: 2,
+        color: badgeColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: badgeColor.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(badgeIcon, color: badgeColor, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            role.displayName,
+            style: TextStyle(
+              color: badgeColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
-        gradient: hasRealAvatar ? null : AppTheme.primaryGradient,
-        image: hasRealAvatar
-            ? DecorationImage(
-                image: FileImage(File(avatarPath)),
-                fit: BoxFit.cover,
-              )
-            : null,
       ),
-      child: hasRealAvatar
-          ? null
-          : Center(
-              child: Text(
-                name.isNotEmpty ? name[0].toUpperCase() : 'P',
-                style: const TextStyle(
-                  fontSize: 44,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
     );
   }
 
   // ===========================================================================
-  // BARRA DE NIVEL / XP
+  // BARRA XP
   // ===========================================================================
 
-  Widget _buildLevelBar() {
+  Widget _buildXpBar(
+      int level, String title, int totalXp, int xpForNext, double progress) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF0D2137),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppTheme.gold.withOpacity(0.3),
-        ),
+        border: Border.all(color: AppTheme.gold.withOpacity(0.2)),
       ),
       child: Column(
         children: [
           Row(
             children: [
-              // Chip dorado NV. 1
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   gradient: AppTheme.goldGradient,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
-                  'NV. 1',
-                  style: TextStyle(
+                child: Text(
+                  'NV. $level',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 13,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'Principiante',
-                style: TextStyle(color: Colors.white, fontSize: 15),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
               const Spacer(),
-              const Text(
-                '0 / 100 XP',
-                style: TextStyle(
+              Text(
+                '$totalXp / ${_xpAccumulatedToLevel(level) + xpForNext} XP',
+                style: const TextStyle(
                   color: AppTheme.gold,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
-            child: const LinearProgressIndicator(
-              value: 0.0,
+            child: LinearProgressIndicator(
+              value: progress,
               minHeight: 8,
-              backgroundColor: Color(0xFF1A2A3A),
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFA500)),
+              backgroundColor: const Color(0xFF1A2A3A),
+              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.gold),
             ),
           ),
         ],
@@ -480,218 +477,322 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   // ===========================================================================
-  // ACCESOS RÁPIDOS — 4 BOTONES CIRCULARES
+  // STATS GRID
   // ===========================================================================
 
-  Widget _buildQuickAccess() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildQuickButton(
-            icon: Icons.people,
-            label: 'BUDDY\nHISTORY',
-            subtitle: 'Avistamientos',
-            gradientColors: const [Color(0xFF11998E), Color(0xFF38EF7D)],
-          ),
-          _buildQuickButton(
-            icon: Icons.straighten,
-            label: 'SCRAPBOOK',
-            subtitle: 'Pez más grande',
-            gradientColors: const [Color(0xFF2193B0), Color(0xFF6DD5ED)],
-          ),
-          _buildQuickButton(
-            icon: Icons.calendar_month,
-            label: 'JOURNAL',
-            subtitle: 'Días activos',
-            gradientColors: const [Color(0xFF11998E), Color(0xFF38EF7D)],
-          ),
-          _buildQuickButton(
-            icon: Icons.local_fire_department,
-            label: 'STYLE',
-            subtitle: 'Racha actual',
-            gradientColors: const [Color(0xFFF7971E), Color(0xFFFFD200)],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickButton({
-    required IconData icon,
-    required String label,
-    required String subtitle,
-    required List<Color> gradientColors,
-    VoidCallback? onTap,
+  Widget _buildStatsGrid({
+    required int totalSightings,
+    required int uniqueSpecies,
+    required int rareFish,
+    required int legendaryFish,
+    required int totalXp,
   }) {
-    return GestureDetector(
-      onTap: onTap ??
-          () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('$label — Próximamente 🎣'),
-                duration: const Duration(seconds: 1),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                backgroundColor: const Color(0xFF0D2137),
-              ),
-            );
-          },
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: gradientColors,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: gradientColors.first.withOpacity(0.4),
-                  blurRadius: 12,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Icon(icon, color: Colors.white, size: 32),
-          ),
-          const SizedBox(height: 8),
           Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
+            'ESTADISTICAS',
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
-              fontSize: 10,
+              fontSize: 12,
+              letterSpacing: 2,
+              fontWeight: FontWeight.bold,
             ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildStatCard(
+                  'Capturas', totalSightings.toString(), Icons.phishing,
+                  color: AppTheme.accentBlue),
+              const SizedBox(width: 10),
+              _buildStatCard(
+                  'Especies', uniqueSpecies.toString(), Icons.pets,
+                  color: Colors.green),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildStatCard('Raros', rareFish.toString(), Icons.star,
+                  color: Colors.purple),
+              const SizedBox(width: 10),
+              _buildStatCard(
+                  'Legendarios', legendaryFish.toString(), Icons.auto_awesome,
+                  color: AppTheme.gold),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // ===========================================================================
-  // TOTAL ACTIVITY — Lista de estadísticas
-  // ===========================================================================
-
-  Widget _buildTotalActivity() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        children: [
-          // Separador con título
-          Row(
-            children: [
-              Expanded(
-                child: Divider(color: Colors.white.withOpacity(0.2)),
+  Widget _buildStatCard(String label, String value, IconData icon,
+      {Color color = Colors.white}) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.15)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'TOTAL ACTIVITY',
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 13,
-                    letterSpacing: 2,
+                    color: color,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ACCESOS RÁPIDOS
+  // ===========================================================================
+
+  Widget _buildQuickActions(UserRole role) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'ACCESOS RAPIDOS',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 12,
+              letterSpacing: 2,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildActionButton(
+                icon: Icons.collections_bookmark,
+                label: 'Coleccion',
+                color: const Color(0xFF11998E),
+                onTap: () => context.go('/collection'),
               ),
-              Expanded(
-                child: Divider(color: Colors.white.withOpacity(0.2)),
+              const SizedBox(width: 10),
+              _buildActionButton(
+                icon: Icons.emoji_events,
+                label: 'Ranking',
+                color: const Color(0xFFF7971E),
+                onTap: () => context.go('/ranking'),
+              ),
+              const SizedBox(width: 10),
+              _buildActionButton(
+                icon: Icons.map,
+                label: 'Mapa',
+                color: const Color(0xFF2193B0),
+                onTap: () => context.go('/map'),
+              ),
+              const SizedBox(width: 10),
+              _buildActionButton(
+                icon: Icons.camera_alt,
+                label: 'Captura',
+                color: Colors.green,
+                onTap: () => context.go('/camera'),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // Lista de actividad
-          _buildActivityItem(
-            icon: Icons.directions_walk,
-            iconBgColor: Colors.blueGrey,
-            title: 'Distance Walked',
-            value: '-- km',
-          ),
-          _buildActivityItem(
-            icon: Icons.phishing,
-            iconBgColor: const Color(0xFF1565C0),
-            title: 'Fish Caught',
-            value: '0',
-          ),
-          _buildActivityItem(
-            icon: Icons.explore,
-            iconBgColor: const Color(0xFF006064),
-            title: 'Locations Visited',
-            value: '0',
-          ),
-          _buildActivityItem(
-            icon: Icons.star,
-            iconBgColor: const Color(0xFF4527A0),
-            title: 'Total XP',
-            value: '0',
-          ),
+          // Admin button row
+          if (role == UserRole.admin) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => context.go('/admin'),
+                icon: const Icon(Icons.admin_panel_settings, size: 18),
+                label: const Text('Panel de Administracion'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  side: BorderSide(color: Colors.orange.withOpacity(0.4)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildActivityItem({
+  Widget _buildActionButton({
     required IconData icon,
-    required Color iconBgColor,
-    required String title,
-    required String value,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
   }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.2)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // ACTIVIDAD RECIENTE
+  // ===========================================================================
+
+  Widget _buildRecentActivity(Map<String, dynamic> stats) {
+    final totalXp = (stats['total_xp'] as num?)?.toInt() ?? 0;
+    final totalSightings = (stats['total_sightings'] as num?)?.toInt() ?? 0;
+    final uniqueSpecies = (stats['unique_species'] as num?)?.toInt() ?? 0;
+    final lastActivity = stats['last_activity'] as String?;
+    String lastActiveText = 'Sin actividad reciente';
+    if (lastActivity != null) {
+      try {
+        final date = DateTime.parse(lastActivity);
+        final diff = DateTime.now().difference(date);
+        if (diff.inMinutes < 60) {
+          lastActiveText = 'Hace ${diff.inMinutes} min';
+        } else if (diff.inHours < 24) {
+          lastActiveText = 'Hace ${diff.inHours}h';
+        } else {
+          lastActiveText = 'Hace ${diff.inDays} dias';
+        }
+      } catch (_) {}
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'RESUMEN',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 12,
+              letterSpacing: 2,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildActivityRow(Icons.local_fire_department, 'Ultima actividad',
+              lastActiveText, Colors.orange),
+          _buildActivityRow(
+              Icons.phishing, 'Total capturas', '$totalSightings', AppTheme.accentBlue),
+          _buildActivityRow(
+              Icons.pets, 'Especies unicas', '$uniqueSpecies', Colors.green),
+          _buildActivityRow(
+              Icons.star, 'XP total', '$totalXp', AppTheme.gold),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityRow(
+      IconData icon, String label, String value, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1B2A),
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Row(
         children: [
-          // Ícono circular
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: iconBgColor.withOpacity(0.8),
-            ),
-            child: Icon(icon, color: Colors.white, size: 20),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
-          const SizedBox(width: 16),
-          // Título
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          // Valor
+          const Spacer(),
           Text(
             value,
-            style: const TextStyle(
-              color: Color(0xFF00BCD4),
-              fontSize: 15,
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
         ],
       ),
     );
+  }
+
+  // ===========================================================================
+  // HELPERS
+  // ===========================================================================
+
+  int _xpAccumulatedToLevel(int level) {
+    int total = 0;
+    for (int i = 2; i <= level; i++) {
+      total += (AppConstants.xpBaseForLevel * math.pow(i, AppConstants.xpLevelFactor))
+          .toInt();
+    }
+    return total;
+  }
+
+  String _getLevelTitle(int level) {
+    if (level >= 50) return 'Maestro Legendario';
+    if (level >= 40) return 'Gran Maestro';
+    if (level >= 30) return 'Maestro';
+    if (level >= 20) return 'Experto';
+    if (level >= 15) return 'Veterano';
+    if (level >= 10) return 'Avanzado';
+    if (level >= 5) return 'Intermedio';
+    if (level >= 2) return 'Aprendiz';
+    return 'Principiante';
   }
 }
