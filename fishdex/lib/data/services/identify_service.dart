@@ -4,11 +4,11 @@ import 'package:http/http.dart' as http;
 import '../models/identify_result.dart';
 import '../../core/constants/app_constants.dart';
 
-/// Servicio que se comunica con el servidor de IA en Hugging Face Spaces.
-/// Extrae un frame del video localmente y lo envía como imagen JPEG
-/// (más eficiente que subir el video completo).
+/// Servicio que se comunica con el servidor de IA local.
+/// Envía el video/imagen capturado al servidor corriendo en la misma red
+/// y recibe la identificación del pez con todos sus metadatos.
 class IdentifyService {
-  /// Envía un video (o una imagen extraída de él) al servidor de IA.
+  /// Envía un video (o una imagen extraída de él) al servidor de IA local.
   ///
   /// [videoPath] - Ruta local del video/imagen
   /// [areaCode] - Czech fishing area code (required)
@@ -22,6 +22,8 @@ class IdentifyService {
   /// [size] - Measured size in cm
   /// [latitude] - Latitud GPS opcional
   /// [longitude] - Longitud GPS opcional
+  /// [userId] - ID del usuario (legacy field)
+  /// [notes] - Notas adicionales del pescador
   /// [confidenceThreshold] - Umbral de confianza para formulario manual
   Future<IdentifyResult> identifyFish({
     required String videoPath,
@@ -36,6 +38,8 @@ class IdentifyService {
     double? size,
     double? latitude,
     double? longitude,
+    String? userId,
+    String? notes,
     double? confidenceThreshold,
   }) async {
     try {
@@ -76,6 +80,8 @@ class IdentifyService {
       if (weather != null) request.fields['weather'] = weather;
       if (bite != null) request.fields['bite'] = bite;
       if (size != null) request.fields['size'] = size.toString();
+      if (userId != null) request.fields['user_id'] = userId;
+      if (notes != null) request.fields['notes'] = notes;
 
       // GPS coordinates
       if (latitude != null) {
@@ -117,7 +123,8 @@ class IdentifyService {
       throw IdentifyException(
         'No se pudo conectar al servidor de IA',
         detail:
-            'Verifica tu conexión a internet. El servidor puede estar despertando (~30s).',
+            'Verifica que el servidor local esté corriendo en ${AppConstants.aiServerUrl} '
+            'y que tu teléfono esté en la misma red WiFi.',
       );
     } catch (e) {
       if (e is IdentifyException) rethrow;

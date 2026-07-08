@@ -4,6 +4,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/identify_service.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../camera/providers/capture_metadata_provider.dart';
 import '../../map/providers/map_providers.dart';
 import 'result_screen.dart';
 
@@ -81,8 +82,18 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       final service = IdentifyService();
       final authUser = ref.read(authStateProvider).valueOrNull;
       final location = ref.read(userLocationProvider).valueOrNull;
+      final metadata = ref.read(captureMetadataProvider);
       final result = await service.identifyFish(
         videoPath: widget.videoPath,
+        areaCode: metadata.areaCode ?? '401 001',
+        fishermanId: authUser?.$id ?? 'anonymous',
+        userRole: 'fisherman',
+        species: metadata.species,
+        fishState: metadata.fishState,
+        name: metadata.customName,
+        weather: metadata.weather,
+        bite: metadata.bite,
+        size: metadata.size,
         userId: authUser?.$id,
         latitude: location?.latitude,
         longitude: location?.longitude,
