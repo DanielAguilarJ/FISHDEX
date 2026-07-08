@@ -144,7 +144,7 @@ CZECH_SPECIES: list[dict] = [
     {
         "czech_name": "Bolen dravý",
         "english_name": "Asp",
-        "latin_name": "Leuciscus aspius",
+        "latin_name": "Leuciscus aspius (Aspius aspius)",
         "slug": "leuciscus_aspius",
         "rarity": "uncommon",
         "xp_base": 25,
@@ -207,7 +207,7 @@ CZECH_SPECIES: list[dict] = [
     },
     {
         "czech_name": "Hlavatka obecná",
-        "english_name": "Huchen",
+        "english_name": "Huchen (Danube salmon)",
         "latin_name": "Hucho hucho",
         "slug": "hucho_hucho",
         "rarity": "rare",
@@ -247,7 +247,7 @@ CZECH_SPECIES: list[dict] = [
     },
     {
         "czech_name": "Candát obecný",
-        "english_name": "Pike-perch",
+        "english_name": "Pike-perch (Zander)",
         "latin_name": "Sander lucioperca",
         "slug": "sander_lucioperca",
         "rarity": "common",
