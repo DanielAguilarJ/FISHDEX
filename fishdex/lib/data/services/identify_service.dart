@@ -11,18 +11,31 @@ class IdentifyService {
   /// Envía un video (o una imagen extraída de él) al servidor de IA.
   ///
   /// [videoPath] - Ruta local del video/imagen
+  /// [areaCode] - Czech fishing area code (required)
+  /// [fishermanId] - UUID of the user from Appwrite (required)
+  /// [userRole] - 'fisherman' or 'researcher'
+  /// [species] - Species name if already known
+  /// [fishState] - Injury notes or distinguishing marks
+  /// [name] - Custom name for the fish
+  /// [weather] - Weather conditions
+  /// [bite] - Bait or lure used
+  /// [size] - Measured size in cm
   /// [latitude] - Latitud GPS opcional
   /// [longitude] - Longitud GPS opcional
-  /// [userId] - ID del usuario actual
   /// [confidenceThreshold] - Umbral de confianza para formulario manual
-  ///
-  /// El servidor acepta tanto video como imagen, pero enviar la imagen
-  /// es ~20× más rápido por el tamaño reducido.
   Future<IdentifyResult> identifyFish({
     required String videoPath,
+    required String areaCode,
+    required String fishermanId,
+    String userRole = 'fisherman',
+    String? species,
+    String? fishState,
+    String? name,
+    String? weather,
+    String? bite,
+    double? size,
     double? latitude,
     double? longitude,
-    String? userId,
     double? confidenceThreshold,
   }) async {
     try {
@@ -51,16 +64,27 @@ class IdentifyService {
       );
       request.files.add(multipartFile);
 
-      // Campos opcionales
+      // Required fields
+      request.fields['area_code'] = areaCode;
+      request.fields['fisherman_id'] = fishermanId;
+      request.fields['user_role'] = userRole;
+
+      // Optional metadata fields
+      if (species != null) request.fields['species'] = species;
+      if (fishState != null) request.fields['fish_state'] = fishState;
+      if (name != null) request.fields['name'] = name;
+      if (weather != null) request.fields['weather'] = weather;
+      if (bite != null) request.fields['bite'] = bite;
+      if (size != null) request.fields['size'] = size.toString();
+
+      // GPS coordinates
       if (latitude != null) {
         request.fields['latitude'] = latitude.toString();
       }
       if (longitude != null) {
         request.fields['longitude'] = longitude.toString();
       }
-      if (userId != null) {
-        request.fields['user_id'] = userId;
-      }
+
       // Enviar el umbral de confianza
       request.fields['confidence_threshold'] =
           (confidenceThreshold ?? AppConstants.aiConfidenceThreshold).toString();

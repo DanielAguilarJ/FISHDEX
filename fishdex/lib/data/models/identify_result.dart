@@ -16,6 +16,14 @@ class IdentifyResult {
   final String? frameUsed;
   final String message;
   final String timestamp;
+  // New fields for Czech area system
+  final String? areaCode;
+  final String? areaName;
+  final String? areaUrl;
+  final String? speciesCzech;
+  final String? speciesEnglish;
+  final int? catchNumber;
+  final String? userRole;
 
   const IdentifyResult({
     required this.success,
@@ -34,6 +42,13 @@ class IdentifyResult {
     this.frameUsed,
     required this.message,
     required this.timestamp,
+    this.areaCode,
+    this.areaName,
+    this.areaUrl,
+    this.speciesCzech,
+    this.speciesEnglish,
+    this.catchNumber,
+    this.userRole,
   });
 
   factory IdentifyResult.fromJson(Map<String, dynamic> json) {
@@ -57,6 +72,13 @@ class IdentifyResult {
       frameUsed: json['frame_used'] as String?,
       message: json['message'] as String,
       timestamp: json['timestamp'] as String,
+      areaCode: json['area_code'] as String?,
+      areaName: json['area_name'] as String?,
+      areaUrl: json['area_url'] as String?,
+      speciesCzech: json['species_czech'] as String?,
+      speciesEnglish: json['species_english'] as String?,
+      catchNumber: json['catch_number'] as int?,
+      userRole: json['user_role'] as String?,
     );
   }
 
@@ -77,6 +99,13 @@ class IdentifyResult {
         'frame_used': frameUsed,
         'message': message,
         'timestamp': timestamp,
+        'area_code': areaCode,
+        'area_name': areaName,
+        'area_url': areaUrl,
+        'species_czech': speciesCzech,
+        'species_english': speciesEnglish,
+        'catch_number': catchNumber,
+        'user_role': userRole,
       };
 }
 

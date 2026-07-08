@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
@@ -35,6 +36,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
   bool _showConfetti = false;
   bool _showXP = false;
   bool _showDetails = false;
+  bool _historyExpanded = false;
 
   @override
   void initState() {
@@ -122,7 +124,17 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
         estimatedSizeCm: widget.result.estimatedSizeCm,
       );
     } catch (e) {
-      debugPrint('⚠️ Error guardando avistamiento: $e');
+      debugPrint('Warning: Error saving sighting: $e');
+    }
+  }
+
+  /// Open area URL in browser
+  Future<void> _openAreaUrl() async {
+    final url = widget.result.areaUrl;
+    if (url != null && url.isNotEmpty) {
+      try {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (_) {}
     }
   }
 
@@ -154,6 +166,32 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
                   _buildTitle(),
                   const SizedBox(height: 24),
 
+                  // Area name chip
+                  if (_showDetails && widget.result.areaName != null)
+                    _buildAreaChip(),
+                  if (_showDetails && widget.result.areaName != null)
+                    const SizedBox(height: 12),
+
+                  // Species bilingual display
+                  if (_showDetails &&
+                      (widget.result.speciesCzech != null ||
+                          widget.result.speciesEnglish != null))
+                    _buildSpeciesBilingual(),
+                  if (_showDetails &&
+                      (widget.result.speciesCzech != null ||
+                          widget.result.speciesEnglish != null))
+                    const SizedBox(height: 12),
+
+                  // Catch number badge
+                  if (_showDetails &&
+                      widget.result.catchNumber != null &&
+                      widget.result.catchNumber! > 1)
+                    _buildCatchNumberBadge(),
+                  if (_showDetails &&
+                      widget.result.catchNumber != null &&
+                      widget.result.catchNumber! > 1)
+                    const SizedBox(height: 12),
+
                   // Carta del pez
                   _buildFishCard(),
                   const SizedBox(height: 20),
@@ -164,6 +202,11 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
 
                   // Detalles (reencuentro o nuevo)
                   if (_showDetails) _buildDetailsSection(),
+                  const SizedBox(height: 16),
+
+                  // Full history for researchers
+                  if (_showDetails && widget.result.userRole == 'researcher')
+                    _buildFullHistorySection(),
                   const SizedBox(height: 24),
 
                   // Botones de acción
@@ -194,6 +237,208 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
                 ),
                 child: const Icon(Icons.close, color: Colors.white70, size: 20),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Area name chip with link to rybsvaz.cz
+  Widget _buildAreaChip() {
+    return GestureDetector(
+      onTap: widget.result.areaUrl != null ? _openAreaUrl : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.accentBlue.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.accentBlue.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.location_on, color: AppTheme.accentBlue, size: 16),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                widget.result.areaName!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (widget.result.areaUrl != null) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.open_in_new, color: AppTheme.accentBlue, size: 14),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Species display in both Czech and English
+  Widget _buildSpeciesBilingual() {
+    final czech = widget.result.speciesCzech ?? '';
+    final english = widget.result.speciesEnglish ?? '';
+    final display = czech.isNotEmpty && english.isNotEmpty
+        ? '$czech / $english'
+        : czech.isNotEmpty
+            ? czech
+            : english;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.successGreen.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.pets, color: AppTheme.successGreen, size: 16),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              display,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                fontStyle: FontStyle.italic,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Catch number badge
+  Widget _buildCatchNumberBadge() {
+    final n = widget.result.catchNumber!;
+    final suffix = n == 2
+        ? '2nd'
+        : n == 3
+            ? '3rd'
+            : '${n}th';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.energyOrange.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.energyOrange.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.repeat, color: AppTheme.energyOrange, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            '$suffix catch of this individual fish!',
+            style: const TextStyle(
+              color: AppTheme.energyOrange,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Full history expandable section (researchers only)
+  Widget _buildFullHistorySection() {
+    final result = widget.result;
+    // full_history is in the JSON response but not directly in IdentifyResult model
+    // For researchers, show the previous_data at minimum
+    if (result.previousData == null && result.catchNumber == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.purple.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.history, color: Colors.purple, size: 20),
+            title: const Text(
+              'Full History (Researcher View)',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            trailing: Icon(
+              _historyExpanded
+                  ? Icons.expand_less
+                  : Icons.expand_more,
+              color: Colors.white54,
+            ),
+            onTap: () => setState(() => _historyExpanded = !_historyExpanded),
+          ),
+          if (_historyExpanded && result.previousData != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHistoryRow(
+                    'First seen',
+                    result.previousData!.firstSeenDate,
+                  ),
+                  _buildHistoryRow(
+                    'Total sightings',
+                    '${result.previousData!.totalSightings}',
+                  ),
+                  _buildHistoryRow(
+                    'Last seen',
+                    result.previousData!.lastSeenDate,
+                  ),
+                  _buildHistoryRow(
+                    'Growth',
+                    '${result.previousData!.growthCm.toStringAsFixed(1)} cm',
+                  ),
+                  if (result.previousData!.firstSeenLocation != null)
+                    _buildHistoryRow(
+                      'Location',
+                      result.previousData!.firstSeenLocation!,
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -344,6 +589,8 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
           const SizedBox(height: 12),
           _buildDetailRow(context.l10n.resultFishId, widget.result.fishId),
           _buildDetailRow(context.l10n.resultSpecies, widget.result.species),
+          if (widget.result.scientificName != null)
+            _buildDetailRow('Scientific', widget.result.scientificName!),
           _buildDetailRow(
             context.l10n.resultEstimatedSize,
             '${widget.result.estimatedSizeCm} cm',
@@ -352,6 +599,8 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
             context.l10n.resultAiConfidence,
             '${(widget.result.confidence * 100).toStringAsFixed(1)}%',
           ),
+          if (widget.result.areaCode != null)
+            _buildDetailRow('Area Code', widget.result.areaCode!),
         ],
       ),
     );
@@ -370,12 +619,16 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
               fontSize: 13,
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
             ),
           ),
         ],

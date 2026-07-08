@@ -23,10 +23,17 @@ class FishPreviousData(BaseModel):
 
 class IdentifyRequest(BaseModel):
     """Request para identificar un pez (cuando se envía metadata junto al video)."""
+    area_code: str = Field(..., description="Czech fishing area code e.g. '401 001'")
+    fisherman_id: str = Field(..., description="UUID of the user (from Appwrite)")
+    user_role: str = Field("fisherman", description="'fisherman' or 'researcher'")
+    species: Optional[str] = Field(None, description="Species if already known (skip Step 1)")
+    fish_state: Optional[str] = Field(None, description="Injury notes or distinguishing marks")
+    name: Optional[str] = Field(None, description="Custom name given by fisherman to this fish")
+    weather: Optional[str] = Field(None, description="Weather conditions: sunny, cloudy, raining, etc.")
+    bite: Optional[str] = Field(None, description="Bait or lure used")
+    size: Optional[float] = Field(None, description="Measured size in cm")
     latitude: Optional[float] = Field(None, description="Latitud GPS donde se capturó")
     longitude: Optional[float] = Field(None, description="Longitud GPS donde se capturó")
-    user_id: Optional[str] = Field(None, description="ID del usuario que capturó el video")
-    notes: Optional[str] = Field(None, description="Notas adicionales del pescador")
     confidence_threshold: float = Field(
         0.70,
         description="Umbral de confianza. Si la identificación está por debajo, "
@@ -70,6 +77,15 @@ class IdentifyResponse(BaseModel):
         default_factory=lambda: datetime.now().isoformat(),
         description="Timestamp de la identificación"
     )
+    # New fields for Czech area system
+    area_code: Optional[str] = Field(None, description="Czech fishing area code")
+    area_name: Optional[str] = Field(None, description="Human-readable area name")
+    area_url: Optional[str] = Field(None, description="Link to rybsvaz.cz area page")
+    species_czech: Optional[str] = Field(None, description="Czech name of species")
+    species_english: Optional[str] = Field(None, description="English name of species")
+    catch_number: Optional[int] = Field(None, description="Which catch this is for this fish")
+    full_history: Optional[list] = Field(None, description="Full catch history (researchers only)")
+    user_role: Optional[str] = Field(None, description="Role of the user who submitted")
 
 
 class ErrorResponse(BaseModel):

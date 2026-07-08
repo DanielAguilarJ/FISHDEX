@@ -5,9 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/appwrite_providers.dart';
+import '../../../data/models/fishing_area.dart';
 import '../../../data/repositories/fishing_spots_repository.dart';
+import '../../../data/services/areas_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../map/providers/map_providers.dart';
+import '../../camera/providers/capture_metadata_provider.dart';
 
 /// Pantalla de marcado rápido de spot de pesca al estilo acción rápida
 /// Se accede desde el Speed Dial central del menú
@@ -22,8 +25,16 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
     with SingleTickerProviderStateMixin {
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
+  final _areaSearchController = TextEditingController();
   String _selectedWaterType = 'rio';
   bool _isSaving = false;
+
+  // Area selection state
+  List<FishingArea> _nearbyAreas = [];
+  List<FishingArea> _filteredAreas = [];
+  FishingArea? _selectedArea;
+  bool _isLoadingAreas = true;
+  bool _showAllAreas = false;
 
   late AnimationController _entranceController;
   late Animation<Offset> _slideAnim;
@@ -55,6 +66,60 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
       curve: Curves.easeOut,
     );
     _entranceController.forward();
+
+    // Load nearby areas after location is available
+    _loadNearbyAreas();
+  }
+
+  /// Load nearby fishing areas based on current GPS location
+  Future<void> _loadNearbyAreas() async {
+    setState(() => _isLoadingAreas = true);
+    try {
+      final location = ref.read(userLocationProvider).valueOrNull;
+      if (location != null) {
+        final areasService = AreasService();
+        final areas = await areasService.getNearbyAreas(
+          location.latitude,
+          location.longitude,
+          radiusKm: 15.0,
+        );
+        if (mounted) {
+          setState(() {
+            _nearbyAreas = areas;
+            _filteredAreas = areas;
+            _isLoadingAreas = false;
+          });
+        }
+      } else {
+        // GPS not available - show empty list with option to search all
+        if (mounted) {
+          setState(() {
+            _isLoadingAreas = false;
+            _showAllAreas = true;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingAreas = false);
+      }
+    }
+  }
+
+  /// Filter areas based on search text
+  void _filterAreas(String query) {
+    if (query.isEmpty) {
+      setState(() => _filteredAreas = _nearbyAreas);
+    } else {
+      final lowerQuery = query.toLowerCase();
+      setState(() {
+        _filteredAreas = _nearbyAreas
+            .where((area) =>
+                area.name.toLowerCase().contains(lowerQuery) ||
+                area.code.contains(query))
+            .toList();
+      });
+    }
   }
 
   @override
@@ -62,6 +127,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
     _entranceController.dispose();
     _nameController.dispose();
     _descController.dispose();
+    _areaSearchController.dispose();
     super.dispose();
   }
 
@@ -93,6 +159,14 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
     if (name.isEmpty) {
       _showError(l10n.quickSpotErrorName);
       return;
+    }
+
+    // Store selected area in capture metadata provider
+    if (_selectedArea != null) {
+      ref.read(captureMetadataProvider.notifier).setArea(
+            _selectedArea!.code,
+            _selectedArea!.name,
+          );
     }
 
     setState(() => _isSaving = true);
@@ -210,6 +284,10 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
                     children: [
                       _buildLocationCard(),
                       const SizedBox(height: 24),
+                      _buildSectionLabel('Fishing Area (Revír)'),
+                      const SizedBox(height: 8),
+                      _buildAreaSelector(),
+                      const SizedBox(height: 24),
                       _buildSectionLabel(context.l10n.quickSpotNameLabel),
                       const SizedBox(height: 8),
                       _buildNameField(),
@@ -231,6 +309,165 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
           ),
         ),
       ),
+    );
+  }
+
+  // ── Area Selector (dynamic dropdown) ───────────────────────────────────────────
+  Widget _buildAreaSelector() {
+    if (_isLoadingAreas) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentBlue),
+            ),
+            SizedBox(width: 12),
+            Text(
+              'Loading nearby areas...',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Search field
+        TextField(
+          controller: _areaSearchController,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          onChanged: _filterAreas,
+          decoration: InputDecoration(
+            hintText: 'Search area by name or code...',
+            hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+            filled: true,
+            fillColor: AppTheme.darkSurface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppTheme.accentBlue, width: 2),
+            ),
+            prefixIcon: const Icon(Icons.search, color: AppTheme.accentBlue, size: 20),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Selected area display
+        if (_selectedArea != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.accentBlue.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.accentBlue.withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.location_on, color: AppTheme.accentBlue, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _selectedArea!.displayName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_selectedArea!.distanceKm != null)
+                  Text(
+                    _selectedArea!.distanceDisplay,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => setState(() => _selectedArea = null),
+                  child: const Icon(Icons.close, color: Colors.white54, size: 16),
+                ),
+              ],
+            ),
+          ),
+        // Area list
+        if (_selectedArea == null && _filteredAreas.isNotEmpty)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 180),
+            margin: const EdgeInsets.only(top: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: _filteredAreas.length,
+              separatorBuilder: (_, __) => Divider(
+                color: Colors.white.withOpacity(0.05),
+                height: 1,
+              ),
+              itemBuilder: (context, index) {
+                final area = _filteredAreas[index];
+                return ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: const Icon(
+                    Icons.water,
+                    color: AppTheme.accentBlue,
+                    size: 18,
+                  ),
+                  title: Text(
+                    area.displayName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: area.distanceKm != null
+                      ? Text(
+                          area.distanceDisplay,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        )
+                      : null,
+                  onTap: () {
+                    setState(() {
+                      _selectedArea = area;
+                      _areaSearchController.clear();
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+        // Empty state or "search all" option
+        if (_filteredAreas.isEmpty && !_isLoadingAreas)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _nearbyAreas.isEmpty
+                  ? 'No areas found nearby. Try increasing search radius.'
+                  : 'No matching areas. Try a different search.',
+              style: const TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ),
+      ],
     );
   }
 

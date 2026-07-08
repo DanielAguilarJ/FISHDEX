@@ -41,13 +41,19 @@ class AppConstants {
   // AI SERVER
   // ===========================================================================
   
-  /// URL del servidor de IA en Hugging Face Spaces (producción)
-  /// El Space puede tardar ~30s en despertar si estuvo inactivo 48h
-  static const String aiServerUrl =
-      'https://danielaguilarr-fishdex-fish-detector.hf.space';
+  // LOCAL DEVELOPMENT (Windows PC - change IP to your local machine)
+  static const String aiServerUrl = 'http://160.217.215.92:8000';
+  // PRODUCTION (Hugging Face - uncomment when deploying)
+  // static const String aiServerUrl = 'https://danielaguilarr-fishdex-fish-detector.hf.space';
   
   /// Endpoint de identificación
   static const String identifyEndpoint = '/api/v1/identify';
+
+  /// Endpoint for searching nearby fishing areas
+  static const String areasSearchEndpoint = '/api/v1/areas/search';
+
+  /// Endpoint for getting all species list
+  static const String speciesListEndpoint = '/api/v1/species';
 
   // ===========================================================================
   // GAMIFICACIÓN

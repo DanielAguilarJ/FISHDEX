@@ -16,6 +16,12 @@ Pillow==10.4.0
 torch==2.4.1
 torchvision==0.19.1
 
+# ONNX Runtime for fish detection model
+onnxruntime==1.19.2
+
+# Scientific computing (Haversine, similarity)
+scipy==1.13.1
+
 # Utilidades
 python-dotenv==1.0.1
 pydantic==2.9.1
