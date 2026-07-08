@@ -88,12 +88,14 @@ async def identify_fish(
         allowed_types = [
             "video/mp4", "video/quicktime", "video/x-msvideo",
             "video/avi", "video/webm",
+            # The Flutter app can also send still images
+            "image/jpeg", "image/png", "image/webp",
         ]
         if video.content_type and video.content_type not in allowed_types:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported video format: {video.content_type}. "
-                       f"Allowed: MP4, MOV, AVI, WebM",
+                detail=f"Unsupported format: {video.content_type}. "
+                       f"Allowed: MP4, MOV, AVI, WebM, JPEG, PNG, WebP",
             )
 
         # ── Read video bytes ──

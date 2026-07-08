@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/l10n/l10n_extension.dart';
@@ -30,6 +31,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
   bool _statusInitialized = false;
   bool _hasError = false;
   String? _errorMessage;
+  Timer? _safetyTimer;
 
   @override
   void initState() {
@@ -55,8 +57,23 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Iniciar la identificación
-    _startIdentification();
+    // Iniciar la identificación después de que el contexto esté listo
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startIdentification();
+    });
+
+    // Timer de seguridad: si después de 100s no hay respuesta,
+    // mostrar error para que el usuario no se quede atrapado
+    _safetyTimer = Timer(const Duration(seconds: 100), () {
+      if (mounted && !_hasError) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = 'La identificación tardó demasiado. '
+              'Verifica que el servidor esté activo e inténtalo de nuevo.';
+          _statusText = context.l10n.identifyingError;
+        });
+      }
+    });
   }
 
   @override
@@ -69,14 +86,18 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
   }
 
   Future<void> _startIdentification() async {
+    if (!mounted) return;
     final l10n = context.l10n;
     try {
+      debugPrint('[IdentifyingScreen] Starting identification...');
       // Simular pasos del proceso con delays para UX
       await Future.delayed(const Duration(milliseconds: 800));
       if (mounted) setState(() => _statusText = l10n.identifyingExtractingFrames);
 
       await Future.delayed(const Duration(milliseconds: 600));
       if (mounted) setState(() => _statusText = l10n.identifyingAnalyzing);
+
+      debugPrint('[IdentifyingScreen] Sending video to server...');
 
       // Llamar al servicio de identificación con userId y ubicación GPS
       final service = IdentifyService();
@@ -99,6 +120,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
         longitude: location?.longitude,
       );
 
+      debugPrint('[IdentifyingScreen] Server response received!');
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) setState(() => _statusText = l10n.identifyingSuccess);
 
@@ -119,11 +141,13 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
         );
       }
     } catch (e) {
+      debugPrint('[IdentifyingScreen] Error: $e');
+      _safetyTimer?.cancel();
       if (mounted) {
         setState(() {
           _hasError = true;
           _errorMessage = e is IdentifyException
-              ? e.message
+              ? '${e.message}${e.detail != null ? '\n\n${e.detail}' : ''}'
               : l10n.identifyingUnexpectedError;
           _statusText = l10n.identifyingError;
         });
@@ -133,6 +157,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
 
   @override
   void dispose() {
+    _safetyTimer?.cancel();
     _scanController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -142,57 +167,117 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.darkBackground,
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Icono animado de escaneo
-              _buildScanIcon(),
-              const SizedBox(height: 40),
-
-              // Texto de estado
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: Text(
-                  _statusText,
-                  key: ValueKey(_statusText),
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        color: _hasError ? Colors.red : Colors.white,
-                      ),
-                  textAlign: TextAlign.center,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Botón de volver/cancelar (siempre visible)
+            Positioned(
+              top: 16,
+              left: 16,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.1),
+                  ),
+                  child: const Icon(Icons.arrow_back, color: Colors.white70),
                 ),
               ),
-              const SizedBox(height: 16),
+            ),
+            // Contenido principal
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Icono animado de escaneo
+                    _buildScanIcon(),
+                    const SizedBox(height: 40),
 
-              // Barra de progreso o error
-              if (!_hasError)
-                const SizedBox(
-                  width: 200,
-                  child: LinearProgressIndicator(
-                    backgroundColor: AppTheme.darkSurfaceElevated,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentBlue),
-                  ),
-                )
-              else ...[
-                const SizedBox(height: 8),
-                Text(
-                  _errorMessage ?? context.l10n.identifyingUnexpectedError,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
+                    // Texto de estado
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: Text(
+                        _statusText,
+                        key: ValueKey(_statusText),
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              color: _hasError ? Colors.red : Colors.white,
+                            ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Barra de progreso o error
+                    if (!_hasError)
+                      const SizedBox(
+                        width: 200,
+                        child: LinearProgressIndicator(
+                          backgroundColor: AppTheme.darkSurfaceElevated,
+                          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentBlue),
+                        ),
+                      )
+                    else ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _errorMessage ?? context.l10n.identifyingUnexpectedError,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: Colors.white24),
+                            ),
+                            child: Text(context.l10n.videoPreviewRetake),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _hasError = false;
+                                _errorMessage = null;
+                                _statusText = context.l10n.identifyingProcessing;
+                              });
+                              _safetyTimer?.cancel();
+                              _safetyTimer = Timer(const Duration(seconds: 100), () {
+                                if (mounted && !_hasError) {
+                                  setState(() {
+                                    _hasError = true;
+                                    _errorMessage = 'La identificación tardó demasiado.';
+                                    _statusText = context.l10n.identifyingError;
+                                  });
+                                }
+                              });
+                              _startIdentification();
+                            },
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: Text(context.l10n.identifyingRetry),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.accentBlue,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(context.l10n.identifyingRetry),
-                ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );

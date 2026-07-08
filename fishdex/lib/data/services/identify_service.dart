@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -119,12 +120,25 @@ class IdentifyService {
           detail: errorDetail,
         );
       }
+    } on TimeoutException {
+      throw IdentifyException(
+        'El servidor tardó demasiado en responder',
+        detail:
+            'La solicitud superó los 90 segundos. '
+            'Verifica que el servidor en ${AppConstants.aiServerUrl} '
+            'esté funcionando correctamente y que tu conexión sea estable.',
+      );
     } on SocketException {
       throw IdentifyException(
         'No se pudo conectar al servidor de IA',
         detail:
             'Verifica que el servidor local esté corriendo en ${AppConstants.aiServerUrl} '
             'y que tu teléfono esté en la misma red WiFi.',
+      );
+    } on http.ClientException catch (e) {
+      throw IdentifyException(
+        'Error de conexión con el servidor',
+        detail: 'No se pudo enviar el video: ${e.message}',
       );
     } catch (e) {
       if (e is IdentifyException) rethrow;
