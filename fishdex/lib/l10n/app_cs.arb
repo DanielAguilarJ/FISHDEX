@@ -455,5 +455,83 @@
 
   "conditionAlive": "Živá",
   "conditionReleased": "Vypuštěna",
-  "conditionDead": "Uhynulá"
+  "conditionDead": "Uhynulá",
+
+  "cameraGuideSkip": "Přeskočit",
+  "cameraGuideNext": "Další",
+  "cameraGuideStart": "Spustit fotoaparát",
+  "cameraGuideOrientationTitle": "Správná orientace",
+  "cameraGuideOrientationDesc": "Vždy umístěte rybu HLAVOU směřující DOLEVA a OCASEM směřujícím DOPRAVA. To zajišťuje konzistentní identifikaci u všech úlovků.",
+  "cameraGuideOrientationTip": "Stejná orientace = lepší přesnost shody",
+  "cameraGuidePositionTitle": "Viditelné celé tělo",
+  "cameraGuidePositionDesc": "Ujistěte se, že je v rámečku vidět CELÉ tělo ryby, od úst po ocas. Ponechte malé okraje na všech stranách. Vzdálenost: 30-50 cm od ryby.",
+  "cameraGuidePositionTip": "Celé tělo = vzory lze správně analyzovat",
+  "cameraGuideTechniqueTitle": "Tipy pro nahrávání",
+  "cameraGuideTechniqueDesc": "Umístěte rybu na rovný povrch (ideální je měřicí podložka). Minimalizujte zakrytí rukama. Stabilní video o délce 5-10 sekund je perfektní.",
+  "cameraGuideDoFlat": "Položte rybu naplocho na měřicí podložku",
+  "cameraGuideDoLight": "Použijte dobré přirozené světlo",
+  "cameraGuideDoSteady": "Nahrávejte stabilně 5-10 sekund",
+  "cameraGuideDontHands": "Držte rybu rukama zakrývajícími tělo",
+  "cameraGuideDontDark": "Nahrávejte ve velmi tmavých podmínkách",
+  "cameraGuideReadyTitle": "Připraven k zachycení!",
+  "cameraGuideReadyDesc": "Fotoaparát zobrazí vodítko siluety ryby. Zarovnejte rybu s obrysem a stiskněte tlačítko nahrávání. Umělá inteligence identifikuje váš úlovek!",
+  "cameraGuideReadySettings": "Tuto příručku můžete kdykoli otevřít z nastavení fotoaparátu.",
+
+  "arAlignSilhouette": "Zarovnejte rybu se siluetou",
+  "arHeadLeftBodyVisible": "Hlava směřuje DOLEVA • Viditelné celé tělo",
+  "arHeadLabel": "HLAVA",
+  "arTailLabel": "OCAS",
+  "arHorizontal": "Horizontálně",
+  "arDistance": "30-50 cm",
+  "arGoodLight": "Dobré světlo",
+
+  "recordingStateRecording": "Nahrávání... Držte stabilně",
+  "recordingStatePressToRecord": "Stisknutím nahrávejte (max {seconds}s)",
+  "@recordingStatePressToRecord": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+
+  "sheetOwnCapture": "MŮJ ÚLOVEK",
+  "sheetFieldDate": "Datum",
+  "sheetFieldTime": "Čas",
+  "sheetFieldFishId": "Fish ID",
+  "sheetFieldCaptureId": "Capture ID",
+  "sheetFieldUser": "Uživatel",
+  "sheetFieldCoordinates": "Přesné souřadnice",
+  "sheetHistoryTitle": "Historie ryby",
+  "sheetHistorySubtitle": "Zobrazit všechny úlovky této ryby",
+  "timelineSummary": "{captures} úlovků na {locations} místech",
+  "@timelineSummary": {
+    "placeholders": {
+      "captures": {
+        "type": "int"
+      },
+      "locations": {
+        "type": "int"
+      }
+    }
+  },
+  "timelineLocationZone": "Zóna {label}",
+  "@timelineLocationZone": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineStatusNew": "Nové",
+  "timelineStatusReunion": "Znovusetkání",
+  "timelineEmpty": "Pro tuto rybu není k dispozici žádná historie",
+  "timelineError": "Chyba při načítání historie: {error}",
+  "@timelineError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  }
 }

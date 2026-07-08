@@ -1090,4 +1090,141 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get conditionDead => 'Muerto';
+
+  @override
+  String get cameraGuideSkip => 'Omitir';
+
+  @override
+  String get cameraGuideNext => 'Siguiente';
+
+  @override
+  String get cameraGuideStart => 'Iniciar cámara';
+
+  @override
+  String get cameraGuideOrientationTitle => 'Orientación correcta';
+
+  @override
+  String get cameraGuideOrientationDesc => 'Coloca siempre el pez con la CABEZA apuntando hacia la IZQUIERDA y la COLA apuntando hacia la DERECHA. Esto asegura una identificación consistente.';
+
+  @override
+  String get cameraGuideOrientationTip => 'Misma orientación = mejor precisión';
+
+  @override
+  String get cameraGuidePositionTitle => 'Cuerpo completo visible';
+
+  @override
+  String get cameraGuidePositionDesc => 'Asegúrate de que todo el cuerpo del pez sea visible en el encuadre, desde la boca hasta la cola. Deja pequeños márgenes en todos los lados. Distancia: 30-50 cm.';
+
+  @override
+  String get cameraGuidePositionTip => 'Cuerpo completo = patrones analizados correctamente';
+
+  @override
+  String get cameraGuideTechniqueTitle => 'Consejos de grabación';
+
+  @override
+  String get cameraGuideTechniqueDesc => 'Coloca el pez sobre una superficie plana (una alfombrilla de medición es ideal). Minimiza la cobertura con las manos. Un video estable de 5-10 segundos es perfecto.';
+
+  @override
+  String get cameraGuideDoFlat => 'Colocar el pez plano sobre la alfombrilla';
+
+  @override
+  String get cameraGuideDoLight => 'Usar buena luz natural';
+
+  @override
+  String get cameraGuideDoSteady => 'Grabar 5-10 segundos de forma estable';
+
+  @override
+  String get cameraGuideDontHands => 'Sostener el pez cubriendo el cuerpo';
+
+  @override
+  String get cameraGuideDontDark => 'Grabar en condiciones muy oscuras';
+
+  @override
+  String get cameraGuideReadyTitle => '¡Listo para capturar!';
+
+  @override
+  String get cameraGuideReadyDesc => 'La cámara mostrará una guía con la silueta de un pez. Alinea el pez con el contorno y presiona el botón de grabar. ¡La IA identificará tu captura!';
+
+  @override
+  String get cameraGuideReadySettings => 'Siempre puedes acceder a esta guía desde los ajustes de la cámara.';
+
+  @override
+  String get arAlignSilhouette => 'Alinea el pez con la silueta';
+
+  @override
+  String get arHeadLeftBodyVisible => 'Cabeza hacia la IZQUIERDA • Cuerpo completo visible';
+
+  @override
+  String get arHeadLabel => 'CABEZA';
+
+  @override
+  String get arTailLabel => 'COLA';
+
+  @override
+  String get arHorizontal => 'Horizontal';
+
+  @override
+  String get arDistance => '30-50cm';
+
+  @override
+  String get arGoodLight => 'Buena luz';
+
+  @override
+  String get recordingStateRecording => 'Grabando... Mantén estable';
+
+  @override
+  String recordingStatePressToRecord(int seconds) {
+    return 'Pulsa para grabar (${seconds}s máx)';
+  }
+
+  @override
+  String get sheetOwnCapture => 'MI CAPTURA';
+
+  @override
+  String get sheetFieldDate => 'Fecha';
+
+  @override
+  String get sheetFieldTime => 'Hora';
+
+  @override
+  String get sheetFieldFishId => 'Fish ID';
+
+  @override
+  String get sheetFieldCaptureId => 'Capture ID';
+
+  @override
+  String get sheetFieldUser => 'Usuario';
+
+  @override
+  String get sheetFieldCoordinates => 'Coordenadas exactas';
+
+  @override
+  String get sheetHistoryTitle => 'Historial del pez';
+
+  @override
+  String get sheetHistorySubtitle => 'Ver todas las capturas de este pez';
+
+  @override
+  String timelineSummary(int captures, int locations) {
+    return '$captures capturas en $locations ubicaciones';
+  }
+
+  @override
+  String timelineLocationZone(String label) {
+    return 'Zona $label';
+  }
+
+  @override
+  String get timelineStatusNew => 'Nuevo';
+
+  @override
+  String get timelineStatusReunion => 'Reencuentro';
+
+  @override
+  String get timelineEmpty => 'No hay historial disponible para este pez';
+
+  @override
+  String timelineError(Object error) {
+    return 'Error al cargar historial: $error';
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 
 /// Controles de grabación con botón grande estilo Pokémon Go
 /// y barra de progreso circular
@@ -61,8 +62,8 @@ class RecordingControls extends StatelessWidget {
           // Texto de ayuda
           Text(
             isRecording
-                ? 'Grabando... Mantén estable'
-                : 'Pulsa para grabar (${maxDurationSeconds}s máx)',
+                ? context.l10n.recordingStateRecording
+                : context.l10n.recordingStatePressToRecord(maxDurationSeconds),
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 13,

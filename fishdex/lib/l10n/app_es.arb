@@ -459,5 +459,83 @@
 
   "conditionAlive": "Vivo",
   "conditionReleased": "Liberado",
-  "conditionDead": "Muerto"
+  "conditionDead": "Muerto",
+
+  "cameraGuideSkip": "Omitir",
+  "cameraGuideNext": "Siguiente",
+  "cameraGuideStart": "Iniciar cámara",
+  "cameraGuideOrientationTitle": "Orientación correcta",
+  "cameraGuideOrientationDesc": "Coloca siempre el pez con la CABEZA apuntando hacia la IZQUIERDA y la COLA apuntando hacia la DERECHA. Esto asegura una identificación consistente.",
+  "cameraGuideOrientationTip": "Misma orientación = mejor precisión",
+  "cameraGuidePositionTitle": "Cuerpo completo visible",
+  "cameraGuidePositionDesc": "Asegúrate de que todo el cuerpo del pez sea visible en el encuadre, desde la boca hasta la cola. Deja pequeños márgenes en todos los lados. Distancia: 30-50 cm.",
+  "cameraGuidePositionTip": "Cuerpo completo = patrones analizados correctamente",
+  "cameraGuideTechniqueTitle": "Consejos de grabación",
+  "cameraGuideTechniqueDesc": "Coloca el pez sobre una superficie plana (una alfombrilla de medición es ideal). Minimiza la cobertura con las manos. Un video estable de 5-10 segundos es perfecto.",
+  "cameraGuideDoFlat": "Colocar el pez plano sobre la alfombrilla",
+  "cameraGuideDoLight": "Usar buena luz natural",
+  "cameraGuideDoSteady": "Grabar 5-10 segundos de forma estable",
+  "cameraGuideDontHands": "Sostener el pez cubriendo el cuerpo",
+  "cameraGuideDontDark": "Grabar en condiciones muy oscuras",
+  "cameraGuideReadyTitle": "¡Listo para capturar!",
+  "cameraGuideReadyDesc": "La cámara mostrará una guía con la silueta de un pez. Alinea el pez con el contorno y presiona el botón de grabar. ¡La IA identificará tu captura!",
+  "cameraGuideReadySettings": "Siempre puedes acceder a esta guía desde los ajustes de la cámara.",
+
+  "arAlignSilhouette": "Alinea el pez con la silueta",
+  "arHeadLeftBodyVisible": "Cabeza hacia la IZQUIERDA • Cuerpo completo visible",
+  "arHeadLabel": "CABEZA",
+  "arTailLabel": "COLA",
+  "arHorizontal": "Horizontal",
+  "arDistance": "30-50cm",
+  "arGoodLight": "Buena luz",
+
+  "recordingStateRecording": "Grabando... Mantén estable",
+  "recordingStatePressToRecord": "Pulsa para grabar ({seconds}s máx)",
+  "@recordingStatePressToRecord": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+
+  "sheetOwnCapture": "MI CAPTURA",
+  "sheetFieldDate": "Fecha",
+  "sheetFieldTime": "Hora",
+  "sheetFieldFishId": "Fish ID",
+  "sheetFieldCaptureId": "Capture ID",
+  "sheetFieldUser": "Usuario",
+  "sheetFieldCoordinates": "Coordenadas exactas",
+  "sheetHistoryTitle": "Historial del pez",
+  "sheetHistorySubtitle": "Ver todas las capturas de este pez",
+  "timelineSummary": "{captures} capturas en {locations} ubicaciones",
+  "@timelineSummary": {
+    "placeholders": {
+      "captures": {
+        "type": "int"
+      },
+      "locations": {
+        "type": "int"
+      }
+    }
+  },
+  "timelineLocationZone": "Zona {label}",
+  "@timelineLocationZone": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineStatusNew": "Nuevo",
+  "timelineStatusReunion": "Reencuentro",
+  "timelineEmpty": "No hay historial disponible para este pez",
+  "timelineError": "Error al cargar historial: {error}",
+  "@timelineError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 
 /// Tutorial screen shown before first capture to teach users how to properly
 /// record a fish video. Similar to "Intro Captura" from the technical spec.
@@ -31,14 +32,13 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Skip button
             Align(
               alignment: Alignment.topRight,
               child: TextButton(
                 onPressed: widget.onContinue,
-                child: const Text(
-                  'Skip',
-                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                child: Text(
+                  context.l10n.cameraGuideSkip,
+                  style: const TextStyle(color: Colors.white54, fontSize: 14),
                 ),
               ),
             ),
@@ -83,13 +83,16 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
               ),
             ),
             child: CustomPaint(
-              painter: _OrientationGuidePainter(),
+              painter: _OrientationGuidePainter(
+                headText: context.l10n.arHeadLabel,
+                tailText: context.l10n.arTailLabel,
+              ),
             ),
           ),
           const SizedBox(height: 32),
-          const Text(
-            'Correct Orientation',
-            style: TextStyle(
+          Text(
+            context.l10n.cameraGuideOrientationTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -97,9 +100,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Always position the fish with the HEAD pointing LEFT '
-            'and the TAIL pointing RIGHT. This ensures consistent '
-            'identification across all catches.',
+            context.l10n.cameraGuideOrientationDesc,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
@@ -110,7 +111,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
           const SizedBox(height: 20),
           _buildTipChip(
             Icons.lightbulb_outline,
-            'Same orientation = better matching accuracy',
+            context.l10n.cameraGuideOrientationTip,
           ),
         ],
       ),
@@ -140,9 +141,9 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
             ),
           ),
           const SizedBox(height: 32),
-          const Text(
-            'Full Body Visible',
-            style: TextStyle(
+          Text(
+            context.l10n.cameraGuidePositionTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -150,9 +151,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Make sure the ENTIRE fish body is visible in the frame, '
-            'from mouth to tail. Leave small margins on all sides. '
-            'Distance: 30-50 cm from the fish.',
+            context.l10n.cameraGuidePositionDesc,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
@@ -163,7 +162,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
           const SizedBox(height: 20),
           _buildTipChip(
             Icons.crop_free,
-            'Full body = patterns can be analyzed correctly',
+            context.l10n.cameraGuidePositionTip,
           ),
         ],
       ),
@@ -189,18 +188,18 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildDoItem(true, 'Lay fish flat on measuring mat'),
-                _buildDoItem(true, 'Use good natural light'),
-                _buildDoItem(true, 'Record 5-10 seconds steadily'),
-                _buildDoItem(false, 'Hold fish with hands covering body'),
-                _buildDoItem(false, 'Record in very dark conditions'),
+                _buildDoItem(true, context.l10n.cameraGuideDoFlat),
+                _buildDoItem(true, context.l10n.cameraGuideDoLight),
+                _buildDoItem(true, context.l10n.cameraGuideDoSteady),
+                _buildDoItem(false, context.l10n.cameraGuideDontHands),
+                _buildDoItem(false, context.l10n.cameraGuideDontDark),
               ],
             ),
           ),
           const SizedBox(height: 32),
-          const Text(
-            'Recording Tips',
-            style: TextStyle(
+          Text(
+            context.l10n.cameraGuideTechniqueTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -208,8 +207,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Place the fish on a flat surface (measuring mat is ideal). '
-            'Minimize hand coverage. A steady 5-10 second video is perfect.',
+            context.l10n.cameraGuideTechniqueDesc,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
@@ -248,9 +246,9 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
             ),
           ),
           const SizedBox(height: 32),
-          const Text(
-            'Ready to Capture!',
-            style: TextStyle(
+          Text(
+            context.l10n.cameraGuideReadyTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -258,9 +256,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'The camera will show a fish silhouette guide. '
-            'Align the fish with the outline and press the record button. '
-            'The AI will identify your catch!',
+            context.l10n.cameraGuideReadyDesc,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
@@ -281,7 +277,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'You can always access this guide from the camera settings.',
+                    context.l10n.cameraGuideReadySettings,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.6),
                       fontSize: 12,
@@ -394,7 +390,9 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
                 ),
               ),
               child: Text(
-                _currentPage == _totalPages - 1 ? 'Start Camera' : 'Next',
+                _currentPage == _totalPages - 1
+                    ? context.l10n.cameraGuideStart
+                    : context.l10n.cameraGuideNext,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
@@ -411,6 +409,11 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
 
 /// Painter showing correct fish orientation (head left, arrow)
 class _OrientationGuidePainter extends CustomPainter {
+  final String headText;
+  final String tailText;
+
+  _OrientationGuidePainter({required this.headText, required this.tailText});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -478,7 +481,7 @@ class _OrientationGuidePainter extends CustomPainter {
     // "HEAD" label
     final textPainter = TextPainter(
       text: TextSpan(
-        text: 'HEAD',
+        text: headText,
         style: TextStyle(
           color: AppTheme.successGreen.withOpacity(0.8),
           fontSize: 10,
@@ -493,7 +496,7 @@ class _OrientationGuidePainter extends CustomPainter {
     // "TAIL" label
     final tailTextPainter = TextPainter(
       text: TextSpan(
-        text: 'TAIL',
+        text: tailText,
         style: TextStyle(
           color: AppTheme.energyOrange.withOpacity(0.8),
           fontSize: 10,

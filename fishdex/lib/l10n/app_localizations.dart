@@ -2166,6 +2166,264 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Muerto'**
   String get conditionDead;
+
+  /// No description provided for @cameraGuideSkip.
+  ///
+  /// In es, this message translates to:
+  /// **'Omitir'**
+  String get cameraGuideSkip;
+
+  /// No description provided for @cameraGuideNext.
+  ///
+  /// In es, this message translates to:
+  /// **'Siguiente'**
+  String get cameraGuideNext;
+
+  /// No description provided for @cameraGuideStart.
+  ///
+  /// In es, this message translates to:
+  /// **'Iniciar cámara'**
+  String get cameraGuideStart;
+
+  /// No description provided for @cameraGuideOrientationTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Orientación correcta'**
+  String get cameraGuideOrientationTitle;
+
+  /// No description provided for @cameraGuideOrientationDesc.
+  ///
+  /// In es, this message translates to:
+  /// **'Coloca siempre el pez con la CABEZA apuntando hacia la IZQUIERDA y la COLA apuntando hacia la DERECHA. Esto asegura una identificación consistente.'**
+  String get cameraGuideOrientationDesc;
+
+  /// No description provided for @cameraGuideOrientationTip.
+  ///
+  /// In es, this message translates to:
+  /// **'Misma orientación = mejor precisión'**
+  String get cameraGuideOrientationTip;
+
+  /// No description provided for @cameraGuidePositionTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuerpo completo visible'**
+  String get cameraGuidePositionTitle;
+
+  /// No description provided for @cameraGuidePositionDesc.
+  ///
+  /// In es, this message translates to:
+  /// **'Asegúrate de que todo el cuerpo del pez sea visible en el encuadre, desde la boca hasta la cola. Deja pequeños márgenes en todos los lados. Distancia: 30-50 cm.'**
+  String get cameraGuidePositionDesc;
+
+  /// No description provided for @cameraGuidePositionTip.
+  ///
+  /// In es, this message translates to:
+  /// **'Cuerpo completo = patrones analizados correctamente'**
+  String get cameraGuidePositionTip;
+
+  /// No description provided for @cameraGuideTechniqueTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Consejos de grabación'**
+  String get cameraGuideTechniqueTitle;
+
+  /// No description provided for @cameraGuideTechniqueDesc.
+  ///
+  /// In es, this message translates to:
+  /// **'Coloca el pez sobre una superficie plana (una alfombrilla de medición es ideal). Minimiza la cobertura con las manos. Un video estable de 5-10 segundos es perfecto.'**
+  String get cameraGuideTechniqueDesc;
+
+  /// No description provided for @cameraGuideDoFlat.
+  ///
+  /// In es, this message translates to:
+  /// **'Colocar el pez plano sobre la alfombrilla'**
+  String get cameraGuideDoFlat;
+
+  /// No description provided for @cameraGuideDoLight.
+  ///
+  /// In es, this message translates to:
+  /// **'Usar buena luz natural'**
+  String get cameraGuideDoLight;
+
+  /// No description provided for @cameraGuideDoSteady.
+  ///
+  /// In es, this message translates to:
+  /// **'Grabar 5-10 segundos de forma estable'**
+  String get cameraGuideDoSteady;
+
+  /// No description provided for @cameraGuideDontHands.
+  ///
+  /// In es, this message translates to:
+  /// **'Sostener el pez cubriendo el cuerpo'**
+  String get cameraGuideDontHands;
+
+  /// No description provided for @cameraGuideDontDark.
+  ///
+  /// In es, this message translates to:
+  /// **'Grabar en condiciones muy oscuras'**
+  String get cameraGuideDontDark;
+
+  /// No description provided for @cameraGuideReadyTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'¡Listo para capturar!'**
+  String get cameraGuideReadyTitle;
+
+  /// No description provided for @cameraGuideReadyDesc.
+  ///
+  /// In es, this message translates to:
+  /// **'La cámara mostrará una guía con la silueta de un pez. Alinea el pez con el contorno y presiona el botón de grabar. ¡La IA identificará tu captura!'**
+  String get cameraGuideReadyDesc;
+
+  /// No description provided for @cameraGuideReadySettings.
+  ///
+  /// In es, this message translates to:
+  /// **'Siempre puedes acceder a esta guía desde los ajustes de la cámara.'**
+  String get cameraGuideReadySettings;
+
+  /// No description provided for @arAlignSilhouette.
+  ///
+  /// In es, this message translates to:
+  /// **'Alinea el pez con la silueta'**
+  String get arAlignSilhouette;
+
+  /// No description provided for @arHeadLeftBodyVisible.
+  ///
+  /// In es, this message translates to:
+  /// **'Cabeza hacia la IZQUIERDA • Cuerpo completo visible'**
+  String get arHeadLeftBodyVisible;
+
+  /// No description provided for @arHeadLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'CABEZA'**
+  String get arHeadLabel;
+
+  /// No description provided for @arTailLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'COLA'**
+  String get arTailLabel;
+
+  /// No description provided for @arHorizontal.
+  ///
+  /// In es, this message translates to:
+  /// **'Horizontal'**
+  String get arHorizontal;
+
+  /// No description provided for @arDistance.
+  ///
+  /// In es, this message translates to:
+  /// **'30-50cm'**
+  String get arDistance;
+
+  /// No description provided for @arGoodLight.
+  ///
+  /// In es, this message translates to:
+  /// **'Buena luz'**
+  String get arGoodLight;
+
+  /// No description provided for @recordingStateRecording.
+  ///
+  /// In es, this message translates to:
+  /// **'Grabando... Mantén estable'**
+  String get recordingStateRecording;
+
+  /// No description provided for @recordingStatePressToRecord.
+  ///
+  /// In es, this message translates to:
+  /// **'Pulsa para grabar ({seconds}s máx)'**
+  String recordingStatePressToRecord(int seconds);
+
+  /// No description provided for @sheetOwnCapture.
+  ///
+  /// In es, this message translates to:
+  /// **'MI CAPTURA'**
+  String get sheetOwnCapture;
+
+  /// No description provided for @sheetFieldDate.
+  ///
+  /// In es, this message translates to:
+  /// **'Fecha'**
+  String get sheetFieldDate;
+
+  /// No description provided for @sheetFieldTime.
+  ///
+  /// In es, this message translates to:
+  /// **'Hora'**
+  String get sheetFieldTime;
+
+  /// No description provided for @sheetFieldFishId.
+  ///
+  /// In es, this message translates to:
+  /// **'Fish ID'**
+  String get sheetFieldFishId;
+
+  /// No description provided for @sheetFieldCaptureId.
+  ///
+  /// In es, this message translates to:
+  /// **'Capture ID'**
+  String get sheetFieldCaptureId;
+
+  /// No description provided for @sheetFieldUser.
+  ///
+  /// In es, this message translates to:
+  /// **'Usuario'**
+  String get sheetFieldUser;
+
+  /// No description provided for @sheetFieldCoordinates.
+  ///
+  /// In es, this message translates to:
+  /// **'Coordenadas exactas'**
+  String get sheetFieldCoordinates;
+
+  /// No description provided for @sheetHistoryTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Historial del pez'**
+  String get sheetHistoryTitle;
+
+  /// No description provided for @sheetHistorySubtitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Ver todas las capturas de este pez'**
+  String get sheetHistorySubtitle;
+
+  /// No description provided for @timelineSummary.
+  ///
+  /// In es, this message translates to:
+  /// **'{captures} capturas en {locations} ubicaciones'**
+  String timelineSummary(int captures, int locations);
+
+  /// No description provided for @timelineLocationZone.
+  ///
+  /// In es, this message translates to:
+  /// **'Zona {label}'**
+  String timelineLocationZone(String label);
+
+  /// No description provided for @timelineStatusNew.
+  ///
+  /// In es, this message translates to:
+  /// **'Nuevo'**
+  String get timelineStatusNew;
+
+  /// No description provided for @timelineStatusReunion.
+  ///
+  /// In es, this message translates to:
+  /// **'Reencuentro'**
+  String get timelineStatusReunion;
+
+  /// No description provided for @timelineEmpty.
+  ///
+  /// In es, this message translates to:
+  /// **'No hay historial disponible para este pez'**
+  String get timelineEmpty;
+
+  /// No description provided for @timelineError.
+  ///
+  /// In es, this message translates to:
+  /// **'Error al cargar historial: {error}'**
+  String timelineError(Object error);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

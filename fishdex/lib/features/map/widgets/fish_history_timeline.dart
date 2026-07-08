@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../data/models/fish_capture.dart';
 import '../providers/fish_history_provider.dart';
 
@@ -28,12 +29,12 @@ class FishHistoryTimeline extends ConsumerWidget {
     return groupedHistory.when(
       data: (groups) {
         if (groups.isEmpty) {
-          return _buildEmptyState();
+          return _buildEmptyState(context);
         }
         return _buildTimeline(context, groups);
       },
       loading: () => _buildLoading(),
-      error: (e, _) => _buildError(e),
+      error: (e, _) => _buildError(context, e),
     );
   }
 
@@ -68,7 +69,7 @@ class FishHistoryTimeline extends ConsumerWidget {
                     ),
                   ),
                   Text(
-                    '${_totalCaptures(groups)} capturas en ${groups.length} ubicación${groups.length > 1 ? "es" : ""}',
+                    context.l10n.timelineSummary(_totalCaptures(groups), groups.length),
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.5),
                       fontSize: 12,
@@ -148,7 +149,7 @@ class FishHistoryTimeline extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'Zona ${group.locationLabel}',
+                          context.l10n.timelineLocationZone(group.locationLabel),
                           style: TextStyle(
                             color: branchColor,
                             fontSize: 13,
@@ -178,7 +179,7 @@ class FishHistoryTimeline extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   ...group.captures.map(
-                    (capture) => _buildCaptureEntry(capture, branchColor),
+                    (capture) => _buildCaptureEntry(context, capture, branchColor),
                   ),
                 ],
               ),
@@ -189,7 +190,7 @@ class FishHistoryTimeline extends ConsumerWidget {
     );
   }
 
-  Widget _buildCaptureEntry(FishCapture capture, Color branchColor) {
+  Widget _buildCaptureEntry(BuildContext context, FishCapture capture, Color branchColor) {
     final date = capture.capturedAt;
     final dateStr = '${date.day}/${_monthName(date.month)}/${date.year}';
 
@@ -248,7 +249,9 @@ class FishHistoryTimeline extends ConsumerWidget {
                 const SizedBox(width: 8),
                 _dataChip(
                   capture.isNewFish ? Icons.fiber_new : Icons.replay,
-                  capture.isNewFish ? 'Nuevo' : 'Reencuentro',
+                  capture.isNewFish
+                      ? context.l10n.timelineStatusNew
+                      : context.l10n.timelineStatusReunion,
                 ),
               ],
             ),
@@ -275,7 +278,7 @@ class FishHistoryTimeline extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -287,7 +290,7 @@ class FishHistoryTimeline extends ConsumerWidget {
           Icon(Icons.info_outline, color: Colors.white.withOpacity(0.3), size: 18),
           const SizedBox(width: 12),
           Text(
-            'No hay historial disponible para este pez',
+            context.l10n.timelineEmpty,
             style: TextStyle(
               color: Colors.white.withOpacity(0.5),
               fontSize: 13,
@@ -314,7 +317,7 @@ class FishHistoryTimeline extends ConsumerWidget {
     );
   }
 
-  Widget _buildError(Object error) {
+  Widget _buildError(BuildContext context, Object error) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -327,7 +330,7 @@ class FishHistoryTimeline extends ConsumerWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Error al cargar historial: $error',
+              context.l10n.timelineError(error.toString()),
               style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),

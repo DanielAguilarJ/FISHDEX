@@ -455,5 +455,83 @@
 
   "conditionAlive": "Alive",
   "conditionReleased": "Released",
-  "conditionDead": "Dead"
+  "conditionDead": "Dead",
+
+  "cameraGuideSkip": "Skip",
+  "cameraGuideNext": "Next",
+  "cameraGuideStart": "Start Camera",
+  "cameraGuideOrientationTitle": "Correct Orientation",
+  "cameraGuideOrientationDesc": "Always position the fish with the HEAD pointing LEFT and the TAIL pointing RIGHT. This ensures consistent identification across all catches.",
+  "cameraGuideOrientationTip": "Same orientation = better matching accuracy",
+  "cameraGuidePositionTitle": "Full Body Visible",
+  "cameraGuidePositionDesc": "Make sure the ENTIRE fish body is visible in the frame, from mouth to tail. Leave small margins on all sides. Distance: 30-50 cm from the fish.",
+  "cameraGuidePositionTip": "Full body = patterns can be analyzed correctly",
+  "cameraGuideTechniqueTitle": "Recording Tips",
+  "cameraGuideTechniqueDesc": "Place the fish on a flat surface (measuring mat is ideal). Minimize hand coverage. A steady 5-10 second video is perfect.",
+  "cameraGuideDoFlat": "Lay fish flat on measuring mat",
+  "cameraGuideDoLight": "Use good natural light",
+  "cameraGuideDoSteady": "Record 5-10 seconds steadily",
+  "cameraGuideDontHands": "Hold fish with hands covering body",
+  "cameraGuideDontDark": "Record in very dark conditions",
+  "cameraGuideReadyTitle": "Ready to Capture!",
+  "cameraGuideReadyDesc": "The camera will show a fish silhouette guide. Align the fish with the outline and press the record button. The AI will identify your catch!",
+  "cameraGuideReadySettings": "You can always access this guide from the camera settings.",
+
+  "arAlignSilhouette": "Align the fish with the silhouette",
+  "arHeadLeftBodyVisible": "Head pointing LEFT • Full body visible",
+  "arHeadLabel": "HEAD",
+  "arTailLabel": "TAIL",
+  "arHorizontal": "Horizontal",
+  "arDistance": "30-50cm",
+  "arGoodLight": "Good light",
+
+  "recordingStateRecording": "Recording... Keep steady",
+  "recordingStatePressToRecord": "Press to record ({seconds}s max)",
+  "@recordingStatePressToRecord": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+
+  "sheetOwnCapture": "MY CATCH",
+  "sheetFieldDate": "Date",
+  "sheetFieldTime": "Time",
+  "sheetFieldFishId": "Fish ID",
+  "sheetFieldCaptureId": "Capture ID",
+  "sheetFieldUser": "User",
+  "sheetFieldCoordinates": "Exact coordinates",
+  "sheetHistoryTitle": "Fish History",
+  "sheetHistorySubtitle": "View all catches of this fish",
+  "timelineSummary": "{captures} catches in {locations} locations",
+  "@timelineSummary": {
+    "placeholders": {
+      "captures": {
+        "type": "int"
+      },
+      "locations": {
+        "type": "int"
+      }
+    }
+  },
+  "timelineLocationZone": "Zone {label}",
+  "@timelineLocationZone": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineStatusNew": "New",
+  "timelineStatusReunion": "Reunion",
+  "timelineEmpty": "No history available for this fish",
+  "timelineError": "Error loading history: {error}",
+  "@timelineError": {
+    "placeholders": {
+      "error": {
+        "type": "Object"
+      }
+    }
+  }
 }

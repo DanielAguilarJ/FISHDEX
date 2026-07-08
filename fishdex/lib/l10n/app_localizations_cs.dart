@@ -1090,4 +1090,141 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get conditionDead => 'Uhynulá';
+
+  @override
+  String get cameraGuideSkip => 'Přeskočit';
+
+  @override
+  String get cameraGuideNext => 'Další';
+
+  @override
+  String get cameraGuideStart => 'Spustit fotoaparát';
+
+  @override
+  String get cameraGuideOrientationTitle => 'Správná orientace';
+
+  @override
+  String get cameraGuideOrientationDesc => 'Vždy umístěte rybu HLAVOU směřující DOLEVA a OCASEM směřujícím DOPRAVA. To zajišťuje konzistentní identifikaci u všech úlovků.';
+
+  @override
+  String get cameraGuideOrientationTip => 'Stejná orientace = lepší přesnost shody';
+
+  @override
+  String get cameraGuidePositionTitle => 'Viditelné celé tělo';
+
+  @override
+  String get cameraGuidePositionDesc => 'Ujistěte se, že je v rámečku vidět CELÉ tělo ryby, od úst po ocas. Ponechte malé okraje na všech stranách. Vzdálenost: 30-50 cm od ryby.';
+
+  @override
+  String get cameraGuidePositionTip => 'Celé tělo = vzory lze správně analyzovat';
+
+  @override
+  String get cameraGuideTechniqueTitle => 'Tipy pro nahrávání';
+
+  @override
+  String get cameraGuideTechniqueDesc => 'Umístěte rybu na rovný povrch (ideální je měřicí podložka). Minimalizujte zakrytí rukama. Stabilní video o délce 5-10 sekund je perfektní.';
+
+  @override
+  String get cameraGuideDoFlat => 'Položte rybu naplocho na měřicí podložku';
+
+  @override
+  String get cameraGuideDoLight => 'Použijte dobré přirozené světlo';
+
+  @override
+  String get cameraGuideDoSteady => 'Nahrávejte stabilně 5-10 sekund';
+
+  @override
+  String get cameraGuideDontHands => 'Držte rybu rukama zakrývajícími tělo';
+
+  @override
+  String get cameraGuideDontDark => 'Nahrávejte ve velmi tmavých podmínkách';
+
+  @override
+  String get cameraGuideReadyTitle => 'Připraven k zachycení!';
+
+  @override
+  String get cameraGuideReadyDesc => 'Fotoaparát zobrazí vodítko siluety ryby. Zarovnejte rybu s obrysem a stiskněte tlačítko nahrávání. Umělá inteligence identifikuje váš úlovek!';
+
+  @override
+  String get cameraGuideReadySettings => 'Tuto příručku můžete kdykoli otevřít z nastavení fotoaparátu.';
+
+  @override
+  String get arAlignSilhouette => 'Zarovnejte rybu se siluetou';
+
+  @override
+  String get arHeadLeftBodyVisible => 'Hlava směřuje DOLEVA • Viditelné celé tělo';
+
+  @override
+  String get arHeadLabel => 'HLAVA';
+
+  @override
+  String get arTailLabel => 'OCAS';
+
+  @override
+  String get arHorizontal => 'Horizontálně';
+
+  @override
+  String get arDistance => '30-50 cm';
+
+  @override
+  String get arGoodLight => 'Dobré světlo';
+
+  @override
+  String get recordingStateRecording => 'Nahrávání... Držte stabilně';
+
+  @override
+  String recordingStatePressToRecord(int seconds) {
+    return 'Stisknutím nahrávejte (max ${seconds}s)';
+  }
+
+  @override
+  String get sheetOwnCapture => 'MŮJ ÚLOVEK';
+
+  @override
+  String get sheetFieldDate => 'Datum';
+
+  @override
+  String get sheetFieldTime => 'Čas';
+
+  @override
+  String get sheetFieldFishId => 'Fish ID';
+
+  @override
+  String get sheetFieldCaptureId => 'Capture ID';
+
+  @override
+  String get sheetFieldUser => 'Uživatel';
+
+  @override
+  String get sheetFieldCoordinates => 'Přesné souřadnice';
+
+  @override
+  String get sheetHistoryTitle => 'Historie ryby';
+
+  @override
+  String get sheetHistorySubtitle => 'Zobrazit všechny úlovky této ryby';
+
+  @override
+  String timelineSummary(int captures, int locations) {
+    return '$captures úlovků na $locations místech';
+  }
+
+  @override
+  String timelineLocationZone(String label) {
+    return 'Zóna $label';
+  }
+
+  @override
+  String get timelineStatusNew => 'Nové';
+
+  @override
+  String get timelineStatusReunion => 'Znovusetkání';
+
+  @override
+  String get timelineEmpty => 'Pro tuto rybu není k dispozici žádná historie';
+
+  @override
+  String timelineError(Object error) {
+    return 'Chyba při načítání historie: $error';
+  }
 }

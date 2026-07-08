@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../providers/map_providers.dart';
 import 'fish_history_timeline.dart';
 
@@ -152,9 +153,9 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
                         color: AppTheme.accentBlue.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text(
-                        'MI CAPTURA',
-                        style: TextStyle(
+                      child: Text(
+                        context.l10n.sheetOwnCapture,
+                        style: const TextStyle(
                           color: AppTheme.accentBlue,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -185,19 +186,19 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
       ),
       child: Column(
         children: [
-          _dataRow(Icons.calendar_today, 'Fecha', dateStr),
+          _dataRow(Icons.calendar_today, context.l10n.sheetFieldDate, dateStr),
           _divider(),
-          _dataRow(Icons.access_time, 'Hora', timeStr),
+          _dataRow(Icons.access_time, context.l10n.sheetFieldTime, timeStr),
           _divider(),
-          _dataRow(Icons.fingerprint, 'Fish ID', capture.fishId),
+          _dataRow(Icons.fingerprint, context.l10n.sheetFieldFishId, capture.fishId),
           _divider(),
-          _dataRow(Icons.badge, 'Capture ID',
+          _dataRow(Icons.badge, context.l10n.sheetFieldCaptureId,
               capture.captureId.length > 12
                   ? '${capture.captureId.substring(0, 12)}...'
                   : capture.captureId),
           if (capture.userId != null) ...[
             _divider(),
-            _dataRow(Icons.person, 'Usuario',
+            _dataRow(Icons.person, context.l10n.sheetFieldUser,
                 capture.userId!.length > 10
                     ? '${capture.userId!.substring(0, 10)}...'
                     : capture.userId!),
@@ -270,9 +271,9 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Coordenadas exactas',
-                  style: TextStyle(
+                Text(
+                  context.l10n.sheetFieldCoordinates,
+                  style: const TextStyle(
                     color: AppTheme.teal,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -324,7 +325,7 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Historial del pez',
+                    context.l10n.sheetHistoryTitle,
                     style: TextStyle(
                       color: _showHistory ? AppTheme.teal : Colors.white,
                       fontSize: 14,
@@ -332,7 +333,7 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
                     ),
                   ),
                   Text(
-                    'Ver todas las capturas de este pez',
+                    context.l10n.sheetHistorySubtitle,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.4),
                       fontSize: 11,

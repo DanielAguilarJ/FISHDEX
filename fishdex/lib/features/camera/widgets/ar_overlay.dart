@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 
 /// AR Overlay con silueta de pez para guiar al usuario a orientar correctamente el pez.
 /// Similar a las apps de banco que muestran la silueta de una tarjeta/ID para verificación.
@@ -98,23 +99,23 @@ class _AROverlayState extends State<AROverlay>
           width: 1,
         ),
       ),
-      child: const Column(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Align the fish with the silhouette',
+            context.l10n.arAlignSilhouette,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
-            'Head pointing LEFT \u2022 Full body visible',
+            context.l10n.arHeadLeftBodyVisible,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white70,
               fontSize: 11,
               fontWeight: FontWeight.w400,
@@ -140,14 +141,14 @@ class _AROverlayState extends State<AROverlay>
                 color: Colors.black54,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.arrow_back, color: AppTheme.successGreen, size: 12),
-                  SizedBox(width: 2),
+                  const Icon(Icons.arrow_back, color: AppTheme.successGreen, size: 12),
+                  const SizedBox(width: 2),
                   Text(
-                    'HEAD',
-                    style: TextStyle(
+                    context.l10n.arHeadLabel,
+                    style: const TextStyle(
                       color: AppTheme.successGreen,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
@@ -170,19 +171,19 @@ class _AROverlayState extends State<AROverlay>
                 color: Colors.black54,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'TAIL',
-                    style: TextStyle(
+                    context.l10n.arTailLabel,
+                    style: const TextStyle(
                       color: AppTheme.energyOrange,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(width: 2),
-                  Icon(Icons.arrow_forward, color: AppTheme.energyOrange, size: 12),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.arrow_forward, color: AppTheme.energyOrange, size: 12),
                 ],
               ),
             ),
@@ -198,19 +199,19 @@ class _AROverlayState extends State<AROverlay>
       children: [
         _buildIndicatorPill(
           Icons.rotate_90_degrees_ccw,
-          'Horizontal',
+          context.l10n.arHorizontal,
           AppTheme.successGreen,
         ),
         const SizedBox(width: 10),
         _buildIndicatorPill(
           Icons.straighten,
-          '30-50cm',
+          context.l10n.arDistance,
           AppTheme.energyOrange,
         ),
         const SizedBox(width: 10),
         _buildIndicatorPill(
           Icons.wb_sunny_outlined,
-          'Good light',
+          context.l10n.arGoodLight,
           AppTheme.accentBlue,
         ),
       ],

@@ -1090,4 +1090,141 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get conditionDead => 'Dead';
+
+  @override
+  String get cameraGuideSkip => 'Skip';
+
+  @override
+  String get cameraGuideNext => 'Next';
+
+  @override
+  String get cameraGuideStart => 'Start Camera';
+
+  @override
+  String get cameraGuideOrientationTitle => 'Correct Orientation';
+
+  @override
+  String get cameraGuideOrientationDesc => 'Always position the fish with the HEAD pointing LEFT and the TAIL pointing RIGHT. This ensures consistent identification across all catches.';
+
+  @override
+  String get cameraGuideOrientationTip => 'Same orientation = better matching accuracy';
+
+  @override
+  String get cameraGuidePositionTitle => 'Full Body Visible';
+
+  @override
+  String get cameraGuidePositionDesc => 'Make sure the ENTIRE fish body is visible in the frame, from mouth to tail. Leave small margins on all sides. Distance: 30-50 cm from the fish.';
+
+  @override
+  String get cameraGuidePositionTip => 'Full body = patterns can be analyzed correctly';
+
+  @override
+  String get cameraGuideTechniqueTitle => 'Recording Tips';
+
+  @override
+  String get cameraGuideTechniqueDesc => 'Place the fish on a flat surface (measuring mat is ideal). Minimize hand coverage. A steady 5-10 second video is perfect.';
+
+  @override
+  String get cameraGuideDoFlat => 'Lay fish flat on measuring mat';
+
+  @override
+  String get cameraGuideDoLight => 'Use good natural light';
+
+  @override
+  String get cameraGuideDoSteady => 'Record 5-10 seconds steadily';
+
+  @override
+  String get cameraGuideDontHands => 'Hold fish with hands covering body';
+
+  @override
+  String get cameraGuideDontDark => 'Record in very dark conditions';
+
+  @override
+  String get cameraGuideReadyTitle => 'Ready to Capture!';
+
+  @override
+  String get cameraGuideReadyDesc => 'The camera will show a fish silhouette guide. Align the fish with the outline and press the record button. The AI will identify your catch!';
+
+  @override
+  String get cameraGuideReadySettings => 'You can always access this guide from the camera settings.';
+
+  @override
+  String get arAlignSilhouette => 'Align the fish with the silhouette';
+
+  @override
+  String get arHeadLeftBodyVisible => 'Head pointing LEFT • Full body visible';
+
+  @override
+  String get arHeadLabel => 'HEAD';
+
+  @override
+  String get arTailLabel => 'TAIL';
+
+  @override
+  String get arHorizontal => 'Horizontal';
+
+  @override
+  String get arDistance => '30-50cm';
+
+  @override
+  String get arGoodLight => 'Good light';
+
+  @override
+  String get recordingStateRecording => 'Recording... Keep steady';
+
+  @override
+  String recordingStatePressToRecord(int seconds) {
+    return 'Press to record (${seconds}s max)';
+  }
+
+  @override
+  String get sheetOwnCapture => 'MY CATCH';
+
+  @override
+  String get sheetFieldDate => 'Date';
+
+  @override
+  String get sheetFieldTime => 'Time';
+
+  @override
+  String get sheetFieldFishId => 'Fish ID';
+
+  @override
+  String get sheetFieldCaptureId => 'Capture ID';
+
+  @override
+  String get sheetFieldUser => 'User';
+
+  @override
+  String get sheetFieldCoordinates => 'Exact coordinates';
+
+  @override
+  String get sheetHistoryTitle => 'Fish History';
+
+  @override
+  String get sheetHistorySubtitle => 'View all catches of this fish';
+
+  @override
+  String timelineSummary(int captures, int locations) {
+    return '$captures catches in $locations locations';
+  }
+
+  @override
+  String timelineLocationZone(String label) {
+    return 'Zone $label';
+  }
+
+  @override
+  String get timelineStatusNew => 'New';
+
+  @override
+  String get timelineStatusReunion => 'Reunion';
+
+  @override
+  String get timelineEmpty => 'No history available for this fish';
+
+  @override
+  String timelineError(Object error) {
+    return 'Error loading history: $error';
+  }
 }
