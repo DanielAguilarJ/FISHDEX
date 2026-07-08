@@ -537,5 +537,11 @@
         "type": "Object"
       }
     }
-  }
+  },
+
+  "quickSpotFishingAreaLabel": "Coto de Pesca (Revír)",
+  "quickSpotLoadingAreas": "Cargando cotos cercanos...",
+  "quickSpotSearchAreaHint": "Buscar coto por nombre o código...",
+  "quickSpotNoAreasNearby": "No se encontraron cotos cercanos. Intenta aumentar el radio.",
+  "quickSpotNoAreasMatching": "Sin cotos que coincidan. Intenta otra búsqueda."
 }

@@ -328,7 +328,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           child: Text(
             isLastIntroPage
                 ? context.l10n.onboardingChooseRole
-                : 'Siguiente',
+                : context.l10n.next,
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,

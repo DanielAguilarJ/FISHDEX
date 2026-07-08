@@ -671,7 +671,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
           if (setupState.latitude != null && setupState.longitude != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Coordenadas: ${setupState.latitude!.toStringAsFixed(4)}, ${setupState.longitude!.toStringAsFixed(4)}',
+              '${context.l10n.mapCoordinates}: ${setupState.latitude!.toStringAsFixed(4)}, ${setupState.longitude!.toStringAsFixed(4)}',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.3),
                 fontSize: 12,

@@ -533,5 +533,11 @@
         "type": "Object"
       }
     }
-  }
+  },
+
+  "quickSpotFishingAreaLabel": "Fishing Area (Revír)",
+  "quickSpotLoadingAreas": "Loading nearby areas...",
+  "quickSpotSearchAreaHint": "Search area by name or code...",
+  "quickSpotNoAreasNearby": "No areas found nearby. Try increasing search radius.",
+  "quickSpotNoAreasMatching": "No matching areas. Try a different search."
 }

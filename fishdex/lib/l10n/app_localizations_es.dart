@@ -1227,4 +1227,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String timelineError(Object error) {
     return 'Error al cargar historial: $error';
   }
+
+  @override
+  String get quickSpotFishingAreaLabel => 'Coto de Pesca (Revír)';
+
+  @override
+  String get quickSpotLoadingAreas => 'Cargando cotos cercanos...';
+
+  @override
+  String get quickSpotSearchAreaHint => 'Buscar coto por nombre o código...';
+
+  @override
+  String get quickSpotNoAreasNearby => 'No se encontraron cotos cercanos. Intenta aumentar el radio.';
+
+  @override
+  String get quickSpotNoAreasMatching => 'Sin cotos que coincidan. Intenta otra búsqueda.';
 }

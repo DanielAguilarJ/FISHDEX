@@ -2424,6 +2424,36 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Error al cargar historial: {error}'**
   String timelineError(Object error);
+
+  /// No description provided for @quickSpotFishingAreaLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Coto de Pesca (Revír)'**
+  String get quickSpotFishingAreaLabel;
+
+  /// No description provided for @quickSpotLoadingAreas.
+  ///
+  /// In es, this message translates to:
+  /// **'Cargando cotos cercanos...'**
+  String get quickSpotLoadingAreas;
+
+  /// No description provided for @quickSpotSearchAreaHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Buscar coto por nombre o código...'**
+  String get quickSpotSearchAreaHint;
+
+  /// No description provided for @quickSpotNoAreasNearby.
+  ///
+  /// In es, this message translates to:
+  /// **'No se encontraron cotos cercanos. Intenta aumentar el radio.'**
+  String get quickSpotNoAreasNearby;
+
+  /// No description provided for @quickSpotNoAreasMatching.
+  ///
+  /// In es, this message translates to:
+  /// **'Sin cotos que coincidan. Intenta otra búsqueda.'**
+  String get quickSpotNoAreasMatching;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

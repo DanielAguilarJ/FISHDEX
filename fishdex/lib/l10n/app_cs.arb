@@ -533,5 +533,11 @@
         "type": "Object"
       }
     }
-  }
+  },
+
+  "quickSpotFishingAreaLabel": "Rybářský revír",
+  "quickSpotLoadingAreas": "Načítání okolních revírů...",
+  "quickSpotSearchAreaHint": "Hledat revír podle názvu nebo kódu...",
+  "quickSpotNoAreasNearby": "V okolí nebyly nalezeny žádné revíry. Zkuste zvětšit okruh hledání.",
+  "quickSpotNoAreasMatching": "Žádné odpovídající revíry. Zkuste jiné hledání."
 }

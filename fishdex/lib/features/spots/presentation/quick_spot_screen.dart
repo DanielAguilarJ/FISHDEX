@@ -284,7 +284,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
                     children: [
                       _buildLocationCard(),
                       const SizedBox(height: 24),
-                      _buildSectionLabel('Fishing Area (Revír)'),
+                      _buildSectionLabel(context.l10n.quickSpotFishingAreaLabel),
                       const SizedBox(height: 8),
                       _buildAreaSelector(),
                       const SizedBox(height: 24),
@@ -321,17 +321,17 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
           color: AppTheme.darkSurface,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            SizedBox(
+            const SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentBlue),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Text(
-              'Loading nearby areas...',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
+              context.l10n.quickSpotLoadingAreas,
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
             ),
           ],
         ),
@@ -347,7 +347,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
           style: const TextStyle(color: Colors.white, fontSize: 13),
           onChanged: _filterAreas,
           decoration: InputDecoration(
-            hintText: 'Search area by name or code...',
+            hintText: context.l10n.quickSpotSearchAreaHint,
             hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
             filled: true,
             fillColor: AppTheme.darkSurface,
@@ -462,8 +462,8 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               _nearbyAreas.isEmpty
-                  ? 'No areas found nearby. Try increasing search radius.'
-                  : 'No matching areas. Try a different search.',
+                  ? context.l10n.quickSpotNoAreasNearby
+                  : context.l10n.quickSpotNoAreasMatching,
               style: const TextStyle(color: Colors.white38, fontSize: 12),
             ),
           ),

@@ -1227,4 +1227,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String timelineError(Object error) {
     return 'Chyba při načítání historie: $error';
   }
+
+  @override
+  String get quickSpotFishingAreaLabel => 'Rybářský revír';
+
+  @override
+  String get quickSpotLoadingAreas => 'Načítání okolních revírů...';
+
+  @override
+  String get quickSpotSearchAreaHint => 'Hledat revír podle názvu nebo kódu...';
+
+  @override
+  String get quickSpotNoAreasNearby => 'V okolí nebyly nalezeny žádné revíry. Zkuste zvětšit okruh hledání.';
+
+  @override
+  String get quickSpotNoAreasMatching => 'Žádné odpovídající revíry. Zkuste jiné hledání.';
 }

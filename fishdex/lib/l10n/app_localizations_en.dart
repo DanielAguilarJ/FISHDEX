@@ -1227,4 +1227,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String timelineError(Object error) {
     return 'Error loading history: $error';
   }
+
+  @override
+  String get quickSpotFishingAreaLabel => 'Fishing Area (Revír)';
+
+  @override
+  String get quickSpotLoadingAreas => 'Loading nearby areas...';
+
+  @override
+  String get quickSpotSearchAreaHint => 'Search area by name or code...';
+
+  @override
+  String get quickSpotNoAreasNearby => 'No areas found nearby. Try increasing search radius.';
+
+  @override
+  String get quickSpotNoAreasMatching => 'No matching areas. Try a different search.';
 }
