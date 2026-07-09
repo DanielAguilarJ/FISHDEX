@@ -25,21 +25,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1200),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.elasticOut),
+    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: AppTheme.curveEaseOut),
     );
 
     _controller.forward();
 
     // Verificar autenticación después de la animación
-    Future.delayed(const Duration(milliseconds: 2500), () {
+    Future.delayed(const Duration(milliseconds: 1500), () {
       _checkAuth();
     });
   }
@@ -194,7 +194,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             .textTheme
                             .displayLarge
                             ?.copyWith(
-                              letterSpacing: 8,
+                              letterSpacing: 4,
                               shadows: [
                                 Shadow(
                                   color: AppTheme.accentBlue.withOpacity(0.5),
@@ -208,7 +208,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         'Identifica. Colecciona. Compite.',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               color: Colors.white.withOpacity(0.7),
-                              letterSpacing: 2,
+                              letterSpacing: 1.5,
                             ),
                       ),
                       const SizedBox(height: 48),

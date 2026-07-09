@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../widgets/pressable_scale.dart';
 
 /// Pantalla de onboarding para nuevos usuarios
 /// Se muestra solo la primera vez que abren la app.
@@ -403,13 +404,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     required VoidCallback onTap,
     String? badge,
   }) {
-    return GestureDetector(
+    return PressableScale(
       onTap: onTap,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
           border: Border.all(
             color: gradient.colors.first.withOpacity(0.4),
             width: 1.5,

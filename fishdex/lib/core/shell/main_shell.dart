@@ -93,7 +93,7 @@ class _MainShellState extends ConsumerState<MainShell>
     // Pulso del FAB cuando el menú está cerrado
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
 
     _pulseAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -132,9 +132,8 @@ class _MainShellState extends ConsumerState<MainShell>
   void _onDialAction(BuildContext context, String route) {
     _closeDial();
     final router = GoRouter.of(context);
-    Future.delayed(const Duration(milliseconds: 120), () {
-      if (mounted) router.go(route);
-    });
+    // Navigate immediately - no artificial delay
+    if (mounted) router.go(route);
   }
 
   void _onNavTap(BuildContext context, int index) {
@@ -370,11 +369,11 @@ class _MainShellState extends ConsumerState<MainShell>
         final pulseV = _pulseAnim.value;
 
         // Escala pulsante solo cuando el menú está cerrado
-        final pulseScale = _isOpen ? 1.0 : (1.0 + 0.06 * pulseV);
+        final pulseScale = _isOpen ? 1.0 : (1.0 + 0.03 * pulseV);
         // Glow pulsante: más grande e intenso cuando cerrado
-        final glowRadius = _isOpen ? 10.0 : (10.0 + 12.0 * pulseV);
-        final glowOpacity = _isOpen ? 0.18 : (0.20 + 0.28 * pulseV);
-        final glowSpread = _isOpen ? 0.0 : (1.5 * pulseV);
+        final glowRadius = _isOpen ? 10.0 : (10.0 + 8.0 * pulseV);
+        final glowOpacity = _isOpen ? 0.18 : (0.18 + 0.20 * pulseV);
+        final glowSpread = _isOpen ? 0.0 : (1.0 * pulseV);
 
         return GestureDetector(
           onTap: _toggleDial,
@@ -520,7 +519,7 @@ class _MainShellState extends ConsumerState<MainShell>
       onTap: () => _onNavTap(context, index),
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
+        duration: const Duration(milliseconds: 150),
         curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -545,7 +544,7 @@ class _MainShellState extends ConsumerState<MainShell>
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight:
                     isActive ? FontWeight.w700 : FontWeight.normal,
                 // Activo: accentBlue / Inactivo: blanco apagado

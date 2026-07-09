@@ -67,7 +67,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
       CurvedAnimation(parent: _cardController, curve: Curves.elasticOut),
     );
 
-    _cardRotation = Tween<double>(begin: 0.1, end: 0.0).animate(
+    _cardRotation = Tween<double>(begin: 0.03, end: 0.0).animate(
       CurvedAnimation(parent: _cardController, curve: Curves.easeOut),
     );
 
@@ -79,26 +79,27 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
     // Guardar el avistamiento en Appwrite en background (sin bloquear animaciones)
     _saveSighting();
 
+    // Secuencia compacta: 1200ms total (en vez de 2300ms)
     // 1. Mostrar confeti si es nuevo
     if (widget.result.isNew) {
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 100));
       setState(() => _showConfetti = true);
     }
 
     // 2. Animar título
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 150));
     _entranceController.forward();
 
     // 3. Animar carta del pez
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 300));
     _cardController.forward();
 
-    // 4. Mostrar XP
-    await Future.delayed(const Duration(milliseconds: 800));
+    // 4. Mostrar XP (stagger 100ms después de la carta)
+    await Future.delayed(const Duration(milliseconds: 400));
     setState(() => _showXP = true);
 
     // 5. Mostrar detalles
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 200));
     setState(() => _showDetails = true);
   }
 
@@ -244,7 +245,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
           // Confeti overlay
           if (_showConfetti) const ConfettiOverlay(),
 
-          // Botón cerrar
+          // Botón cerrar (44px min hit area)
           Positioned(
             top: MediaQuery.of(context).padding.top + 12,
             right: 16,
@@ -252,14 +253,15 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
               onTap: () => Navigator.of(context).popUntil(
                 (route) => route.isFirst,
               ),
+              behavior: HitTestBehavior.opaque,
               child: Container(
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withOpacity(0.12),
                 ),
-                child: const Icon(Icons.close, color: Colors.white70, size: 20),
+                child: const Icon(Icons.close, color: Colors.white70, size: 22),
               ),
             ),
           ),

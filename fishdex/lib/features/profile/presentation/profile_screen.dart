@@ -12,6 +12,7 @@ import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/gamification_service.dart';
 import '../../../data/services/role_guard_service.dart';
+import '../../../widgets/pressable_scale.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_setup_provider.dart';
 
@@ -74,8 +75,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0D2137),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppTheme.darkSurfaceVariant,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
         title: const Row(
           children: [
             Icon(Icons.language, color: Colors.white70),
@@ -127,8 +128,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0D2137),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: AppTheme.darkSurfaceVariant,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
         title: Text(l10n.profileLogoutTitle,
             style: const TextStyle(color: Colors.white)),
         content: Text(
@@ -213,14 +214,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final String levelTitle = _getLevelTitle(level);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A1020),
+      backgroundColor: AppTheme.darkBackground,
       body: CustomScrollView(
         slivers: [
           // HERO HEADER
           SliverAppBar(
-            expandedHeight: 320,
+            expandedHeight: 280,
             pinned: true,
-            backgroundColor: const Color(0xFF0A1020),
+            backgroundColor: AppTheme.darkBackground,
             automaticallyImplyLeading: false,
             actions: [
               // Botón selector de idioma
@@ -315,9 +316,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               stops: [0.0, 0.4, 0.7, 1.0],
               colors: [
                 Color(0xFF1A3A5C),
-                Color(0xFF0F2A44),
-                Color(0xFF0C1E34),
-                Color(0xFF0A1020),
+                AppTheme.darkSurfaceVariant,
+                AppTheme.darkSurfaceDeep,
+                AppTheme.darkBackground,
               ],
             ),
           ),
@@ -387,7 +388,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             gradient: hasAvatar ? null : AppTheme.primaryGradient,
             image: hasAvatar
                 ? DecorationImage(
-                    image: FileImage(File(avatarPath!)),
+                    image: FileImage(File(avatarPath)),
                     fit: BoxFit.cover,
                   )
                 : null,
@@ -489,9 +490,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D2137),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.gold.withOpacity(0.2)),
+        color: AppTheme.darkSurfaceVariant,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.gold.withOpacity(AppTheme.opacityBorder)),
       ),
       child: Column(
         children: [
@@ -535,7 +536,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 8,
-              backgroundColor: const Color(0xFF1A2A3A),
+              backgroundColor: AppTheme.darkSurfaceElevated,
               valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.gold),
             ),
           ),
@@ -737,14 +738,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: GestureDetector(
+      child: PressableScale(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.2)),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(color: color.withOpacity(AppTheme.opacityBorder)),
           ),
           child: Column(
             children: [
@@ -754,7 +755,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 label,
                 style: TextStyle(
                   color: color,
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -823,7 +824,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1B2A),
+        color: AppTheme.darkSurfaceDeep,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(

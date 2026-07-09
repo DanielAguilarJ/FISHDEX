@@ -7,7 +7,6 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../l10n/app_localizations.dart';
 
 /// Pantalla de Login con diseño gamificado
 class LoginScreen extends ConsumerStatefulWidget {
@@ -24,8 +23,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
-  bool _isPinging = false;
-  String? _pingMessage;
 
   @override
   void dispose() {
@@ -90,38 +87,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handlePing() async {
-    setState(() {
-      _isPinging = true;
-      _pingMessage = null;
-    });
-
     try {
-      // Probamos obtener la cuenta anónima para verificar conectividad
       final account = ref.read(appwriteAccountProvider);
       await account.get();
-      setState(() {
-        _pingMessage = '✅ Pong! Conexión con Appwrite exitosa (sesión activa)';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pong! Conexion con Appwrite exitosa')),
+        );
+      }
     } on AppwriteException catch (e) {
-      debugPrint('❌ Ping Appwrite Error: [${e.code}] ${e.type} - ${e.message}');
       if (e.code == 401) {
-        // 401 = No hay sesión pero el servidor respondió → conectividad OK
-        setState(() {
-          _pingMessage = '✅ Pong! Conexión con Appwrite exitosa (sin sesión)';
-        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Pong! Servidor responde (sin sesion)')),
+          );
+        }
       } else {
-        setState(() {
-          _pingMessage = '❌ Error Appwrite [${e.code}]: ${e.message}';
-        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error Appwrite [${e.code}]: ${e.message}')),
+          );
+        }
       }
     } catch (e) {
-      debugPrint('❌ Ping Error: $e');
-      setState(() {
-        _pingMessage = '❌ Error de conexión: $e';
-      });
-    } finally {
       if (mounted) {
-        setState(() => _isPinging = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error de conexion: $e')),
+        );
       }
     }
   }
@@ -158,7 +150,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Text(
                     context.l10n.loginTitle,
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                          letterSpacing: 3,
+                          letterSpacing: 1.5,
                         ),
                   ),
                   const SizedBox(height: 8),
@@ -174,18 +166,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                        color: AppTheme.rareRed.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        border: Border.all(color: AppTheme.rareRed.withOpacity(0.3)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const Icon(Icons.error_outline, color: AppTheme.rareRed, size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: const TextStyle(color: Colors.red, fontSize: 14),
+                              style: const TextStyle(color: AppTheme.rareRed, fontSize: 14),
                             ),
                           ),
                         ],
@@ -260,7 +252,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.accentBlue,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         ),
                       ),
                       child: _isLoading
@@ -277,7 +269,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                letterSpacing: 2,
+                                letterSpacing: 1.5,
                               ),
                             ),
                     ),
@@ -309,85 +301,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 32),
                   
                   // MODO DEMO - Entrar sin backend
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setBool('is_demo_mode', true);
-                        await prefs.setBool('onboarding_completed', true);
-                        if (context.mounted) context.go('/map');
-                      },
-                      icon: const Icon(Icons.play_arrow),
-                      label: Text(context.l10n.loginDemoMode),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.gold,
-                        side: const BorderSide(color: AppTheme.gold),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                  TextButton(
+                    onPressed: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('is_demo_mode', true);
+                      await prefs.setBool('onboarding_completed', true);
+                      if (context.mounted) context.go('/map');
+                    },
+                    child: Text(
+                      context.l10n.loginDemoMode,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(AppTheme.opacityMuted),
+                        fontSize: 14,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  
-                  // BOTÓN PING - Verificar conexión con Appwrite
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: _isPinging ? null : _handlePing,
-                      icon: _isPinging
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTheme.accentBlue,
-                              ),
-                            )
-                          : const Icon(Icons.wifi_tethering),
-                      label: Text(_isPinging ? context.l10n.loginPinging : context.l10n.loginSendPing),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.accentBlue,
-                        side: const BorderSide(color: AppTheme.accentBlue),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
-                  ),
-                  
-                  // Resultado del ping
-                  if (_pingMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _pingMessage!.startsWith('✅')
-                              ? Colors.green.withOpacity(0.1)
-                              : Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _pingMessage!.startsWith('✅')
-                                ? Colors.green.withOpacity(0.3)
-                                : Colors.red.withOpacity(0.3),
-                          ),
-                        ),
-                        child: Text(
-                          _pingMessage!,
-                          style: TextStyle(
-                            color: _pingMessage!.startsWith('✅')
-                                ? Colors.green
-                                : Colors.red,
-                            fontSize: 13,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -399,24 +327,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildLogo() {
-    return Container(
-      width: 100,
-      height: 100,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: AppTheme.primaryGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.accentBlue.withOpacity(0.4),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: const Icon(
-        Icons.phishing,
-        size: 50,
-        color: Colors.white,
+    return GestureDetector(
+      onLongPress: _handlePing, // Hidden dev tool: long-press logo to ping
+      child: Container(
+        width: 100,
+        height: 100,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: AppTheme.primaryGradient,
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.accentBlue.withOpacity(0.4),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.phishing,
+          size: 50,
+          color: Colors.white,
+        ),
       ),
     );
   }

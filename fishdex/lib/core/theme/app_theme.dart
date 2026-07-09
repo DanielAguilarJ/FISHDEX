@@ -46,6 +46,79 @@ class AppTheme {
   /// Superficie elevada - Cards elevados
   static const Color darkSurfaceElevated = Color(0xFF243B55);
 
+  /// Variante de superficie (headers, overlays)
+  static const Color darkSurfaceVariant = Color(0xFF0D2137);
+
+  /// Superficie más profunda (activity rows, nested containers)
+  static const Color darkSurfaceDeep = Color(0xFF0D1B2A);
+
+  /// Gris oceánico para rarity common (armoniza con la paleta)
+  static const Color commonGrey = Color(0xFF8899AA);
+
+  // ===========================================================================
+  // SPACING TOKENS
+  // ===========================================================================
+
+  static const double spaceXs = 4.0;
+  static const double spaceSm = 8.0;
+  static const double spaceMd = 16.0;
+  static const double spaceLg = 24.0;
+  static const double spaceXl = 32.0;
+  static const double space2xl = 48.0;
+  static const double space3xl = 64.0;
+
+  // ===========================================================================
+  // RADIUS TOKENS
+  // ===========================================================================
+
+  static const double radiusSm = 8.0;
+  static const double radiusMd = 12.0;
+  static const double radiusLg = 16.0;
+  static const double radiusXl = 20.0;
+  static const double radiusFull = 999.0;
+
+  // ===========================================================================
+  // CUSTOM EASING CURVES (stronger than defaults)
+  // ===========================================================================
+
+  /// Strong ease-out: arranca rapido, se siente responsive
+  static const Curve curveEaseOut = Cubic(0.23, 1.0, 0.32, 1.0);
+
+  /// Strong ease-in-out: movimiento natural en pantalla
+  static const Curve curveEaseInOut = Cubic(0.16, 1.0, 0.3, 1.0);
+
+  /// Snap: para micro-interacciones de feedback
+  static const Curve curveSnap = Cubic(0.2, 0.0, 0.0, 1.0);
+
+  // ===========================================================================
+  // DURATION TOKENS
+  // ===========================================================================
+
+  /// Micro-interacciones (press, hover)
+  static const Duration durationFast = Duration(milliseconds: 120);
+
+  /// Transiciones de UI (nav highlights, chips)
+  static const Duration durationMedium = Duration(milliseconds: 200);
+
+  /// Animaciones de contenido (cards, modales)
+  static const Duration durationSlow = Duration(milliseconds: 350);
+
+  // ===========================================================================
+  // OPACITY TOKENS
+  // ===========================================================================
+
+  /// Texto secundario
+  static const double opacityMuted = 0.55;
+
+  /// Texto terciario / placeholders
+  static const double opacitySubtle = 0.4;
+
+  /// Bordes sutiles
+  static const double opacityBorder = 0.2;
+
+  /// Overlays y tints
+  static const double opacityOverlay = 0.15;
+
   // ===========================================================================
   // GRADIENTES
   // ===========================================================================
@@ -71,6 +144,20 @@ class AppTheme {
     colors: [Color(0xFF9C27B0), Color(0xFFE91E63)],
   );
 
+  /// Gradiente de superficie (para headers con depth)
+  static const LinearGradient surfaceGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [darkSurfaceVariant, darkBackground],
+  );
+
+  /// Gradiente de overlay (para el fondo del login/splash)
+  static const LinearGradient overlayGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [darkBackground, darkSurfaceVariant],
+  );
+
   // ===========================================================================
   // COLORES POR RAREZA
   // ===========================================================================
@@ -78,7 +165,7 @@ class AppTheme {
   static Color getRarityColor(String rarity) {
     switch (rarity) {
       case 'common':
-        return Colors.grey.shade400;
+        return commonGrey;
       case 'uncommon':
         return successGreen;
       case 'rare':
@@ -86,7 +173,7 @@ class AppTheme {
       case 'legendary':
         return legendaryPurple;
       default:
-        return Colors.grey;
+        return commonGrey;
     }
   }
 
@@ -107,33 +194,36 @@ class AppTheme {
         error: rareRed,
       ),
       
-      // Tipografía gaming
+      // Tipografía con type scale sistematizada
       textTheme: GoogleFonts.rajdhaniTextTheme(
         ThemeData.dark().textTheme,
       ).copyWith(
-        // Títulos grandes - para pantallas de resultado
-        displayLarge: GoogleFonts.orbitron(
+        // Display: títulos de pantallas de resultado/impacto
+        displayLarge: GoogleFonts.rajdhani(
           fontSize: 32,
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          letterSpacing: 1.5,
         ),
-        displayMedium: GoogleFonts.orbitron(
+        displayMedium: GoogleFonts.rajdhani(
           fontSize: 24,
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          letterSpacing: 1.0,
         ),
-        // Títulos de sección
+        // Headlines: títulos de sección
         headlineLarge: GoogleFonts.rajdhani(
           fontSize: 28,
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          letterSpacing: 1.0,
         ),
         headlineMedium: GoogleFonts.rajdhani(
           fontSize: 22,
           fontWeight: FontWeight.w600,
           color: Colors.white,
         ),
-        // Cuerpo de texto
+        // Body: texto de contenido
         bodyLarge: GoogleFonts.rajdhani(
           fontSize: 18,
           fontWeight: FontWeight.w500,
@@ -143,11 +233,25 @@ class AppTheme {
           fontSize: 16,
           color: Colors.white.withOpacity(0.8),
         ),
+        bodySmall: GoogleFonts.rajdhani(
+          fontSize: 14,
+          color: Colors.white.withOpacity(opacityMuted),
+        ),
         // Labels
         labelLarge: GoogleFonts.rajdhani(
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: Colors.white,
+        ),
+        labelMedium: GoogleFonts.rajdhani(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+        labelSmall: GoogleFonts.rajdhani(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: Colors.white.withOpacity(opacityMuted),
         ),
       ),
       
@@ -156,10 +260,11 @@ class AppTheme {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.orbitron(
-          fontSize: 18,
+        titleTextStyle: GoogleFonts.rajdhani(
+          fontSize: 20,
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          letterSpacing: 1.5,
         ),
       ),
       
@@ -168,7 +273,7 @@ class AppTheme {
         color: darkSurface,
         elevation: 4,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusLg),
         ),
       ),
       
@@ -179,7 +284,7 @@ class AppTheme {
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(radiusMd),
           ),
           textStyle: GoogleFonts.rajdhani(
             fontSize: 18,
@@ -193,16 +298,16 @@ class AppTheme {
         filled: true,
         fillColor: darkSurfaceElevated,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(radiusMd),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(radiusMd),
           borderSide: const BorderSide(color: accentBlue, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-        labelStyle: GoogleFonts.rajdhani(color: Colors.white.withOpacity(0.7)),
+        hintStyle: TextStyle(color: Colors.white.withOpacity(opacitySubtle)),
+        labelStyle: GoogleFonts.rajdhani(color: Colors.white.withOpacity(opacityMuted)),
       ),
       
       // Bottom Navigation
@@ -225,7 +330,7 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         backgroundColor: darkSurfaceElevated,
         contentTextStyle: GoogleFonts.rajdhani(color: Colors.white),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -247,4 +352,26 @@ class AppTheme {
       textTheme: GoogleFonts.rajdhaniTextTheme(),
     );
   }
+
+  // ===========================================================================
+  // HELPERS
+  // ===========================================================================
+
+  /// Sombra estándar para cards elevados
+  static List<BoxShadow> cardShadow({Color? color, double blur = 16}) => [
+    BoxShadow(
+      color: (color ?? accentBlue).withOpacity(0.15),
+      blurRadius: blur,
+      offset: const Offset(0, 4),
+    ),
+  ];
+
+  /// Sombra con glow para elementos interactivos
+  static List<BoxShadow> glowShadow(Color color, {double intensity = 0.3}) => [
+    BoxShadow(
+      color: color.withOpacity(intensity),
+      blurRadius: 16,
+      spreadRadius: 2,
+    ),
+  ];
 }

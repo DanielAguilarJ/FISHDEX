@@ -6,6 +6,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/czech_fish_catalog.dart';
+import '../../../widgets/pressable_scale.dart';
 import '../../auth/providers/auth_provider.dart';
 
 /// Datos de un pez en la colección del usuario
@@ -162,7 +163,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: 0.75,
+                childAspectRatio: 0.80,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
@@ -291,11 +292,11 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   }
 
   Widget _buildDiscoveredCard(BuildContext context, CollectionFish fish) {
-    return GestureDetector(
+    return PressableScale(
       onTap: () => _showFishDetail(context, fish),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -402,8 +403,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                       Text(
                         fish.latinName!,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.4),
-                          fontSize: 10,
+                          color: Colors.white.withOpacity(AppTheme.opacityMuted),
+                          fontSize: 11,
                           fontStyle: FontStyle.italic,
                         ),
                         maxLines: 1,
@@ -447,24 +448,32 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   Widget _buildUndiscoveredCard(BuildContext context, CollectionFish fish) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: AppTheme.darkSurface.withOpacity(0.5),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        color: AppTheme.darkSurface.withOpacity(0.6),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Silueta del pez
-          Icon(
-            Icons.help_outline,
-            size: 48,
-            color: Colors.white.withOpacity(0.1),
+          // Silueta del pez con más presencia
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.04),
+            ),
+            child: Icon(
+              Icons.help_outline,
+              size: 36,
+              color: Colors.white.withOpacity(0.18),
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             '???',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withOpacity(0.3),
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -473,8 +482,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
           Text(
             context.l10n.collectionUndiscovered,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.1),
-              fontSize: 11,
+              color: Colors.white.withOpacity(0.2),
+              fontSize: 12,
             ),
           ),
         ],

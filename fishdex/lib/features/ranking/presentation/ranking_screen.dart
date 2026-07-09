@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -633,7 +632,7 @@ class _RankingScreenState extends ConsumerState<RankingScreen>
 }
 
 // =============================================================================
-// SHIMMER TILE — Animación de carga sin dependencia externa
+// SHIMMER TILE — Animación de carga con AnimationController (battery-efficient)
 // =============================================================================
 
 class _ShimmerTile extends StatefulWidget {
@@ -643,37 +642,42 @@ class _ShimmerTile extends StatefulWidget {
   State<_ShimmerTile> createState() => _ShimmerTileState();
 }
 
-class _ShimmerTileState extends State<_ShimmerTile> {
-  bool _isLight = false;
-  late Timer _timer;
+class _ShimmerTileState extends State<_ShimmerTile>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(milliseconds: 800), (_) {
-      if (mounted) setState(() => _isLight = !_isLight);
-    });
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _timer.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: _isLight ? 0.6 : 0.3,
-      duration: const Duration(milliseconds: 800),
-      child: Container(
-        height: 64,
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.darkSurface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Opacity(
+          opacity: 0.3 + (0.3 * _controller.value),
+          child: Container(
+            height: 64,
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      },
     );
   }
 }
