@@ -1104,7 +1104,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cameraGuideOrientationTitle => 'Správná orientace';
 
   @override
-  String get cameraGuideOrientationDesc => 'Vždy umístěte rybu HLAVOU směřující DOLEVA a OCASEM směřujícím DOPRAVA. To zajišťuje konzistentní identifikaci u všech úlovků.';
+  String get cameraGuideOrientationDesc => 'Vždy umístěte rybu HLAVOU směřující DOPRAVA a OCASEM směřujícím DOLEVA. To zajišťuje konzistentní identifikaci u všech úlovků.';
 
   @override
   String get cameraGuideOrientationTip => 'Stejná orientace = lepší přesnost shody';
@@ -1152,7 +1152,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get arAlignSilhouette => 'Zarovnejte rybu se siluetou';
 
   @override
-  String get arHeadLeftBodyVisible => 'Hlava směřuje DOLEVA • Viditelné celé tělo';
+  String get arHeadLeftBodyVisible => 'Hlava směřuje DOPRAVA • Viditelné celé tělo';
 
   @override
   String get arHeadLabel => 'HLAVA';

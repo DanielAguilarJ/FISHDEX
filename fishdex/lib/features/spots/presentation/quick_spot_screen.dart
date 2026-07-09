@@ -278,7 +278,8 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
               _buildHeader(context),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+                  padding: EdgeInsets.fromLTRB(20, 20, 20,
+                      MediaQuery.of(context).padding.bottom + 120),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

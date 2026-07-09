@@ -146,71 +146,80 @@ List<String> _parseSpecies(dynamic data) {
 
 /// Genera spots de prueba cerca de la ubicación del usuario
 List<FishingSpotData> _generateMockSpots(Ref ref) {
-  // Spots de ejemplo (Madrid y alrededores - ajustar según ubicación real)
+  // Obtener la ubicación actual del usuario para generar spots cercanos
+  final userLocation = ref.read(userLocationProvider).valueOrNull;
+  
+  // Si no hay ubicación del usuario, no mostrar spots de ejemplo
+  if (userLocation == null) return [];
+  
+  final baseLat = userLocation.latitude;
+  final baseLng = userLocation.longitude;
+
+  // Spots de ejemplo generados dinámicamente cerca de la ubicación del usuario
   final spots = <FishingSpotData>[
-    const FishingSpotData(
+    FishingSpotData(
       id: 'spot_001',
-      name: 'Embalse de El Atazar',
-      latitude: 40.9120,
-      longitude: -3.4890,
+      name: 'Embalse cercano',
+      latitude: baseLat + 0.05,
+      longitude: baseLng - 0.03,
       waterType: 'embalse',
       totalCatches: 47,
-      commonSpecies: ['Trucha Arcoíris', 'Carpa Común', 'Black Bass'],
+      commonSpecies: const ['Trucha Arcoíris', 'Carpa Común', 'Black Bass'],
       hasRareFish: true,
-      description: 'Gran embalse con variedad de especies. Zona norte ideal para truchas.',
+      description: 'Gran embalse con variedad de especies.',
     ),
-    const FishingSpotData(
+    FishingSpotData(
       id: 'spot_002',
-      name: 'Río Manzanares - Sector 3',
-      latitude: 40.3950,
-      longitude: -3.7200,
+      name: 'Río - Sector 3',
+      latitude: baseLat - 0.02,
+      longitude: baseLng + 0.01,
       waterType: 'rio',
       totalCatches: 23,
-      commonSpecies: ['Barbo', 'Carpa Común'],
+      commonSpecies: const ['Barbo', 'Carpa Común'],
       hasRareFish: false,
-      description: 'Tramo urbano del Manzanares, ideal para principiantes.',
+      description: 'Tramo del río ideal para principiantes.',
     ),
-    const FishingSpotData(
+    FishingSpotData(
       id: 'spot_003',
-      name: 'Embalse de Santillana',
-      latitude: 40.7200,
-      longitude: -3.8300,
+      name: 'Embalse Norte',
+      latitude: baseLat + 0.08,
+      longitude: baseLng - 0.06,
       waterType: 'embalse',
       totalCatches: 89,
-      commonSpecies: ['Lucio', 'Carpa Común', 'Perca'],
+      commonSpecies: const ['Lucio', 'Carpa Común', 'Perca'],
       hasRareFish: true,
       description: 'Excelente para lucios. Zona de cola especialmente productiva.',
     ),
-    const FishingSpotData(
+    FishingSpotData(
       id: 'spot_004',
-      name: 'Río Jarama - Puente de Viveros',
-      latitude: 40.4600,
-      longitude: -3.5100,
+      name: 'Río - Puente de Viveros',
+      latitude: baseLat + 0.01,
+      longitude: baseLng + 0.04,
       waterType: 'rio',
       totalCatches: 34,
-      commonSpecies: ['Barbo', 'Lucio', 'Black Bass'],
+      commonSpecies: const ['Barbo', 'Lucio', 'Black Bass'],
       hasRareFish: false,
       description: 'Buen acceso, pozas profundas con barbos grandes.',
     ),
-    const FishingSpotData(
+    FishingSpotData(
       id: 'spot_005',
-      name: 'Embalse de Valmayor',
-      latitude: 40.5500,
-      longitude: -4.0200,
+      name: 'Embalse Sur',
+      latitude: baseLat - 0.06,
+      longitude: baseLng - 0.08,
       waterType: 'embalse',
       totalCatches: 156,
-      commonSpecies: ['Black Bass', 'Lucio', 'Carpa', 'Siluro'],
+      commonSpecies: const ['Black Bass', 'Lucio', 'Carpa', 'Siluro'],
       hasRareFish: true,
-      description: 'El mejor spot de la zona para Black Bass. Se han avistado siluros.',
+      description: 'El mejor spot de la zona para Black Bass.',
     ),
-    const FishingSpotData(
+    FishingSpotData(
       id: 'spot_006',
-      name: 'Río Lozoya - Tramo regulado',
-      latitude: 40.9500,
-      longitude: -3.6400,
+      name: 'Río - Tramo regulado',
+      latitude: baseLat + 0.10,
+      longitude: baseLng + 0.02,
       waterType: 'rio',
       totalCatches: 67,
-      commonSpecies: ['Trucha Marrón', 'Trucha Arcoíris'],
+      commonSpecies: const ['Trucha Marrón', 'Trucha Arcoíris'],
       hasRareFish: false,
       description: 'Tramo de trucha con regulación sin muerte. Aguas cristalinas.',
     ),

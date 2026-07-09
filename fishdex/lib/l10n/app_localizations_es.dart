@@ -1104,7 +1104,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cameraGuideOrientationTitle => 'Orientación correcta';
 
   @override
-  String get cameraGuideOrientationDesc => 'Coloca siempre el pez con la CABEZA apuntando hacia la IZQUIERDA y la COLA apuntando hacia la DERECHA. Esto asegura una identificación consistente.';
+  String get cameraGuideOrientationDesc => 'Coloca siempre el pez con la CABEZA apuntando hacia la DERECHA y la COLA apuntando hacia la IZQUIERDA. Esto asegura una identificación consistente.';
 
   @override
   String get cameraGuideOrientationTip => 'Misma orientación = mejor precisión';
@@ -1152,7 +1152,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get arAlignSilhouette => 'Alinea el pez con la silueta';
 
   @override
-  String get arHeadLeftBodyVisible => 'Cabeza hacia la IZQUIERDA • Cuerpo completo visible';
+  String get arHeadLeftBodyVisible => 'Cabeza hacia la DERECHA • Cuerpo completo visible';
 
   @override
   String get arHeadLabel => 'CABEZA';

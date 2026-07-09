@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/services/identify_service.dart';
+import '../../../data/services/role_guard_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camera/providers/capture_metadata_provider.dart';
 import '../../map/providers/map_providers.dart';
@@ -108,7 +109,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
         videoPath: widget.videoPath,
         areaCode: metadata.areaCode ?? '401 001',
         fishermanId: authUser?.$id ?? 'anonymous',
-        userRole: 'fisherman',
+        userRole: ref.read(currentUserRoleProvider).valueOrNull?.role.name ?? 'fisherman',
         species: metadata.species,
         fishState: metadata.fishState,
         name: metadata.customName,

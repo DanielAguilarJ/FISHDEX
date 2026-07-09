@@ -465,7 +465,7 @@
   "cameraGuideNext": "Siguiente",
   "cameraGuideStart": "Iniciar cámara",
   "cameraGuideOrientationTitle": "Orientación correcta",
-  "cameraGuideOrientationDesc": "Coloca siempre el pez con la CABEZA apuntando hacia la IZQUIERDA y la COLA apuntando hacia la DERECHA. Esto asegura una identificación consistente.",
+  "cameraGuideOrientationDesc": "Coloca siempre el pez con la CABEZA apuntando hacia la DERECHA y la COLA apuntando hacia la IZQUIERDA. Esto asegura una identificación consistente.",
   "cameraGuideOrientationTip": "Misma orientación = mejor precisión",
   "cameraGuidePositionTitle": "Cuerpo completo visible",
   "cameraGuidePositionDesc": "Asegúrate de que todo el cuerpo del pez sea visible en el encuadre, desde la boca hasta la cola. Deja pequeños márgenes en todos los lados. Distancia: 30-50 cm.",
@@ -482,7 +482,7 @@
   "cameraGuideReadySettings": "Siempre puedes acceder a esta guía desde los ajustes de la cámara.",
 
   "arAlignSilhouette": "Alinea el pez con la silueta",
-  "arHeadLeftBodyVisible": "Cabeza hacia la IZQUIERDA • Cuerpo completo visible",
+  "arHeadLeftBodyVisible": "Cabeza hacia la DERECHA • Cuerpo completo visible",
   "arHeadLabel": "CABEZA",
   "arTailLabel": "COLA",
   "arHorizontal": "Horizontal",

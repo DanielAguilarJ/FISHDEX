@@ -461,7 +461,7 @@
   "cameraGuideNext": "Next",
   "cameraGuideStart": "Start Camera",
   "cameraGuideOrientationTitle": "Correct Orientation",
-  "cameraGuideOrientationDesc": "Always position the fish with the HEAD pointing LEFT and the TAIL pointing RIGHT. This ensures consistent identification across all catches.",
+  "cameraGuideOrientationDesc": "Always position the fish with the HEAD pointing RIGHT and the TAIL pointing LEFT. This ensures consistent identification across all catches.",
   "cameraGuideOrientationTip": "Same orientation = better matching accuracy",
   "cameraGuidePositionTitle": "Full Body Visible",
   "cameraGuidePositionDesc": "Make sure the ENTIRE fish body is visible in the frame, from mouth to tail. Leave small margins on all sides. Distance: 30-50 cm from the fish.",
@@ -478,7 +478,7 @@
   "cameraGuideReadySettings": "You can always access this guide from the camera settings.",
 
   "arAlignSilhouette": "Align the fish with the silhouette",
-  "arHeadLeftBodyVisible": "Head pointing LEFT • Full body visible",
+  "arHeadLeftBodyVisible": "Head pointing RIGHT • Full body visible",
   "arHeadLabel": "HEAD",
   "arTailLabel": "TAIL",
   "arHorizontal": "Horizontal",

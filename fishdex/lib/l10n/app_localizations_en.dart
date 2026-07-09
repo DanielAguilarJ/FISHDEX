@@ -1104,7 +1104,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cameraGuideOrientationTitle => 'Correct Orientation';
 
   @override
-  String get cameraGuideOrientationDesc => 'Always position the fish with the HEAD pointing LEFT and the TAIL pointing RIGHT. This ensures consistent identification across all catches.';
+  String get cameraGuideOrientationDesc => 'Always position the fish with the HEAD pointing RIGHT and the TAIL pointing LEFT. This ensures consistent identification across all catches.';
 
   @override
   String get cameraGuideOrientationTip => 'Same orientation = better matching accuracy';
@@ -1152,7 +1152,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get arAlignSilhouette => 'Align the fish with the silhouette';
 
   @override
-  String get arHeadLeftBodyVisible => 'Head pointing LEFT • Full body visible';
+  String get arHeadLeftBodyVisible => 'Head pointing RIGHT • Full body visible';
 
   @override
   String get arHeadLabel => 'HEAD';

@@ -2194,7 +2194,7 @@ abstract class AppLocalizations {
   /// No description provided for @cameraGuideOrientationDesc.
   ///
   /// In es, this message translates to:
-  /// **'Coloca siempre el pez con la CABEZA apuntando hacia la IZQUIERDA y la COLA apuntando hacia la DERECHA. Esto asegura una identificación consistente.'**
+  /// **'Coloca siempre el pez con la CABEZA apuntando hacia la DERECHA y la COLA apuntando hacia la IZQUIERDA. Esto asegura una identificación consistente.'**
   String get cameraGuideOrientationDesc;
 
   /// No description provided for @cameraGuideOrientationTip.
@@ -2290,7 +2290,7 @@ abstract class AppLocalizations {
   /// No description provided for @arHeadLeftBodyVisible.
   ///
   /// In es, this message translates to:
-  /// **'Cabeza hacia la IZQUIERDA • Cuerpo completo visible'**
+  /// **'Cabeza hacia la DERECHA • Cuerpo completo visible'**
   String get arHeadLeftBodyVisible;
 
   /// No description provided for @arHeadLabel.

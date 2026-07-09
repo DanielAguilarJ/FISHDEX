@@ -461,7 +461,7 @@
   "cameraGuideNext": "Další",
   "cameraGuideStart": "Spustit fotoaparát",
   "cameraGuideOrientationTitle": "Správná orientace",
-  "cameraGuideOrientationDesc": "Vždy umístěte rybu HLAVOU směřující DOLEVA a OCASEM směřujícím DOPRAVA. To zajišťuje konzistentní identifikaci u všech úlovků.",
+  "cameraGuideOrientationDesc": "Vždy umístěte rybu HLAVOU směřující DOPRAVA a OCASEM směřujícím DOLEVA. To zajišťuje konzistentní identifikaci u všech úlovků.",
   "cameraGuideOrientationTip": "Stejná orientace = lepší přesnost shody",
   "cameraGuidePositionTitle": "Viditelné celé tělo",
   "cameraGuidePositionDesc": "Ujistěte se, že je v rámečku vidět CELÉ tělo ryby, od úst po ocas. Ponechte malé okraje na všech stranách. Vzdálenost: 30-50 cm od ryby.",
@@ -478,7 +478,7 @@
   "cameraGuideReadySettings": "Tuto příručku můžete kdykoli otevřít z nastavení fotoaparátu.",
 
   "arAlignSilhouette": "Zarovnejte rybu se siluetou",
-  "arHeadLeftBodyVisible": "Hlava směřuje DOLEVA • Viditelné celé tělo",
+  "arHeadLeftBodyVisible": "Hlava směřuje DOPRAVA • Viditelné celé tělo",
   "arHeadLabel": "HLAVA",
   "arTailLabel": "OCAS",
   "arHorizontal": "Horizontálně",

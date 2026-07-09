@@ -5,6 +5,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../data/czech_fish_catalog.dart';
 import '../../auth/providers/auth_provider.dart';
 
 /// Datos de un pez en la colección del usuario
@@ -17,6 +18,8 @@ class CollectionFish {
   final DateTime firstSeen;
   final bool isDiscovered;
   final String? imageBase64;
+  final String? czechName;
+  final String? latinName;
 
   const CollectionFish({
     required this.fishId,
@@ -27,131 +30,111 @@ class CollectionFish {
     required this.firstSeen,
     this.isDiscovered = true,
     this.imageBase64,
+    this.czechName,
+    this.latinName,
   });
 }
 
-/// Provider de la colección del usuario — carga desde fish_individuals de Appwrite.
-/// Fallback a datos de ejemplo si no hay sesión o falla la conexión.
+/// Provider de la colección del usuario — carga desde fish_individuals de Appwrite
+/// y cruza con el catálogo de 45 especies checas para mostrar la colección completa.
 final collectionProvider = FutureProvider<List<CollectionFish>>((ref) async {
+  // 1. Obtener capturas reales del usuario desde Appwrite
+  List<CollectionFish> discovered = [];
+
   try {
     final prefs = await SharedPreferences.getInstance();
     final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
-    if (isDemoMode) return _mockCollection();
 
-    final authUser = ref.read(authStateProvider).valueOrNull;
-    if (authUser == null) return _mockCollection();
+    if (!isDemoMode) {
+      final authUser = ref.read(authStateProvider).valueOrNull;
+      if (authUser != null) {
+        final databases = ref.read(appwriteDatabasesProvider);
+        final response = await databases.listDocuments(
+          databaseId: AppConstants.databaseId,
+          collectionId: AppConstants.fishIndividualsCollection,
+          queries: [
+            'equal("first_seen_by", ["${authUser.$id}"])',
+            'orderDesc("\$createdAt")',
+            'limit(100)',
+          ],
+        );
 
-    final databases = ref.read(appwriteDatabasesProvider);
-    final response = await databases.listDocuments(
-      databaseId: AppConstants.databaseId,
-      collectionId: AppConstants.fishIndividualsCollection,
-      queries: [
-        // Peces vistos por este usuario (como primer descubridor)
-        'equal("first_seen_by", ["${authUser.$id}"])',
-        'orderDesc("\$createdAt")',
-        'limit(100)',
-      ],
-    );
-
-    if (response.documents.isEmpty) return _mockCollection();
-
-    return response.documents.map((doc) {
-      final data = doc.data;
-      return CollectionFish(
-        fishId: doc.$id,
-        species: data['species'] as String? ?? 'Desconocido',
-        rarity: data['rarity'] as String? ?? 'common',
-        sizeCm: (data['estimated_size_cm'] as num?)?.toDouble() ?? 0.0,
-        timesSpotted: (data['total_sightings'] as num?)?.toInt() ?? 1,
-        firstSeen: data['first_seen_date'] != null
-            ? DateTime.tryParse(data['first_seen_date'] as String) ??
-                DateTime.now()
-            : DateTime.now(),
-        isDiscovered: true,
-      );
-    }).toList();
+        discovered = response.documents.map((doc) {
+          final data = doc.data;
+          final speciesName = data['species'] as String? ?? 'Desconocido';
+          final catalogMatch = findCzechSpeciesByAnyName(speciesName);
+          return CollectionFish(
+            fishId: doc.$id,
+            species: catalogMatch?.englishName ?? speciesName,
+            rarity: data['rarity'] as String? ?? catalogMatch?.rarity ?? 'common',
+            sizeCm: (data['estimated_size_cm'] as num?)?.toDouble() ?? 0.0,
+            timesSpotted: (data['total_sightings'] as num?)?.toInt() ?? 1,
+            firstSeen: data['first_seen_date'] != null
+                ? DateTime.tryParse(data['first_seen_date'] as String) ??
+                    DateTime.now()
+                : DateTime.now(),
+            isDiscovered: true,
+            czechName: catalogMatch?.czechName,
+            latinName: catalogMatch?.latinName,
+          );
+        }).toList();
+      }
+    }
   } catch (e) {
-    return _mockCollection();
+    // Si falla Appwrite, seguimos con discovered vacío
   }
-});
 
-/// Datos de ejemplo (usados en demo mode y como fallback)
-List<CollectionFish> _mockCollection() => [
-      CollectionFish(
-        fishId: 'FISH-1234',
-        species: 'Trucha Arcoíris',
-        rarity: 'common',
-        sizeCm: 35.2,
-        timesSpotted: 3,
-        firstSeen: DateTime.now().subtract(const Duration(days: 15)),
-      ),
-      CollectionFish(
-        fishId: 'FISH-5678',
-        species: 'Lucio',
-        rarity: 'uncommon',
-        sizeCm: 72.0,
-        timesSpotted: 1,
-        firstSeen: DateTime.now().subtract(const Duration(days: 7)),
-      ),
-      CollectionFish(
-        fishId: 'FISH-9012',
-        species: 'Siluro',
-        rarity: 'rare',
-        sizeCm: 145.5,
-        timesSpotted: 1,
-        firstSeen: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-      CollectionFish(
-        fishId: 'FISH-????',
-        species: '???',
-        rarity: 'common',
-        sizeCm: 0,
-        timesSpotted: 0,
-        firstSeen: DateTime.now(),
-        isDiscovered: false,
-      ),
-      CollectionFish(
-        fishId: 'FISH-????',
-        species: '???',
-        rarity: 'uncommon',
-        sizeCm: 0,
-        timesSpotted: 0,
-        firstSeen: DateTime.now(),
-        isDiscovered: false,
-      ),
-      CollectionFish(
-        fishId: 'FISH-????',
-        species: '???',
-        rarity: 'rare',
-        sizeCm: 0,
-        timesSpotted: 0,
-        firstSeen: DateTime.now(),
-        isDiscovered: false,
-      ),
-      CollectionFish(
-        fishId: 'FISH-????',
-        species: '???',
-        rarity: 'legendary',
-        sizeCm: 0,
-        timesSpotted: 0,
-        firstSeen: DateTime.now(),
-        isDiscovered: false,
-      ),
-    ];
+  // 2. Cruzar con el catálogo: las especies no descubiertas se añaden como siluetas
+  final discoveredNames = discovered
+      .map((f) => f.species.toLowerCase())
+      .toSet();
+
+  final undiscovered = czechFishCatalog
+      .where((sp) => !discoveredNames.contains(sp.englishName.toLowerCase()))
+      .map((sp) => CollectionFish(
+            fishId: 'FISH-????',
+            species: sp.englishName,
+            rarity: sp.rarity,
+            sizeCm: 0,
+            timesSpotted: 0,
+            firstSeen: DateTime.now(),
+            isDiscovered: false,
+            czechName: sp.czechName,
+            latinName: sp.latinName,
+          ))
+      .toList();
+
+  // 3. Descubiertos primero, luego no descubiertos
+  return [...discovered, ...undiscovered];
+});
 
 /// Pantalla de Colección - Pokédex de Peces
 /// Grid de cartas coleccionables, peces descubiertos a color y no descubiertos como silueta
-class CollectionScreen extends ConsumerWidget {
+class CollectionScreen extends ConsumerStatefulWidget {
   const CollectionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // FutureProvider: valueOrNull devuelve datos cuando están listos,
-    // o null mientras carga / si hay error → fallback a lista vacía
-    final collection =
-        ref.watch(collectionProvider).valueOrNull ?? _mockCollection();
-    final discovered = collection.where((f) => f.isDiscovered).length;
-    final total = collection.length;
+  ConsumerState<CollectionScreen> createState() => _CollectionScreenState();
+}
+
+class _CollectionScreenState extends ConsumerState<CollectionScreen> {
+  /// Filtro activo: null = todos, o 'common'/'uncommon'/'rare'/'legendary'
+  String? _selectedFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final allCollection =
+        ref.watch(collectionProvider).valueOrNull ?? <CollectionFish>[];
+
+    // Aplicar filtro de rareza
+    final collection = _selectedFilter == null
+        ? allCollection
+        : allCollection
+            .where((f) => f.rarity == _selectedFilter)
+            .toList();
+
+    final discovered = allCollection.where((f) => f.isDiscovered).length;
+    final total = allCollection.length;
 
     return Scaffold(
       body: CustomScrollView(
@@ -174,7 +157,8 @@ class CollectionScreen extends ConsumerWidget {
 
           // Grid de peces
           SliverPadding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(16, 16, 16,
+                MediaQuery.of(context).padding.bottom + 100),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
@@ -259,23 +243,28 @@ class CollectionScreen extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          _buildFilterChip(context.l10n.collectionFilterAll, true),
-          _buildFilterChip(context.l10n.collectionFilterCommon, false),
-          _buildFilterChip(context.l10n.collectionFilterUncommon, false),
-          _buildFilterChip(context.l10n.collectionFilterRare, false),
-          _buildFilterChip(context.l10n.collectionFilterLegendary, false),
+          _buildFilterChip(context.l10n.collectionFilterAll, null),
+          _buildFilterChip(context.l10n.collectionFilterCommon, 'common'),
+          _buildFilterChip(context.l10n.collectionFilterUncommon, 'uncommon'),
+          _buildFilterChip(context.l10n.collectionFilterRare, 'rare'),
+          _buildFilterChip(context.l10n.collectionFilterLegendary, 'legendary'),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChip(String label, bool isSelected) {
+  Widget _buildFilterChip(String label, String? filterValue) {
+    final isSelected = _selectedFilter == filterValue;
     return Container(
       margin: const EdgeInsets.only(right: 8),
       child: FilterChip(
         label: Text(label),
         selected: isSelected,
-        onSelected: (_) {},
+        onSelected: (_) {
+          setState(() {
+            _selectedFilter = isSelected ? null : filterValue;
+          });
+        },
         selectedColor: AppTheme.accentBlue.withOpacity(0.3),
         backgroundColor: AppTheme.darkSurface,
         labelStyle: TextStyle(
@@ -409,6 +398,17 @@ class CollectionScreen extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (fish.latinName != null)
+                      Text(
+                        fish.latinName!,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 10,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     Row(
                       children: [
                         Icon(

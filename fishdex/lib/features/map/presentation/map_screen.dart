@@ -24,9 +24,23 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen> {
   final MapController _mapController = MapController();
+  bool _hasCenteredOnUser = false;
 
   @override
   Widget build(BuildContext context) {
+    // Auto-centrar en la ubicación del usuario la primera vez que llega GPS
+    ref.listen<AsyncValue<LatLng?>>(userLocationProvider, (previous, next) {
+      final location = next.valueOrNull;
+      if (location != null && !_hasCenteredOnUser) {
+        _hasCenteredOnUser = true;
+        // Mover el mapa a la ubicación real del usuario
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _mapController.move(location, AppConstants.mapDefaultZoom);
+          }
+        });
+      }
+    });
     final userLocation = ref.watch(userLocationProvider);
     final fishingSpots = ref.watch(fishingSpotsProvider);
     final mapCaptures = ref.watch(mapCapturesProvider);
@@ -103,14 +117,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     AsyncValue<List<FishingSpotData>> fishingSpots,
     AsyncValue<List<MapCaptureData>> mapCaptures,
   ) {
-    // Ubicación por defecto (Madrid, España) si no hay GPS
-    final center = userLocation.valueOrNull ?? const LatLng(40.4168, -3.7038);
+    // Centro temporal mientras se obtiene GPS (se re-centra automáticamente)
+    final center = userLocation.valueOrNull ?? const LatLng(0, 0);
+    final initialZoom = userLocation.valueOrNull != null
+        ? AppConstants.mapDefaultZoom
+        : 2.0; // Zoom global mientras no hay GPS
 
     return FlutterMap(
       mapController: _mapController,
       options: MapOptions(
         initialCenter: center,
-        initialZoom: AppConstants.mapDefaultZoom,
+        initialZoom: initialZoom,
         minZoom: AppConstants.mapMinZoom,
         maxZoom: AppConstants.mapMaxZoom,
         // Estilo oscuro del mapa
