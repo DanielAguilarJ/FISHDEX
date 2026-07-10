@@ -248,11 +248,15 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
       // 4. Navigate to identifying screen with job ID
       if (context.mounted) {
         Navigator.pop(context); // dismiss loading
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => IdentifyingScreen(jobId: createdJobId),
-          ),
-        );
+        Future.microtask(() {
+          if (context.mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => IdentifyingScreen(jobId: createdJobId),
+              ),
+            );
+          }
+        });
       }
     } catch (e) {
       if (context.mounted) {
