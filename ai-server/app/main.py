@@ -19,7 +19,9 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.middleware.correlation import CorrelationFilter, CorrelationMiddleware
-from app.routers import identify, jobs
+from app.routers import identify, jobs, websocket, dashboard
+from app.services.event_bus import EventBusLogHandler
+from app.services.system_monitor import start_system_monitor
 
 # ─── Logging Configuration ───────────────────────────────────────────────
 # Use a custom LogRecord factory to ensure 'correlation_id' is always present
@@ -41,6 +43,14 @@ logging.basicConfig(
 # Add CorrelationFilter to the root logger so all loggers inherit it
 _correlation_filter = CorrelationFilter()
 logging.getLogger().addFilter(_correlation_filter)
+
+# Add EventBusLogHandler to root logger to stream logs to dashboard
+_event_bus_handler = EventBusLogHandler()
+_event_bus_handler.setFormatter(logging.Formatter(
+    "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    "%Y-%m-%d %H:%M:%S"
+))
+logging.getLogger().addHandler(_event_bus_handler)
 
 logger = logging.getLogger("fishdex")
 
@@ -76,6 +86,9 @@ async def lifespan(app: FastAPI):
     """Run startup tasks before serving and cleanup on shutdown."""
     global _server_start_time
     _server_start_time = time.time()
+
+    # Start background system monitoring
+    start_system_monitor()
 
     # Ensure data directories exist
     Path(settings.server_data_dir).mkdir(parents=True, exist_ok=True)
@@ -142,6 +155,8 @@ app.add_middleware(
 # Register routers
 app.include_router(identify.router, prefix="/api/v1", tags=["Identification"])
 app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs"])
+app.include_router(dashboard.router)
+app.include_router(websocket.router)
 
 
 # ─── Root endpoints ─────────────────────────────────────────────────────
@@ -183,12 +198,12 @@ async def health_check() -> dict:
     }
 
 
+from fastapi.responses import HTMLResponse
+
 @app.get("/", tags=["System"])
-async def root() -> dict:
-    """Root endpoint with service info."""
-    return {
-        "service": "FishDex AI Server",
-        "version": "2.0.0",
-        "docs": "/docs",
-        "health": "/health",
-    }
+async def root() -> HTMLResponse:
+    """Root endpoint serving the Dashboard HTML."""
+    dashboard_path = Path(__file__).parent / "dashboard" / "index.html"
+    if dashboard_path.exists():
+        return HTMLResponse(content=dashboard_path.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>Dashboard HTML not found</h1>", status_code=404)

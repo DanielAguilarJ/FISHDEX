@@ -26,7 +26,26 @@ from app.utils.video import (
     select_best_n_frames,
 )
 
+from app.services.event_bus import event_bus
+import asyncio
+
 logger = logging.getLogger(__name__)
+
+def _emit_progress(job_id: str, status: str, progress: int, message: str):
+    payload = {
+        "job_id": job_id,
+        "status": status,
+        "progress": progress,
+        "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(event_bus.emit("job_progress", payload))
+        )
+    except RuntimeError:
+        pass
 
 XP_BASE_MAP = {
     "common": 10,
@@ -134,6 +153,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
 
     try:
         # --- Step 1: Get job document ---
+        _emit_progress(job_id, "processing", 5, "Job started")
         logger.info(f"[Job {job_id}] Fetching job document")
         job_doc = appwrite.get_document(
             database_id=settings.appwrite_database_id,
@@ -174,6 +194,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         if not raw_video_file_id:
             raise ValueError("Job has no raw_video_file_id")
 
+        _emit_progress(job_id, "downloading_video", 15, "Downloading video file from Appwrite Storage")
         logger.info(f"[Job {job_id}] Downloading video file: {raw_video_file_id}")
         video_bytes = appwrite.get_file_download(
             bucket_id=settings.capture_raw_videos_bucket,
@@ -183,6 +204,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         logger.info(f"[Job {job_id}] Video saved to temp: {temp_video_path}")
 
         # --- Step 5: Extract frames ---
+        _emit_progress(job_id, "extracting_frames", 30, "Extracting and selecting video frames")
         logger.info(f"[Job {job_id}] Extracting frames (max {settings.max_frames_to_extract})")
         all_frames = extract_frames_from_video(
             temp_video_path,
@@ -198,6 +220,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         logger.info(f"[Job {job_id}] Selected {len(best_frames)} best frames")
 
         # --- Step 7: Run detector on each frame ---
+        _emit_progress(job_id, "detecting_fish", 50, "Running YOLOv8 OBB fish detector")
         logger.info(f"[Job {job_id}] Running fish detection")
         best_detection = None
         best_detection_frame = None
@@ -242,6 +265,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
 
         try:
             classifier = get_classifier_service()
+            _emit_progress(job_id, "classifying_species", 70, f"Classifying species (given: {species_slug})")
             logger.info(f"[Job {job_id}] Running classifier")
             classification_result = classifier.classify(cropped_frame)
 
@@ -269,6 +293,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 )
 
         # --- Step 10: Generate embedding ---
+        _emit_progress(job_id, "matching_individual", 85, "Generating embeddings and matching features")
         logger.info(f"[Job {job_id}] Generating embeddings from {len(cropped_frames)} crops")
         embedding = embedding_service.extract_embeddings(cropped_frames)
         # Average embedding across frames for a single 2048-d vector
@@ -308,6 +333,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             logger.info(f"[Job {job_id}] Using existing fish_id: {fish_id}")
 
         # --- Step 13: Upload best cropped frame ---
+        _emit_progress(job_id, "uploading_results", 95, "Uploading cropped frames and saving sightings")
         logger.info(f"[Job {job_id}] Uploading cropped frame to storage")
         import cv2
         import io
@@ -528,10 +554,12 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             "match_confidence": round(match_confidence, 4),
         }
 
+        _emit_progress(job_id, final_status, 100, f"Job completed successfully: {fish_id}")
         logger.info(f"[Job {job_id}] Processing complete: {result}")
         return result
 
     except Exception as e:
+        _emit_progress(job_id, "failed", 100, f"Failed: {str(e)[:100]}")
         logger.error(f"[Job {job_id}] Processing failed: {e}", exc_info=True)
 
         # Update job to failed if we got past step 3

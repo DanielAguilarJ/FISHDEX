@@ -24,6 +24,9 @@ def _validate_auth(
     authorization: Optional[str] = None,
 ) -> None:
     """Validate request authentication via client secret or bearer token."""
+    if settings.skip_auth:
+        return
+
     expected_secret = settings.client_secret
 
     # Check X-FishDex-Client-Secret header

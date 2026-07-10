@@ -59,7 +59,10 @@ class Settings(BaseSettings):
     # ── Auth settings ────────────────────────────────────────────────
     skip_auth: bool = False
     ai_server_secret: str = "change-me-in-production"
+    client_secret: str = "change-me"
+    dashboard_secret: str = "change-me"
     environment: str = "development"
+    device: str = "cpu"
 
     class Config:
         env_prefix = "FISHDEX_"

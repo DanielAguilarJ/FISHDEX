@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FishDex AI Server Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #060e17;
+            --surface-color: rgba(13, 27, 42, 0.4);
+            --surface-border: rgba(33, 150, 243, 0.15);
+            --accent-blue: #2196F3;
+            --teal: #00BCD4;
+            --gold: #FFD700;
+            --success-green: #4CAF50;
+            --error-red: #E91E63;
+            --text-primary: #ffffff;
+            --text-secondary: #a0aec0;
+            --text-muted: #4a5568;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(13, 71, 161, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 188, 212, 0.1) 0%, transparent 40%);
+        }
+
+        header {
+            padding: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--surface-border);
+            backdrop-filter: blur(12px);
+            background-color: rgba(6, 14, 23, 0.7);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .header-title-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-title-container img {
+            width: 32px;
+            height: 32px;
+        }
+
+        .header-title {
+            font-weight: 800;
+            font-size: 24px;
+            letter-spacing: 0.5px;
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--teal));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .server-badge {
+            background-color: rgba(76, 175, 80, 0.1);
+            color: var(--success-green);
+            border: 1px solid var(--success-green);
+            padding: 4px 12px;
+            border-radius: 99px;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            animation: pulse-border 2s infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(76, 175, 80, 0.4); }
+            50% { border-color: rgba(76, 175, 80, 1); }
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--error-red);
+            color: var(--error-red);
+        }
+
+        main {
+            padding: 24px;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+            flex-grow: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+        }
+
+        /* Glassmorphic Card base */
+        .card {
+            background: var(--surface-color);
+            border: 1px solid var(--surface-border);
+            backdrop-filter: blur(16px);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transition: transform 0.3s, border-color 0.3s;
+        }
+
+        .card:hover {
+            border-color: rgba(33, 150, 243, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-value {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        /* Grid Layout Configuration */
+        .system-stats-card { grid-column: span 1; }
+        .model-status-card { grid-column: span 1; }
+        .jobs-summary-card { grid-column: span 2; }
+        .active-job-card { grid-column: span 2; }
+        .recent-jobs-card { grid-column: span 4; }
+        .logs-card { grid-column: span 4; }
+
+        /* Stats Row inside Cards */
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .stat-label { color: var(--text-secondary); font-size: 15px; }
+        .stat-value { font-weight: 600; }
+
+        /* ProgressBar */
+        .progress-bar-container {
+            width: 100%;
+            background-color: rgba(255, 255, 255, 0.05);
+            height: 8px;
+            border-radius: 99px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), var(--teal));
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Jobs Table */
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+        th, td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        tr:hover td {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-pill.completed { background-color: rgba(76, 175, 80, 0.15); color: var(--success-green); }
+        .status-pill.failed { background-color: rgba(233, 30, 99, 0.15); color: var(--error-red); }
+        .status-pill.processing { background-color: rgba(33, 150, 243, 0.15); color: var(--accent-blue); }
+        .status-pill.queued { background-color: rgba(255, 215, 0, 0.15); color: var(--gold); }
+
+        .action-btn {
+            background-color: rgba(33, 150, 243, 0.1);
+            color: var(--accent-blue);
+            border: 1px solid var(--accent-blue);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .action-btn:hover {
+            background-color: var(--accent-blue);
+            color: white;
+        }
+
+        /* Logs Live Terminal */
+        .terminal {
+            background-color: #02060c;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            height: 300px;
+            overflow-y: auto;
+            color: #d1d5db;
+        }
+        .log-line {
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+        .log-line.INFO { color: #a3e635; }
+        .log-line.WARNING { color: #facc15; }
+        .log-line.ERROR { color: #f87171; }
+        .log-line.DEBUG { color: #9ca3af; }
+
+        /* Secret Prompt Overlay */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(6, 14, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .overlay-card {
+            background-color: #0d1b2a;
+            border: 1px solid var(--surface-border);
+            padding: 32px;
+            border-radius: 16px;
+            max-width: 400px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .overlay-input {
+            width: 100%;
+            padding: 12px 16px;
+            background-color: rgba(255,255,255,0.05);
+            border: 1px solid var(--surface-border);
+            border-radius: 8px;
+            color: white;
+            font-family: inherit;
+            font-size: 16px;
+            outline: none;
+        }
+        .overlay-btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+        .overlay-btn:hover { background-color: #1976D2; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Overlay de Login -->
+    <div id="login-overlay" class="overlay hidden">
+        <div class="overlay-card">
+            <h2>FishDex Admin Access</h2>
+            <p style="color: var(--text-secondary)">Ingresa la contraseña del panel de control</p>
+            <input type="password" id="secret-input" class="overlay-input" placeholder="Contraseña secreta">
+            <button id="login-btn" class="overlay-btn">Entrar al Panel</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="header-title-container">
+            <span class="server-badge">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--success-green); display: inline-block;"></span>
+                AI SERVER ONLINE
+            </span>
+            <h1 class="header-title">FishDex Dashboard</h1>
+        </div>
+        <button id="logout-btn" class="logout-btn">Salir</button>
+    </header>
+
+    <main>
+        <!-- Servidor stats -->
+        <section class="card system-stats-card">
+            <h2 class="card-title">Estado de Sistema</h2>
+            <div class="stat-row">
+                <span class="stat-label">CPU</span>
+                <span id="cpu-val" class="stat-value">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Memoria RAM</span>
+                <span id="ram-val" class="stat-value">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Uptime</span>
+                <span id="uptime-val" class="stat-value">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">GPU</span>
+                <span id="gpu-val" class="stat-value">-</span>
+            </div>
+        </section>
+
+        <!-- Modelos cargados -->
+        <section class="card model-status-card">
+            <h2 class="card-title">Modelos Activos</h2>
+            <div class="stat-row">
+                <span class="stat-label">Detector</span>
+                <span id="model-det-val" class="stat-value">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Clasificador</span>
+                <span id="model-clf-val" class="stat-value">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Tipo</span>
+                <span id="model-type-val" class="stat-value">-</span>
+            </div>
+        </section>
+
+        <!-- Resumen de jobs -->
+        <section class="card jobs-summary-card">
+            <h2 class="card-title">Cola de Trabajo</h2>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: center; margin-top: 10px;">
+                <div>
+                    <div style="color: var(--gold); font-size: 28px; font-weight: 800;" id="cnt-queued">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary)">En Espera</div>
+                </div>
+                <div>
+                    <div style="color: var(--accent-blue); font-size: 28px; font-weight: 800;" id="cnt-processing">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary)">Procesando</div>
+                </div>
+                <div>
+                    <div style="color: var(--success-green); font-size: 28px; font-weight: 800;" id="cnt-completed">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary)">Completados</div>
+                </div>
+                <div>
+                    <div style="color: var(--error-red); font-size: 28px; font-weight: 800;" id="cnt-failed">0</div>
+                    <div style="font-size: 12px; color: var(--text-secondary)">Fallidos</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Detalle de Job Activo -->
+        <section class="card active-job-card" id="active-job-panel">
+            <h2 class="card-title">Job Activo</h2>
+            <div id="active-job-none" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                No hay ningún proceso activo en este momento.
+            </div>
+            <div id="active-job-details" class="hidden" style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="stat-row" style="border: none; padding: 0;">
+                    <span id="active-job-id" style="font-weight: 800; font-family: monospace;">-</span>
+                    <span id="active-job-status" class="status-pill processing">-</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="active-job-progress"></div>
+                </div>
+                <div id="active-job-msg" style="font-size: 14px; color: var(--teal); margin-top: 4px;">-</div>
+            </div>
+        </section>
+
+        <!-- Tabla de Jobs -->
+        <section class="card recent-jobs-card">
+            <div class="card-header">
+                <h2 class="card-title">Jobs Recientes</h2>
+                <button class="action-btn" id="refresh-jobs-btn">Refrescar Lista</button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Job ID</th>
+                            <th>Usuario</th>
+                            <th>Estado</th>
+                            <th>Especie</th>
+                            <th>Confianza</th>
+                            <th>Creado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-table-body">
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: var(--text-secondary)">Cargando trabajos...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Terminal Logs -->
+        <section class="card logs-card">
+            <h2 class="card-title">Logs en Vivo (Servidor)</h2>
+            <div class="terminal" id="terminal-body">
+                [SYSTEM] WebSocket desconectado. Esperando autenticación...
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const API_BASE = '/api/v1/dashboard';
+        let ws = null;
+        let secret = localStorage.getItem('fishdex_dashboard_secret') || '';
+
+        // Elements
+        const loginOverlay = document.getElementById('login-overlay');
+        const secretInput = document.getElementById('secret-input');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const refreshJobsBtn = document.getElementById('refresh-jobs-btn');
+        const terminalBody = document.getElementById('terminal-body');
+        
+        // Init UI
+        function checkAuth() {
+            // Test if authentication is required by making a trial call to health detailed or check endpoint.
+            // In dev mode, settings.skip_auth might be true. We fetch stats to check 401.
+            fetch(`${API_BASE}/status?secret=${secret}`)
+                .then(res => {
+                    if (res.status === 401) {
+                        loginOverlay.classList.remove('hidden');
+                    } else {
+                        loginOverlay.classList.add('hidden');
+                        initializeDashboard();
+                    }
+                })
+                .catch(() => {
+                    // Try connecting anyway
+                    initializeDashboard();
+                });
+        }
+
+        loginBtn.addEventListener('click', () => {
+            secret = secretInput.value.trim();
+            localStorage.setItem('fishdex_dashboard_secret', secret);
+            checkAuth();
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('fishdex_dashboard_secret');
+            secret = '';
+            location.reload();
+        });
+
+        function writeToTerminal(message, level = 'INFO') {
+            const line = document.createElement('div');
+            line.className = `log-line ${level}`;
+            const now = new Date().toLocaleTimeString();
+            line.textContent = `[${now}] [${level}] ${message}`;
+            terminalBody.appendChild(line);
+            terminalBody.scrollTop = terminalBody.scrollHeight;
+        }
+
+        function formatUptime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${h}h ${m}m ${s}s`;
+        }
+
+        function updateServerStatus() {
+            fetch(`${API_BASE}/status?secret=${secret}`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('cpu-val').textContent = `${data.cpu_percent.toFixed(1)}%`;
+                    document.getElementById('ram-val').textContent = `${data.memory_percent.toFixed(1)}%`;
+                    document.getElementById('uptime-val').textContent = formatUptime(data.uptime_seconds);
+                    document.getElementById('gpu-val').textContent = data.gpu_available ? `DISPONIBLE (${data.gpu_name})` : 'NO DISPONIBLE';
+                    
+                    document.getElementById('model-det-val').textContent = data.models.detector.loaded ? 'CARGADO' : 'NO CARGADO';
+                    document.getElementById('model-clf-val').textContent = data.models.classifier.loaded ? 'CARGADO' : 'NO CARGADO';
+                    document.getElementById('model-type-val').textContent = data.models.detector.type.toUpperCase();
+
+                    document.getElementById('cnt-queued').textContent = data.jobs.queued;
+                    document.getElementById('cnt-processing').textContent = data.jobs.processing;
+                    document.getElementById('cnt-completed').textContent = data.jobs.completed;
+                    document.getElementById('cnt-failed').textContent = data.jobs.failed;
+                })
+                .catch(err => console.error('Error fetching stats:', err));
+        }
+
+        function loadJobs() {
+            fetch(`${API_BASE}/jobs?secret=${secret}&limit=20`)
+                .then(res => res.json())
+                .then(jobs => {
+                    const tbody = document.getElementById('jobs-table-body');
+                    tbody.innerHTML = '';
+                    if (jobs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary)">No se encontraron trabajos.</td></tr>';
+                        return;
+                    }
+                    jobs.forEach(job => {
+                        const tr = document.createElement('tr');
+                        const createdDate = new Date(job.created_at).toLocaleString();
+                        const confidence = job.confidence ? `${(job.confidence * 100).toFixed(1)}%` : '-';
+                        const species = job.species_slug ? job.species_slug.replace('_', ' ') : '-';
+                        
+                        let retryBtn = '';
+                        if (job.status === 'failed') {
+                            retryBtn = `<button class="action-btn" onclick="retryJob('${job.$id}')">Reintentar</button>`;
+                        }
+
+                        tr.innerHTML = `
+                            <td style="font-family: monospace; font-size: 13px;">${job.$id}</td>
+                            <td>${job.user_id || 'Anon'}</td>
+                            <td><span class="status-pill ${job.status}">${job.status}</span></td>
+                            <td style="text-transform: capitalize;">${species}</td>
+                            <td>${confidence}</td>
+                            <td>${createdDate}</td>
+                            <td>${retryBtn}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                })
+                .catch(err => console.error('Error fetching jobs:', err));
+        }
+
+        window.retryJob = function(jobId) {
+            writeToTerminal(`Solicitando reintento de job ${jobId}...`, 'INFO');
+            fetch(`${API_BASE}/jobs/${jobId}/retry?secret=${secret}`, { method: 'POST' })
+                .then(res => res.json())
+                .then(res => {
+                    writeToTerminal(`Reintento de job ${jobId} exitoso!`, 'INFO');
+                    loadJobs();
+                    updateServerStatus();
+                })
+                .catch(err => {
+                    writeToTerminal(`Error al reintentar job: ${err}`, 'ERROR');
+                });
+        }
+
+        function connectWebSocket() {
+            const loc = window.location;
+            const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProto}//${loc.host}/ws/events?secret=${secret}`;
+            
+            writeToTerminal('Conectando WebSocket...', 'DEBUG');
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                writeToTerminal('WebSocket conectado con éxito!', 'DEBUG');
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'log') {
+                    writeToTerminal(data.message, data.level);
+                } else if (data.type === 'server_status') {
+                    // Update CPU, RAM, Uptime live from WS
+                    document.getElementById('cpu-val').textContent = `${data.cpu_percent.toFixed(1)}%`;
+                    document.getElementById('ram-val').textContent = `${data.memory_percent.toFixed(1)}%`;
+                    document.getElementById('uptime-val').textContent = formatUptime(data.uptime_seconds);
+                } else if (data.type === 'job_progress') {
+                    const activeNone = document.getElementById('active-job-none');
+                    const activeDetails = document.getElementById('active-job-details');
+                    
+                    if (data.status === 'completed' || data.status === 'failed' || data.status === 'needs_review') {
+                        activeNone.classList.remove('hidden');
+                        activeDetails.classList.add('hidden');
+                        loadJobs();
+                        updateServerStatus();
+                    } else {
+                        activeNone.classList.add('hidden');
+                        activeDetails.classList.remove('hidden');
+                        
+                        document.getElementById('active-job-id').textContent = `Job: ${data.job_id}`;
+                        document.getElementById('active-job-status').textContent = data.status;
+                        document.getElementById('active-job-progress').style.width = `${data.progress}%`;
+                        document.getElementById('active-job-msg').textContent = data.message;
+                    }
+                }
+            };
+
+            ws.onclose = (e) => {
+                writeToTerminal(`WebSocket desconectado (código ${e.code}). Reintentando en 3s...`, 'WARNING');
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error('WebSocket Error:', err);
+                ws.close();
+            };
+        }
+
+        function initializeDashboard() {
+            updateServerStatus();
+            loadJobs();
+            connectWebSocket();
+            
+            // Periodically refresh stats
+            setInterval(updateServerStatus, 5000);
+        }
+
+        refreshJobsBtn.addEventListener('click', () => {
+            loadJobs();
+            updateServerStatus();
+            writeToTerminal('Lista de jobs refrescada manualmente', 'DEBUG');
+        });
+
+        // Start
+        checkAuth();
+    </script>
+</body>
+</html>
