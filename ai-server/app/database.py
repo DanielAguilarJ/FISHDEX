@@ -47,6 +47,7 @@ def init_db():
             species_slug TEXT,
             notes TEXT,
             created_at TEXT NOT NULL,
+            started_at TEXT,
             completed_at TEXT,
             result_sighting_id TEXT,
             result_fish_id TEXT,
@@ -56,6 +57,12 @@ def init_db():
             error_message TEXT
         )
     """)
+    
+    # Migration: Add started_at column to identification_jobs if it doesn't exist in existing DB
+    try:
+        cursor.execute("ALTER TABLE identification_jobs ADD COLUMN started_at TEXT")
+    except sqlite3.OperationalError:
+        pass
     
     # 3. Fish Sightings Table
     cursor.execute("""

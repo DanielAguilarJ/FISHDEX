@@ -63,20 +63,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       }
     } catch (e) {
-      String errorMsg = l10n.loginError;
-      if (e is AppwriteException) {
-        switch (e.code) {
-          case 401:
-            errorMsg = l10n.loginWrongCredentials;
-          case 429:
-            errorMsg = l10n.loginTooManyAttempts;
-          case 500:
-            errorMsg = l10n.serverError;
-          default:
-            errorMsg = e.message ?? l10n.loginError;
-        }
-      } else {
+      String errorMsg;
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('401') || errorStr.contains('invalid')) {
+        errorMsg = l10n.loginWrongCredentials;
+      } else if (errorStr.contains('connection') || errorStr.contains('socket')) {
         errorMsg = l10n.noConnection;
+      } else {
+        errorMsg = '${l10n.loginError}: $e';
       }
       setState(() => _errorMessage = errorMsg);
     } finally {

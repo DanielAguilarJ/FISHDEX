@@ -31,7 +31,7 @@ class EnvConfig {
   ///   --dart-define=AI_SERVER_URL=http://192.168.x.x:8000
   static const String aiServerUrl = String.fromEnvironment(
     'AI_SERVER_URL',
-    defaultValue: 'http://127.0.0.1:8000',
+    defaultValue: 'http://160.217.215.92:8000',
   );
 
   /// Appwrite database identifier.

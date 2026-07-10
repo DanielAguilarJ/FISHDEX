@@ -159,7 +159,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(identify.router, prefix="/api/v1", tags=["Identification"])
-app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs"])
+app.include_router(jobs.router)  # jobs.router already defines prefix="/api/v1/jobs"
 app.include_router(dashboard.router)
 app.include_router(websocket.router)
 app.include_router(auth.router)

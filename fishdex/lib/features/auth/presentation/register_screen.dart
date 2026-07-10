@@ -1,10 +1,8 @@
-import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/user_role_model.dart';
 import '../../../data/repositories/roles_repository.dart';
@@ -73,45 +71,42 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       final authRepo = ref.read(authRepositoryProvider);
       final rolesRepo = ref.read(rolesRepositoryProvider);
 
-      // Registrar usuario en Appwrite Auth
+      // Registrar usuario en servidor local
       await authRepo.register(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         name: _nameController.text.trim(),
       );
 
-      // Auto-login
-      await authRepo.login(
+      // Auto-login — returns session with userId
+      final session = await authRepo.login(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+
+      // Use the userId from the login session directly
+      final userId = session.userId;
 
       ref.invalidate(authStateProvider);
       final prefs = await SharedPreferences.getInstance();
 
       // Crear modelo de rol según selección
       if (_isResearcherRole) {
-        // Researcher: guardar con estado pendiente
-        final appwriteAccount = ref.read(appwriteAccountProvider);
-        final user = await appwriteAccount.get();
-
         final roleModel = UserRoleModel.pendingResearcher(
-          userId: user.$id,
+          userId: userId,
           institution: _institutionController.text.trim(),
           reason: _reasonController.text.trim(),
         );
 
         await rolesRepo.saveUserRole(roleModel, name: _nameController.text.trim());
 
-        // Crear solicitud de aprobación
         await rolesRepo.requestResearcherAccess(
-          userId: user.$id,
+          userId: userId,
           username: _nameController.text.trim(),
           institution: _institutionController.text.trim(),
           reason: _reasonController.text.trim(),
         );
 
-        // Guardar rol en prefs
         await prefs.setString('cached_user_role', 'researcher');
         await prefs.setString('cached_approval_status', 'pending');
 
@@ -120,13 +115,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         }
       } else {
         // Fisherman: acceso inmediato
-        final appwriteAccount = ref.read(appwriteAccountProvider);
-        final user = await appwriteAccount.get();
-
-        final roleModel = UserRoleModel.fisherman(user.$id);
+        final roleModel = UserRoleModel.fisherman(userId);
         await rolesRepo.saveUserRole(roleModel, name: _nameController.text.trim());
 
-        // Guardar rol en prefs
         await prefs.setString('cached_user_role', 'fisherman');
         await prefs.setString('cached_approval_status', 'approved');
 
@@ -140,18 +131,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           }
         }
       }
-    } on AppwriteException catch (e) {
-      debugPrint('Error Appwrite: [${e.code}] ${e.type} - ${e.message}');
-      setState(() {
-        if (e.message != null && e.message!.contains('already exists')) {
-          _errorMessage = l10n.registerEmailAlreadyExists;
-        } else {
-          _errorMessage =
-              'Error Appwrite [${e.code}]: ${e.message ?? l10n.unknownError}';
-        }
-      });
     } catch (e) {
-      debugPrint(l10n.error);
+      debugPrint('Error registro: $e');
       setState(() {
         _errorMessage = '${l10n.error}: $e';
       });
