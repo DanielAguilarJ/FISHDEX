@@ -302,12 +302,7 @@ final mapCapturesProvider = FutureProvider<List<MapCaptureData>>((ref) async {
 
     if (roleModel == null) return [];
 
-    final databases = ref.read(appwriteDatabasesProvider);
-    final functions = ref.read(appwriteFunctionsProvider);
-    final capturesRepo = CapturesRepository(
-      databases: databases,
-      functions: functions,
-    );
+    final capturesRepo = ref.read(capturesRepositoryProvider);
 
     final role = roleModel.role;
     final userId = roleModel.userId;
@@ -316,7 +311,7 @@ final mapCapturesProvider = FutureProvider<List<MapCaptureData>>((ref) async {
       // Fisherman: obtener solo sus capturas
       final myCaptures = await capturesRepo.getCapturesForUser(
         userId: userId,
-        role: UserRole.fisherman,
+        userRole: 'fisherman',
         limit: 100,
       );
 
@@ -369,7 +364,7 @@ final mapCapturesProvider = FutureProvider<List<MapCaptureData>>((ref) async {
       // Researcher/Admin: todas las capturas
       final allCaptures = await capturesRepo.getCapturesForUser(
         userId: userId,
-        role: role,
+        userRole: role.name,
         limit: 200,
       );
 

@@ -19,9 +19,11 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.middleware.correlation import CorrelationFilter, CorrelationMiddleware
-from app.routers import identify, jobs, websocket, dashboard
+from app.routers import identify, jobs, websocket, dashboard, auth, sightings
 from app.services.event_bus import EventBusLogHandler
 from app.services.system_monitor import start_system_monitor
+from app.database import init_db
+from fastapi.staticfiles import StaticFiles
 
 # ─── Logging Configuration ───────────────────────────────────────────────
 # Use a custom LogRecord factory to ensure 'correlation_id' is always present
@@ -90,6 +92,9 @@ async def lifespan(app: FastAPI):
     # Start background system monitoring
     start_system_monitor()
 
+    # Initialize SQLite database
+    init_db()
+
     # Ensure data directories exist
     Path(settings.server_data_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
@@ -157,6 +162,13 @@ app.include_router(identify.router, prefix="/api/v1", tags=["Identification"])
 app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs"])
 app.include_router(dashboard.router)
 app.include_router(websocket.router)
+app.include_router(auth.router)
+app.include_router(sightings.router)
+
+# Mount local storage folder to serve frames and videos directly
+storage_path = Path(settings.server_data_dir) / "storage"
+storage_path.mkdir(parents=True, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
 
 
 # ─── Root endpoints ─────────────────────────────────────────────────────

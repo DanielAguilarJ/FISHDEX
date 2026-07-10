@@ -1,11 +1,8 @@
-import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/providers/appwrite_providers.dart';
 import '../../../data/czech_fish_catalog.dart';
 import '../../../data/repositories/identification_job_repository.dart';
-import '../../../data/services/media_upload_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camera/providers/capture_metadata_provider.dart';
 import '../../identify/presentation/identifying_screen.dart';
@@ -51,7 +48,6 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         throw Exception('Usuario no autenticado');
       }
 
-      final mediaService = ref.read(mediaUploadServiceProvider);
       final jobRepo = ref.read(identificationJobRepositoryProvider);
       final captureMetadataNotifier = ref.read(captureMetadataProvider.notifier);
       final captureMetadata = ref.read(captureMetadataProvider);
@@ -74,18 +70,10 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         captureMetadataNotifier.setFishState(_notesController.text.trim());
       }
 
-      // 1. Subir video a Appwrite Storage
-      final jobId = ID.unique();
-      final videoFileId = await mediaService.uploadRawVideo(
+      // 1. Upload video and register job directly to local SQLite
+      final createdJobId = await jobRepo.uploadAndStartJob(
         videoPath: widget.videoPath,
-        userId: authUser.$id,
-        jobId: jobId,
-      );
-
-      // 2. Crear documento de identificación
-      final createdJobId = await jobRepo.createJob(
-        userId: authUser.$id,
-        rawVideoFileId: videoFileId,
+        userId: authUser.id, // authUser is a LocalUser, using id instead of $id
         areaCode: captureMetadata.areaCode,
         areaName: captureMetadata.areaName,
         latitude: captureMetadata.lat,
@@ -94,15 +82,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
 
-      // 3. Obtener JWT e iniciar procesamiento de IA (fire-and-forget)
-      final account = ref.read(appwriteAccountProvider);
-      String? jwt;
-      try {
-        final jwtResponse = await account.createJWT();
-        jwt = jwtResponse.jwt;
-      } catch (_) {}
-
-      await jobRepo.triggerProcessing(jobId: createdJobId, jwt: jwt);
+      // 2. Trigger processing pipeline on local AI Server
+      await jobRepo.triggerProcessing(jobId: createdJobId);
 
       // 4. Navegar a la pantalla de Identificación
       if (mounted) {

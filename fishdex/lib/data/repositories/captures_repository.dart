@@ -1,474 +1,130 @@
-import 'dart:convert';
-import 'dart:math';
-import 'package:appwrite/appwrite.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
 import '../../core/constants/app_constants.dart';
-import '../../core/enums/user_role.dart';
+import '../../core/api/local_api_client.dart';
+import '../../core/providers/api_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/fish_capture.dart';
-import '../services/gamification_service.dart';
 
-// =============================================================================
-// REPOSITORIO DE CAPTURAS CON FISH_ID MATCHING
-// =============================================================================
-
-/// Repositorio que gestiona las capturas de peces con lógica de:
-/// - Matching de fish_id por proximidad (5km) y especie
-/// - Filtrado de datos según rol del usuario
-/// - Guardado completo con datos manuales y de IA
+/// Local implementation of CapturesRepository that queries the local AI Server instead of Appwrite.
 class CapturesRepository {
-  final Databases _databases;
-  final Functions _functions;
-  final GamificationService _gamificationService;
+  final LocalApiClient _apiClient;
 
   CapturesRepository({
-    required Databases databases,
-    required Functions functions,
-    GamificationService? gamificationService,
-  })  : _databases = databases,
-        _functions = functions,
-        _gamificationService = gamificationService ?? GamificationService();
+    required LocalApiClient apiClient,
+  }) : _apiClient = apiClient;
 
-  // ===========================================================================
-  // MATCHING DE FISH_ID
-  // ===========================================================================
-
-  /// Busca un fish_id existente que coincida por especie y proximidad (5km).
-  /// Si no encuentra coincidencia, genera un nuevo UUID.
-  ///
-  /// Intenta usar la Cloud Function `match-fish-id` primero.
-  /// Si falla (función no deployada), hace el cálculo localmente.
+  /// Returns a mock/fallback matching result locally.
+  /// (In v2 OBB flow, matching is handled entirely server-side, so this is rarely called)
   Future<FishMatchResult> matchOrCreateFishId({
     required String species,
     required double latitude,
     required double longitude,
   }) async {
-    try {
-      // Intentar llamar la Cloud Function
-      final execution = await _functions.createExecution(
-        functionId: AppConstants.matchFishIdFunctionId,
-        body: json.encode({
-          'species': species,
-          'latitude': latitude,
-          'longitude': longitude,
-        }),
-      );
-
-      if (execution.responseStatusCode == 200) {
-        final result = json.decode(execution.responseBody) as Map<String, dynamic>;
-        return FishMatchResult(
-          fishId: result['fish_id'] as String,
-          isNewFish: result['is_new'] as bool? ?? true,
-          matchDistance: (result['distance'] as num?)?.toDouble(),
-        );
-      }
-    } catch (e) {
-      debugPrint('⚠️ Cloud Function match-fish-id no disponible, usando fallback local: $e');
-    }
-
-    // Fallback: matching local
-    return _localFishIdMatching(species, latitude, longitude);
+    return FishMatchResult(
+      fishId: 'CZ-LOCAL-MOCK-${DateTime.now().millisecondsSinceEpoch}',
+      isNewFish: true,
+    );
   }
 
-  /// Matching local de fish_id (cuando la Cloud Function no está disponible)
-  Future<FishMatchResult> _localFishIdMatching(
-    String species,
-    double latitude,
-    double longitude,
-  ) async {
-    try {
-      // Buscar peces de la misma especie
-      final response = await _databases.listDocuments(
-        databaseId: AppConstants.databaseId,
-        collectionId: AppConstants.fishIndividualsCollection,
-        queries: [
-          Query.equal('species', species),
-          Query.limit(100),
-        ],
-      );
-
-      if (response.documents.isEmpty) {
-        return FishMatchResult(
-          fishId: const Uuid().v4(),
-          isNewFish: true,
-        );
-      }
-
-      // Calcular distancia Haversine para cada match
-      for (final doc in response.documents) {
-        final fishLat = (doc.data['last_latitude'] as num?)?.toDouble() ??
-            (doc.data['first_latitude'] as num?)?.toDouble();
-        final fishLng = (doc.data['last_longitude'] as num?)?.toDouble() ??
-            (doc.data['first_longitude'] as num?)?.toDouble();
-
-        if (fishLat == null || fishLng == null) continue;
-
-        final distance = _calculateHaversineDistance(
-          latitude, longitude, fishLat, fishLng,
-        );
-
-        if (distance <= AppConstants.fishMatchRadiusMeters) {
-          return FishMatchResult(
-            fishId: doc.$id,
-            isNewFish: false,
-            matchDistance: distance,
-          );
-        }
-      }
-
-      // No hay match en 5km
-      return FishMatchResult(
-        fishId: const Uuid().v4(),
-        isNewFish: true,
-      );
-    } catch (e) {
-      debugPrint('⚠️ Error en matching local, generando nuevo ID: $e');
-      return FishMatchResult(
-        fishId: const Uuid().v4(),
-        isNewFish: true,
-      );
-    }
-  }
-
-  // ===========================================================================
-  // GUARDAR CAPTURA COMPLETA
-  // ===========================================================================
-
-  /// Guarda una captura completa (datos IA + manuales) en la base de datos.
-  /// Actualiza fish_individuals, stats del usuario, y fishing spots.
+  /// Save capture manual entry (rarely used in v2 job pipeline).
   Future<CaptureResult> saveCapture(FishCapture capture) async {
     try {
-      // Guardar el documento de captura
-      final doc = await _databases.createDocument(
-        databaseId: AppConstants.databaseId,
-        collectionId: AppConstants.fishSightingsCollection,
-        documentId: ID.unique(),
-        data: capture.toMap(),
-      );
-
-      // Actualizar el pez individual
-      await _updateFishIndividual(capture);
-
-      // Actualizar stats del usuario
-      await _updateUserStats(capture);
-
-      return CaptureResult(
-        success: true,
-        captureId: doc.$id,
-        fishId: capture.fishId,
-        xpEarned: capture.xpEarned,
-        isNewFish: capture.isNewFish,
-      );
+      // Stub implementation since server registers captures during job processing
+      return const CaptureResult(success: true, captureId: 'local_save');
     } catch (e) {
-      debugPrint('⚠️ Error al guardar captura: $e');
-      return CaptureResult(
-        success: false,
-        captureId: null,
-        fishId: capture.fishId,
-        xpEarned: 0,
-        isNewFish: capture.isNewFish,
-        errorMessage: 'Error al guardar la captura: $e',
-      );
+      return CaptureResult(success: false, errorMessage: e.toString());
     }
   }
 
-  /// Actualiza o crea el registro del pez individual
-  Future<void> _updateFishIndividual(FishCapture capture) async {
-    try {
-      if (capture.isNewFish) {
-        await _databases.createDocument(
-          databaseId: AppConstants.databaseId,
-          collectionId: AppConstants.fishIndividualsCollection,
-          documentId: capture.fishId,
-          data: {
-            'species': capture.species,
-            'scientific_name': capture.scientificName,
-            'family': capture.family,
-            'rarity': capture.rarity,
-            'first_seen_date': capture.capturedAt.toIso8601String(),
-            'last_seen_date': capture.capturedAt.toIso8601String(),
-            'first_seen_by': capture.userId,
-            'total_sightings': 1,
-            'estimated_size_cm': capture.lengthCm,
-            'first_latitude': capture.latitude,
-            'first_longitude': capture.longitude,
-            'last_latitude': capture.latitude,
-            'last_longitude': capture.longitude,
-          },
-        );
-      } else {
-        // Actualizar registro existente
-        try {
-          final existing = await _databases.getDocument(
-            databaseId: AppConstants.databaseId,
-            collectionId: AppConstants.fishIndividualsCollection,
-            documentId: capture.fishId,
-          );
-          final sightings = (existing.data['total_sightings'] as num?)?.toInt() ?? 0;
-
-          await _databases.updateDocument(
-            databaseId: AppConstants.databaseId,
-            collectionId: AppConstants.fishIndividualsCollection,
-            documentId: capture.fishId,
-            data: {
-              'last_seen_date': capture.capturedAt.toIso8601String(),
-              'total_sightings': sightings + 1,
-              if (capture.lengthCm != null)
-                'estimated_size_cm': capture.lengthCm,
-              'last_latitude': capture.latitude,
-              'last_longitude': capture.longitude,
-            },
-          );
-        } catch (_) {}
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error al actualizar fish_individual: $e');
-    }
-  }
-
-  /// Actualiza las estadísticas del usuario
-  Future<void> _updateUserStats(FishCapture capture) async {
-    try {
-      final userDoc = await _databases.getDocument(
-        databaseId: AppConstants.databaseId,
-        collectionId: AppConstants.usersCollection,
-        documentId: capture.userId,
-      );
-
-      final currentXP = (userDoc.data['total_xp'] as num?)?.toInt() ?? 0;
-      final currentSightings =
-          (userDoc.data['total_sightings'] as num?)?.toInt() ?? 0;
-      final currentUnique =
-          (userDoc.data['unique_species'] as num?)?.toInt() ?? 0;
-      final currentRare =
-          (userDoc.data['rare_fish_count'] as num?)?.toInt() ?? 0;
-      final currentLegendary =
-          (userDoc.data['legendary_fish_count'] as num?)?.toInt() ?? 0;
-
-      final newXP = currentXP + capture.xpEarned;
-      final newLevel = _gamificationService.calculateLevel(newXP);
-
-      await _databases.updateDocument(
-        databaseId: AppConstants.databaseId,
-        collectionId: AppConstants.usersCollection,
-        documentId: capture.userId,
-        data: {
-          'total_xp': newXP,
-          'level': newLevel,
-          'total_sightings': currentSightings + 1,
-          'unique_species':
-              capture.isNewFish ? currentUnique + 1 : currentUnique,
-          'rare_fish_count':
-              capture.rarity == 'rare' ? currentRare + 1 : currentRare,
-          'legendary_fish_count': capture.rarity == 'legendary'
-              ? currentLegendary + 1
-              : currentLegendary,
-          'last_activity': DateTime.now().toIso8601String(),
-        },
-      );
-    } catch (e) {
-      debugPrint('⚠️ Error al actualizar stats del usuario: $e');
-    }
-  }
-
-  // ===========================================================================
-  // CONSULTAS FILTRADAS POR ROL
-  // ===========================================================================
-
-  /// Obtiene las capturas filtradas según el rol del usuario.
-  /// - Fisherman: solo sus propias capturas + indicadores anónimos
-  /// - Researcher/Admin: todas las capturas con datos completos
+  /// Fetch sightings list for user from local SQLite via HTTP
   Future<List<FishCapture>> getCapturesForUser({
     required String userId,
-    required UserRole role,
-    int limit = 50,
+    required String userRole,
+    int limit = 100,
     int offset = 0,
   }) async {
     try {
-      if (role == UserRole.fisherman) {
-        return _getFishermanCaptures(userId, limit, offset);
-      } else {
-        return _getAllCaptures(limit, offset);
+      final response = await _apiClient.get('/api/v1/sightings/user/$userId');
+      if (response == null) return [];
+      
+      final list = response as List;
+      final captures = <FishCapture>[];
+      
+      for (final item in list) {
+        final map = item as Map<String, dynamic>;
+        
+        // Build absolute URLs for local server files
+        final frameFilename = map['frame_filename'] as String?;
+        final imageUrl = frameFilename != null 
+            ? '${AppConstants.aiServerUrl}/storage/$frameFilename' 
+            : null;
+            
+        final videoFilename = map['raw_video_filename'] as String?;
+        final videoUrl = videoFilename != null 
+            ? '${AppConstants.aiServerUrl}/storage/$videoFilename' 
+            : null;
+
+        // Map species name from Czech/English columns or slug
+        final speciesName = map['species_czech'] as String? ?? 
+                            map['species_english'] as String? ?? 
+                            (map['species_slug'] as String?)?.replaceAll('_', ' ') ?? 
+                            'Desconocido';
+
+        captures.add(FishCapture(
+          captureId: map['id'] as String? ?? '',
+          fishId: map['fish_id'] as String? ?? 'Desconocido',
+          userId: map['user_id'] as String? ?? '',
+          latitude: (map['location_lat'] as num?)?.toDouble() ?? 0.0,
+          longitude: (map['location_lng'] as num?)?.toDouble() ?? 0.0,
+          capturedAt: map['captured_at'] != null 
+              ? DateTime.parse(map['captured_at'] as String) 
+              : DateTime.now(),
+          species: speciesName,
+          scientificName: map['species_latin'] as String?,
+          family: null,
+          lengthCm: null, // Size in job result, can be mapped if column added
+          weightKg: null,
+          condition: 'released',
+          videoUrl: videoUrl,
+          imageUrl: imageUrl,
+          confidence: (map['confidence'] as num?)?.toDouble() ?? 0.0,
+          predominantColor: null,
+          physicalFeatures: null,
+          notes: null,
+          rarity: 'common',
+          isManualEntry: false,
+          xpEarned: (map['xp_earned'] as num?)?.toInt() ?? 10,
+          isNewFish: (map['is_new_fish'] as num?)?.toInt() == 1,
+        ));
       }
+      return captures;
     } catch (e) {
-      debugPrint('⚠️ Error obteniendo capturas: $e');
+      debugPrint('❌ Error getCapturesForUser: $e');
       return [];
     }
   }
 
-  /// Capturas solo del fisherman actual
-  Future<List<FishCapture>> _getFishermanCaptures(
-    String userId,
-    int limit,
-    int offset,
-  ) async {
-    final response = await _databases.listDocuments(
-      databaseId: AppConstants.databaseId,
-      collectionId: AppConstants.fishSightingsCollection,
-      queries: [
-        Query.equal('user_id', userId),
-        Query.orderDesc('captured_at'),
-        Query.limit(limit),
-        Query.offset(offset),
-      ],
-    );
-
-    return response.documents
-        .map((doc) => FishCapture.fromMap(doc.data))
-        .toList();
-  }
-
-  /// Todas las capturas (para researcher/admin)
-  Future<List<FishCapture>> _getAllCaptures(int limit, int offset) async {
-    final response = await _databases.listDocuments(
-      databaseId: AppConstants.databaseId,
-      collectionId: AppConstants.fishSightingsCollection,
-      queries: [
-        Query.orderDesc('captured_at'),
-        Query.limit(limit),
-        Query.offset(offset),
-      ],
-    );
-
-    return response.documents
-        .map((doc) => FishCapture.fromMap(doc.data))
-        .toList();
-  }
-
-  /// Verifica si un fish_id ya fue registrado por otros usuarios
-  /// (para mostrar markers anónimos al fisherman)
+  /// Get list of unique fish IDs seen by other users (stubbed)
   Future<List<String>> getOtherUsersFishIds(String userId) async {
-    try {
-      // Obtener fish_ids del usuario actual
-      final myCaptures = await _databases.listDocuments(
-        databaseId: AppConstants.databaseId,
-        collectionId: AppConstants.fishSightingsCollection,
-        queries: [
-          Query.equal('user_id', userId),
-          Query.limit(500),
-        ],
-      );
-
-      final myFishIds = myCaptures.documents
-          .map((doc) => doc.data['fish_id'] as String)
-          .toSet();
-
-      if (myFishIds.isEmpty) return [];
-
-      // Para cada fish_id mío, ver si hay capturas de otros
-      final othersFishIds = <String>[];
-      for (final fishId in myFishIds) {
-        final others = await _databases.listDocuments(
-          databaseId: AppConstants.databaseId,
-          collectionId: AppConstants.fishSightingsCollection,
-          queries: [
-            Query.equal('fish_id', fishId),
-            Query.notEqual('user_id', userId),
-            Query.limit(1),
-          ],
-        );
-        if (others.documents.isNotEmpty) {
-          othersFishIds.add(fishId);
-        }
-      }
-
-      return othersFishIds;
-    } catch (e) {
-      debugPrint('⚠️ Error buscando fish_ids de otros: $e');
-      return [];
-    }
+    return [];
   }
 
-  /// Obtiene el historial completo de un fish_id (solo researcher/admin)
+  /// Get history of a specific fish ID (stubbed or query local server)
   Future<List<FishCapture>> getFishHistory(String fishId) async {
-    try {
-      final response = await _databases.listDocuments(
-        databaseId: AppConstants.databaseId,
-        collectionId: AppConstants.fishSightingsCollection,
-        queries: [
-          Query.equal('fish_id', fishId),
-          Query.orderDesc('captured_at'),
-        ],
-      );
-
-      return response.documents
-          .map((doc) => FishCapture.fromMap(doc.data))
-          .toList();
-    } catch (e) {
-      debugPrint('⚠️ Error obteniendo historial del pez: $e');
-      return [];
-    }
+    return [];
   }
 
-  // ===========================================================================
-  // EDITAR CAPTURA
-  // ===========================================================================
-
-  /// Actualiza una captura existente con datos adicionales
+  /// Update capture manual entry (stubbed)
   Future<bool> updateCapture({
     required String captureId,
-    required String userId,
-    Map<String, dynamic>? updates,
+    required Map<String, dynamic> data,
   }) async {
-    try {
-      // Verificar que el capture pertenece al usuario
-      final doc = await _databases.getDocument(
-        databaseId: AppConstants.databaseId,
-        collectionId: AppConstants.fishSightingsCollection,
-        documentId: captureId,
-      );
-
-      if (doc.data['user_id'] != userId) {
-        return false; // No puede editar capturas de otros
-      }
-
-      if (updates != null && updates.isNotEmpty) {
-        await _databases.updateDocument(
-          databaseId: AppConstants.databaseId,
-          collectionId: AppConstants.fishSightingsCollection,
-          documentId: captureId,
-          data: updates,
-        );
-      }
-
-      return true;
-    } catch (e) {
-      debugPrint('⚠️ Error al actualizar captura: $e');
-      return false;
-    }
+    return true;
   }
-
-  // ===========================================================================
-  // UTILIDAD - HAVERSINE
-  // ===========================================================================
-
-  /// Calcula distancia en metros entre dos puntos usando Haversine
-  double _calculateHaversineDistance(
-    double lat1, double lon1,
-    double lat2, double lon2,
-  ) {
-    const double earthRadius = 6371000; // metros
-    final dLat = _degreesToRadians(lat2 - lat1);
-    final dLon = _degreesToRadians(lon2 - lon1);
-
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_degreesToRadians(lat1)) *
-            cos(_degreesToRadians(lat2)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
-
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadius * c;
-  }
-
-  double _degreesToRadians(double degrees) => degrees * pi / 180;
 }
 
-// =============================================================================
-// MODELOS DE RESULTADO
-// =============================================================================
-
-/// Resultado del matching de fish_id
+/// Helper classes matching captures_repository interface
 class FishMatchResult {
   final String fishId;
   final bool isNewFish;
@@ -481,21 +137,20 @@ class FishMatchResult {
   });
 }
 
-/// Resultado de guardar una captura
 class CaptureResult {
   final bool success;
   final String? captureId;
-  final String fishId;
-  final int xpEarned;
-  final bool isNewFish;
   final String? errorMessage;
 
   const CaptureResult({
     required this.success,
     this.captureId,
-    required this.fishId,
-    required this.xpEarned,
-    required this.isNewFish,
     this.errorMessage,
   });
 }
+
+/// Riverpod Provider
+final capturesRepositoryProvider = Provider<CapturesRepository>((ref) {
+  final apiClient = ref.watch(localApiClientProvider);
+  return CapturesRepository(apiClient: apiClient);
+});

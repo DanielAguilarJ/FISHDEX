@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:appwrite/appwrite.dart';
-import 'package:appwrite/models.dart' as models;
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/providers/appwrite_providers.dart';
+import '../../../core/providers/api_providers.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../core/models/local_models.dart';
 
 /// Excepción personalizada para errores de red/timeout
 class NetworkAuthException implements Exception {
@@ -15,8 +15,13 @@ class NetworkAuthException implements Exception {
 }
 
 /// Estado de autenticación - observa la sesión actual del usuario
-/// Maneja timeout de 6s y diferencia entre error 401 (sin sesión) vs error de red.
-final authStateProvider = FutureProvider<models.User?>((ref) async {
+/// Maneja timeout de 6s y diferencia entre error de red vs sin sesión.
+final authStateProvider = FutureProvider<LocalUser?>((ref) async {
+  final apiClient = ref.watch(localApiClientProvider);
+  
+  // Ensure ApiClient finishes loading token from SharedPreferences on startup
+  await apiClient.init();
+  
   final authRepo = ref.watch(authRepositoryProvider);
   try {
     final user = await authRepo.getCurrentUser().timeout(
@@ -28,34 +33,28 @@ final authStateProvider = FutureProvider<models.User?>((ref) async {
       },
     );
     return user;
-  } on AppwriteException catch (e) {
-    debugPrint('🔐 Auth check AppwriteException: [${e.code}] ${e.message}');
-    if (e.code == 401) {
-      // 401 = El servidor respondió pero no hay sesión activa
+  } on HttpException catch (e) {
+    debugPrint('🔐 Auth check HttpException: ${e.message}');
+    if (e.message.contains('401')) {
       return null;
     }
-    // Otros códigos (500, etc.) → posible error de red/servidor
-    throw NetworkAuthException('Appwrite error [${e.code}]: ${e.message}');
-  } on NetworkAuthException {
-    // Re-lanzar para que Splash la maneje diferente
-    rethrow;
+    throw NetworkAuthException('Error de servidor: ${e.message}');
   } on TimeoutException {
     throw const NetworkAuthException('Timeout al contactar servidor');
   } catch (e) {
     debugPrint('🔐 Auth check error inesperado: $e');
-    // Errores de red (SocketException, etc.) → lanzar NetworkAuthException
     throw NetworkAuthException('Error de conexión: $e');
   }
 });
 
 /// Provider del repositorio de autenticación
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  final account = ref.watch(appwriteAccountProvider);
-  return AuthRepository(account: account);
+  final apiClient = ref.watch(localApiClientProvider);
+  return AuthRepository(apiClient: apiClient);
 });
 
 /// Provider para la acción de login
-final loginProvider = FutureProvider.family<models.Session, LoginParams>(
+final loginProvider = FutureProvider.family<LocalSession, LoginParams>(
   (ref, params) async {
     final authRepo = ref.watch(authRepositoryProvider);
     final session = await authRepo.login(
@@ -69,7 +68,7 @@ final loginProvider = FutureProvider.family<models.Session, LoginParams>(
 );
 
 /// Provider para la acción de registro
-final registerProvider = FutureProvider.family<models.User, RegisterParams>(
+final registerProvider = FutureProvider.family<LocalUser, RegisterParams>(
   (ref, params) async {
     final authRepo = ref.watch(authRepositoryProvider);
     final user = await authRepo.register(

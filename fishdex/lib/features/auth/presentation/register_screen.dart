@@ -7,7 +7,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/user_role_model.dart';
-import '../../../data/services/role_guard_service.dart';
+import '../../../data/repositories/roles_repository.dart';
 import '../providers/auth_provider.dart';
 
 /// Pantalla de Registro con diseño gamificado

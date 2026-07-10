@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/enums/user_role.dart';
-import '../../core/providers/appwrite_providers.dart';
 import '../models/user_role_model.dart';
 import '../repositories/roles_repository.dart';
+import '../../features/auth/providers/auth_provider.dart';
 
 // =============================================================================
 // SERVICIO DE CONTROL DE ACCESO POR ROL
@@ -150,21 +150,17 @@ final roleGuardServiceProvider = Provider<RoleGuardService>((ref) {
   return RoleGuardService();
 });
 
-/// Provider del repositorio de roles
-final rolesRepositoryProvider = Provider<RolesRepository>((ref) {
-  final databases = ref.read(appwriteDatabasesProvider);
-  return RolesRepository(databases: databases);
-});
-
 /// Provider del rol del usuario actual (se inicializa en login/splash)
 final currentUserRoleProvider = FutureProvider<UserRoleModel>((ref) async {
   try {
-    final account = ref.read(appwriteAccountProvider);
-    final user = await account.get();
+    final user = ref.watch(authStateProvider).value;
+    if (user == null) {
+      return UserRoleModel.fisherman('unknown');
+    }
     final rolesRepo = ref.read(rolesRepositoryProvider);
     final roleGuard = ref.read(roleGuardServiceProvider);
 
-    return await roleGuard.initialize(user.$id, rolesRepo);
+    return await roleGuard.initialize(user.id, rolesRepo);
   } catch (e) {
     debugPrint('⚠️ Error en currentUserRoleProvider: $e');
     return UserRoleModel.fisherman('unknown');

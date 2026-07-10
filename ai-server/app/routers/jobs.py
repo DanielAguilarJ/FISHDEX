@@ -1,23 +1,17 @@
-"""
-Jobs Router - FastAPI endpoints for the job-based identification pipeline.
-"""
-
 import logging
+import uuid
+import os
 from typing import Optional
-
-from fastapi import APIRouter, HTTPException, Header, Query, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from datetime import datetime, timezone
+from pathlib import Path
+from fastapi import APIRouter, HTTPException, Header, Query, Request, UploadFile, File, Form
 
 from app.config import settings
-from app.services.appwrite_service import get_appwrite_service
+from app.database import get_db_connection
 from app.services.job_service import process_identification_job
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
-limiter = Limiter(key_func=get_remote_address)
-
 
 def _validate_auth(
     x_fishdex_client_secret: Optional[str] = None,
@@ -41,26 +35,84 @@ def _validate_auth(
 
     raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing credentials")
 
-
-@router.post("/{job_id}/process")
-@limiter.limit("5/minute")
-async def process_job(
-    request: Request,
-    job_id: str,
-    force: bool = Query(default=False, description="Force reprocessing of completed/failed jobs"),
+@router.post("/upload")
+async def upload_job_video(
+    video: UploadFile = File(...),
+    user_id: str = Form(...),
+    area_code: Optional[str] = Form(default=None),
+    area_name: Optional[str] = Form(default=None),
+    latitude: Optional[float] = Form(default=None),
+    longitude: Optional[float] = Form(default=None),
+    species_slug: Optional[str] = Form(default=None),
+    notes: Optional[str] = Form(default=None),
     x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
     authorization: Optional[str] = Header(default=None),
 ):
     """
-    Trigger processing of an identification job.
-
-    Downloads the video, runs detection/classification/matching pipeline,
-    and persists results to Appwrite.
+    Endpoint for the Flutter app to upload raw capture videos.
+    Saves the video locally on the server disk and registers the job in SQLite.
     """
     _validate_auth(x_fishdex_client_secret, authorization)
 
-    logger.info(f"Processing job {job_id} (force={force})")
+    job_id = str(uuid.uuid4())
+    now_str = datetime.now(timezone.utc).isoformat()
+    
+    # Define local file storage path
+    raw_video_filename = f"raw_videos/{job_id}_raw.mp4"
+    local_video_path = Path(settings.server_data_dir) / "storage" / raw_video_filename
+    local_video_path.parent.mkdir(parents=True, exist_ok=True)
 
+    try:
+        # Save video bytes to disk
+        content = await video.read()
+        local_video_path.write_bytes(content)
+        logger.info(f"Saved raw video for job {job_id} to disk: {local_video_path}")
+    except Exception as e:
+        logger.error(f"Failed to write uploaded video file to disk: {e}")
+        raise HTTPException(status_code=500, detail="Error al escribir el archivo de video en el disco")
+
+    # Insert job row into SQLite database
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """INSERT INTO identification_jobs (
+                id, user_id, status, raw_video_filename, area_code, area_name, 
+                latitude, longitude, species_slug, notes, created_at
+            ) VALUES (?, ?, 'uploaded', ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                job_id, user_id, raw_video_filename, area_code, area_name,
+                latitude, longitude, species_slug, notes, now_str
+            )
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        # Clean up video file if database registration fails
+        if local_video_path.exists():
+            os.remove(local_video_path)
+        logger.error(f"Failed to register job in SQLite: {e}")
+        raise HTTPException(status_code=500, detail="Error al registrar el trabajo en la base de datos")
+    finally:
+        conn.close()
+
+    return {"job_id": job_id}
+
+@router.post("/{job_id}/process")
+async def process_job(
+    request: Request,
+    job_id: str,
+    force: bool = Query(default=False),
+    x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
+    authorization: Optional[str] = Header(default=None),
+):
+    """Trigger processing of a registered local job."""
+    _validate_auth(x_fishdex_client_secret, authorization)
+
+    logger.info(f"Processing local job {job_id} (force={force})")
+
+    # We spawn a background thread/task to process, or run it synchronously
+    # for simplicity in this REST API call.
     try:
         result = process_identification_job(job_id, force=force)
         return result
@@ -71,7 +123,6 @@ async def process_job(
         elif "already completed" in error_msg.lower() or "already being processed" in error_msg.lower():
             raise HTTPException(status_code=409, detail=error_msg)
         else:
-            logger.error(f"Job {job_id} processing error: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=error_msg)
     except Exception as e:
         logger.error(f"Job {job_id} processing failed: {e}", exc_info=True)
@@ -84,33 +135,25 @@ async def process_job(
             },
         )
 
-
 @router.get("/{job_id}")
 async def get_job(
     job_id: str,
     x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
     authorization: Optional[str] = Header(default=None),
 ):
-    """Get the current state of an identification job."""
+    """Retrieve job details from local SQLite database."""
     _validate_auth(x_fishdex_client_secret, authorization)
 
-    appwrite = get_appwrite_service()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM identification_jobs WHERE id = ?", (job_id,))
+    row = cursor.fetchone()
+    conn.close()
 
-    try:
-        job_doc = appwrite.get_document(
-            database_id=settings.appwrite_database_id,
-            collection_id="identification_jobs",
-            document_id=job_id,
-        )
-    except Exception as e:
-        logger.error(f"Failed to fetch job {job_id}: {e}")
+    if not row:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    if not job_doc:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    return job_doc
-
+    return dict(row)
 
 @router.get("/{job_id}/result")
 async def get_job_result(
@@ -118,63 +161,28 @@ async def get_job_result(
     x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
     authorization: Optional[str] = Header(default=None),
 ):
-    """
-    Get the fish sighting result linked to a completed job.
-
-    Returns the fish_sightings document referenced by the job's result_sighting_id.
-    """
+    """Retrieve the fish sighting result document for a completed job."""
     _validate_auth(x_fishdex_client_secret, authorization)
 
-    appwrite = get_appwrite_service()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM identification_jobs WHERE id = ?", (job_id,))
+    job_row = cursor.fetchone()
 
-    # Fetch the job first
-    try:
-        job_doc = appwrite.get_document(
-            database_id=settings.appwrite_database_id,
-            collection_id="identification_jobs",
-            document_id=job_id,
-        )
-    except Exception as e:
-        logger.error(f"Failed to fetch job {job_id}: {e}")
+    if not job_row:
+        conn.close()
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    if not job_doc:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    # Check job is completed and has a result
-    status = job_doc.get("status")
-    result_sighting_id = job_doc.get("result_sighting_id")
-
-    if status not in ("completed", "needs_review"):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Job {job_id} has not completed processing (status: {status})",
-        )
-
+    result_sighting_id = job_row["result_sighting_id"]
     if not result_sighting_id:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Job {job_id} has no associated sighting result",
-        )
+        conn.close()
+        raise HTTPException(status_code=404, detail="Job result sighting ID is missing")
 
-    # Fetch the sighting document
-    try:
-        sighting_doc = appwrite.get_document(
-            database_id=settings.appwrite_database_id,
-            collection_id="fish_sightings",
-            document_id=result_sighting_id,
-        )
-    except Exception as e:
-        logger.error(f"Failed to fetch sighting {result_sighting_id}: {e}")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sighting {result_sighting_id} not found",
-        )
+    cursor.execute("SELECT * FROM fish_sightings WHERE id = ?", (result_sighting_id,))
+    sighting_row = cursor.fetchone()
+    conn.close()
 
-    if not sighting_doc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sighting {result_sighting_id} not found",
-        )
+    if not sighting_row:
+        raise HTTPException(status_code=404, detail="Sighting result not found")
 
-    return sighting_doc
+    return dict(sighting_row)

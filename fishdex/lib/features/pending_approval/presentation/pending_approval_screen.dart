@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,7 +23,7 @@ class _PendingApprovalScreenState
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-  RealtimeSubscription? _subscription;
+  dynamic _subscription;
 
   @override
   void initState() {

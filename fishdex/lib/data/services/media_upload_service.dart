@@ -7,9 +7,9 @@ import '../../core/providers/appwrite_providers.dart';
 /// Service responsible for uploading media files to Appwrite Storage.
 /// Handles raw videos, processed frames, and user avatars.
 class MediaUploadService {
-  final Storage _storage;
+  final dynamic _storage;
 
-  MediaUploadService({required Storage storage}) : _storage = storage;
+  MediaUploadService({required dynamic storage}) : _storage = storage;
 
   /// Upload a raw capture video to the capture_raw_videos bucket.
   /// Returns the file ID on success.

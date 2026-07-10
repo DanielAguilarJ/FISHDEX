@@ -4,9 +4,9 @@ import '../../features/map/providers/map_providers.dart';
 
 /// Repositorio de Fishing Spots - conecta con Appwrite Databases
 class FishingSpotsRepository {
-  final Databases _databases;
+  final dynamic _databases;
 
-  FishingSpotsRepository({required Databases databases})
+  FishingSpotsRepository({required dynamic databases})
       : _databases = databases;
 
   /// Obtener todos los spots de pesca

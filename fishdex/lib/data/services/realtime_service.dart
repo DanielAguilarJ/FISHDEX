@@ -102,7 +102,7 @@ class NewApprovalRequestEvent {
 /// Servicio que gestiona las suscripciones en tiempo real con Appwrite.
 /// Proporciona streams de eventos para rankings, avistamientos y spots nuevos.
 class RealtimeService {
-  final Realtime _realtime;
+  final dynamic _realtime;
   final String _currentUserId;
 
   // Controladores de streams internos
@@ -115,18 +115,18 @@ class RealtimeService {
       StreamController<NewApprovalRequestEvent>.broadcast();
 
   // Suscripciones activas de Appwrite
-  RealtimeSubscription? _rankingSub;
-  RealtimeSubscription? _sightingsSub;
-  RealtimeSubscription? _spotsSub;
-  RealtimeSubscription? _approvalSub;
-  RealtimeSubscription? _approvalRequestsSub;
+  dynamic _rankingSub;
+  dynamic _sightingsSub;
+  dynamic _spotsSub;
+  dynamic _approvalSub;
+  dynamic _approvalRequestsSub;
 
   // Estado de conexión
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
   RealtimeService({
-    required Realtime realtime,
+    required dynamic realtime,
     required String currentUserId,
   })  : _realtime = realtime,
         _currentUserId = currentUserId;

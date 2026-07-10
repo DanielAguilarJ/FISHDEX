@@ -12,11 +12,11 @@ import '../services/gamification_service.dart';
 /// Guarda en Appwrite cuando hay conexión, o localmente si no hay.
 /// Actualiza las colecciones relacionadas: fish_individuals, user stats, fishing_spots.
 class SightingsRepository {
-  final Databases _databases;
+  final dynamic _databases;
   final GamificationService _gamificationService;
 
   SightingsRepository({
-    required Databases databases,
+    required dynamic databases,
     GamificationService? gamificationService,
   })  : _databases = databases,
         _gamificationService = gamificationService ?? GamificationService();

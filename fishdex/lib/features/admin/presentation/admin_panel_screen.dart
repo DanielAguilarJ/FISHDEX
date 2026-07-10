@@ -33,8 +33,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
     });
 
     try {
-      final databases = ref.read(appwriteDatabasesProvider);
-      final rolesRepo = RolesRepository(databases: databases);
+      final rolesRepo = ref.read(rolesRepositoryProvider);
       final approvals = await rolesRepo.getPendingApprovals();
 
       setState(() {
@@ -54,8 +53,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
     bool approve,
   ) async {
     try {
-      final databases = ref.read(appwriteDatabasesProvider);
-      final rolesRepo = RolesRepository(databases: databases);
+      final rolesRepo = ref.read(rolesRepositoryProvider);
       final account = ref.read(appwriteAccountProvider);
       final admin = await account.get();
 

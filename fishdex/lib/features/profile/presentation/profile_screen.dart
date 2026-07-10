@@ -16,28 +16,28 @@ import '../../../widgets/pressable_scale.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_setup_provider.dart';
 
+import '../../../core/providers/api_providers.dart';
+
 // =============================================================================
 // PROVIDER DE STATS REALES DEL USUARIO
 // =============================================================================
 
-/// Carga las estadísticas reales del usuario desde Appwrite
+/// Carga las estadísticas reales del usuario desde el servidor local de IA
 final userStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
     if (isDemoMode) return _demoStats();
 
-    final account = ref.read(appwriteAccountProvider);
-    final user = await account.get();
-    final databases = ref.read(appwriteDatabasesProvider);
+    final authUser = ref.watch(authStateProvider).value;
+    if (authUser == null) return _demoStats();
 
-    final doc = await databases.getDocument(
-      databaseId: AppConstants.databaseId,
-      collectionId: AppConstants.usersCollection,
-      documentId: user.$id,
-    );
-
-    return doc.data;
+    final apiClient = ref.read(localApiClientProvider);
+    final stats = await apiClient.get('/api/v1/sightings/stats/${authUser.id}');
+    if (stats != null) {
+      return stats as Map<String, dynamic>;
+    }
+    return _demoStats();
   } catch (e) {
     return _demoStats();
   }

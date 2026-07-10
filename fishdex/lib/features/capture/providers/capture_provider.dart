@@ -197,12 +197,7 @@ class CaptureFormNotifier extends StateNotifier<CaptureFormState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final databases = _ref.read(appwriteDatabasesProvider);
-      final functions = _ref.read(appwriteFunctionsProvider);
-      final capturesRepo = CapturesRepository(
-        databases: databases,
-        functions: functions,
-      );
+      final capturesRepo = _ref.read(capturesRepositoryProvider);
 
       // 1. Match o crear fish_id
       final matchResult = await capturesRepo.matchOrCreateFishId(
@@ -271,12 +266,4 @@ class CaptureFormNotifier extends StateNotifier<CaptureFormState> {
 final captureFormProvider =
     StateNotifierProvider<CaptureFormNotifier, CaptureFormState>((ref) {
   return CaptureFormNotifier(ref);
-});
-
-/// Provider del repositorio de capturas
-final capturesRepositoryProvider = Provider<CapturesRepository>((ref) {
-  return CapturesRepository(
-    databases: ref.read(appwriteDatabasesProvider),
-    functions: ref.read(appwriteFunctionsProvider),
-  );
 });

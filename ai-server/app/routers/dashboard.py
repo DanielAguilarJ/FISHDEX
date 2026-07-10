@@ -5,11 +5,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Query
 
 from app.config import settings
-from app.services.appwrite_service import get_appwrite_service
+from app.database import get_db_connection
 from app.services.system_monitor import get_system_stats
 from app.services.job_service import process_identification_job
 from app.services.detector_service import get_detector_service
-from appwrite.query import Query as AppwriteQuery
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -39,7 +38,7 @@ async def get_dashboard_status(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ):
-    """Retrieve detailed server metrics and Appwrite job stats."""
+    """Retrieve detailed server metrics and local SQLite job stats."""
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     # System metrics
@@ -53,8 +52,7 @@ async def get_dashboard_status(
     except Exception:
         pass
 
-    # Aggregated Job stats from Appwrite (fetch last 100 to calculate aggregates quickly)
-    appwrite = get_appwrite_service()
+    # Aggregated Job stats from local SQLite database
     jobs_summary = {
         "queued": 0,
         "processing": 0,
@@ -63,22 +61,24 @@ async def get_dashboard_status(
     }
     
     try:
-        recent_jobs = appwrite.list_documents(
-            collection_id="identification_jobs",
-            queries=[AppwriteQuery.limit(100), AppwriteQuery.order_desc("created_at")]
-        )
-        for job in recent_jobs:
-            status = job.get("status")
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM identification_jobs")
+        rows = cursor.fetchall()
+        conn.close()
+
+        for row in rows:
+            status = row["status"]
             if status in ("uploaded", "queued"):
                 jobs_summary["queued"] += 1
-            elif status in ("processing", "extracting_frames", "detecting_fish", "cropping_fish", "classifying_species", "matching_individual", "uploading_results", "updating_appwrite"):
+            elif status in ("processing", "extracting_frames", "detecting_fish", "cropping_fish", "classifying_species", "matching_individual", "uploading_results"):
                 jobs_summary["processing"] += 1
             elif status in ("completed", "needs_review"):
                 jobs_summary["completed"] += 1
             elif status == "failed":
                 jobs_summary["failed"] += 1
     except Exception as e:
-        logger.error(f"Failed to fetch jobs summary: {e}")
+        logger.error(f"Failed to fetch jobs summary from SQLite: {e}")
 
     return {
         "status": "online",
@@ -103,22 +103,30 @@ async def get_dashboard_jobs(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ):
-    """List recent identification jobs from Appwrite."""
+    """List recent identification jobs from local SQLite."""
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
-    appwrite = get_appwrite_service()
     try:
-        jobs = appwrite.list_documents(
-            collection_id="identification_jobs",
-            queries=[
-                AppwriteQuery.order_desc("created_at"),
-                AppwriteQuery.limit(limit)
-            ]
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM identification_jobs ORDER BY created_at DESC LIMIT ?", 
+            (limit,)
         )
-        return jobs
+        rows = cursor.fetchall()
+        conn.close()
+
+        jobs_list = []
+        for row in rows:
+            d = dict(row)
+            # Map sqlite 'id' to '$id' for frontend index.html compatibility
+            d["$id"] = d["id"]
+            jobs_list.append(d)
+            
+        return jobs_list
     except Exception as e:
-        logger.error(f"Failed to list jobs: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve jobs from Appwrite")
+        logger.error(f"Failed to list jobs from SQLite: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve jobs from SQLite")
 
 @router.post("/jobs/{job_id}/retry")
 async def retry_dashboard_job(

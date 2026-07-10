@@ -13,12 +13,7 @@ import '../../../data/repositories/captures_repository.dart';
 /// para ver todas las veces que ese pez fue capturado.
 final fishHistoryProvider =
     FutureProvider.family<List<FishCapture>, String>((ref, fishId) async {
-  final databases = ref.read(appwriteDatabasesProvider);
-  final functions = ref.read(appwriteFunctionsProvider);
-  final repo = CapturesRepository(
-    databases: databases,
-    functions: functions,
-  );
+  final repo = ref.read(capturesRepositoryProvider);
   return repo.getFishHistory(fishId);
 });
 
