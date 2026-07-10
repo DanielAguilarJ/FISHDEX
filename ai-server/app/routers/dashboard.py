@@ -46,11 +46,20 @@ async def get_dashboard_status(
 
     # Model status
     detector_loaded = False
+    classifier_loaded = False
+
     try:
         detector = get_detector_service()
-        detector_loaded = detector is not None and detector.is_available()
-    except Exception:
-        pass
+        detector_loaded = detector is not None and bool(getattr(detector, "available", False))
+    except Exception as e:
+        logger.warning(f"Could not check detector status: {e}")
+
+    try:
+        from app.services.classifier_service import get_classifier_service
+        classifier = get_classifier_service()
+        classifier_loaded = classifier is not None and bool(getattr(classifier, "available", False))
+    except Exception as e:
+        logger.warning(f"Could not check classifier status: {e}")
 
     # Aggregated Job stats from local SQLite database
     jobs_summary = {
@@ -90,7 +99,7 @@ async def get_dashboard_status(
                 "path": settings.detector_model_path
             },
             "classifier": {
-                "loaded": False,
+                "loaded": classifier_loaded,
                 "path": settings.classifier_model_path
             }
         },

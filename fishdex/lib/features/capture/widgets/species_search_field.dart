@@ -44,8 +44,8 @@ class SpeciesSearchField extends StatelessWidget {
           focusNode: focusNode,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
-            labelText: 'Selecciona una especie',
-            hintText: 'Escribe para buscar (ej. Kapr...)',
+            labelText: 'Selecciona una especie (opcional)',
+            hintText: 'Déjalo vacío para que la IA la identifique',
             prefixIcon: const Icon(Icons.search, color: AppTheme.accentBlue),
             suffixIcon: IconButton(
               icon: const Icon(Icons.clear, color: Colors.white54),
@@ -55,16 +55,28 @@ class SpeciesSearchField extends StatelessWidget {
               },
             ),
           ),
+          onChanged: (value) {
+            if (value.trim().isEmpty) {
+              onSelected(null);
+              return;
+            }
+            final exactMatch = czechFishCatalog.any((s) =>
+                '${s.czechName} (${s.englishName})'.toLowerCase() ==
+                value.trim().toLowerCase());
+            if (!exactMatch) {
+              onSelected(null);
+            }
+          },
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return 'La especie es obligatoria';
+              return null;
             }
             // Validar que la especie escrita coincida con alguna del catálogo
             final exists = czechFishCatalog.any((s) =>
                 '${s.czechName} (${s.englishName})'.toLowerCase() ==
                 value.trim().toLowerCase());
             if (!exists) {
-              return 'Por favor selecciona una especie válida de la lista';
+              return 'Selecciona una especie válida de la lista o deja el campo vacío';
             }
             return null;
           },

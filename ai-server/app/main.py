@@ -118,6 +118,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Could not pre-load OBB detector: %s", exc)
 
+    # Pre-load species classifier
+    try:
+        from app.services.classifier_service import get_classifier_service
+        classifier = get_classifier_service()
+        logger.info("Species classifier model: available=%s", classifier.available)
+    except Exception as exc:
+        logger.warning("Could not pre-load species classifier: %s", exc)
+
     logger.info(
         "=== FishDex AI Server v2.0.0 started ===  "
         "threshold=%.2f  radius=%.1fkm  data=%s",

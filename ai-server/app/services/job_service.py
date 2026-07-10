@@ -294,7 +294,18 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                     )
 
                     if not species_slug and classified_species:
-                        species_slug = classified_species
+                        if classification_confidence >= settings.confidence_threshold:
+                            species_slug = classified_species
+                            logger.info(
+                                f"[Job {job_id}] Auto-classification accepted: "
+                                f"{species_slug} confidence={classification_confidence:.3f}"
+                            )
+                        else:
+                            logger.warning(
+                                f"[Job {job_id}] Auto-classification rejected: "
+                                f"{classified_species} confidence={classification_confidence:.3f} "
+                                f"< threshold={settings.confidence_threshold:.3f}"
+                            )
         except Exception as e:
             logger.warning(f"[Job {job_id}] Classifier failed: {e}")
             classifier_available = False
@@ -303,9 +314,18 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         if species_slug:
             species_info = find_species_by_name(species_slug)
             if species_info:
+                # Canonicalize species_slug so DB, matching and UI always use catalog slug
+                species_slug = species_info["slug"]
                 logger.info(
-                    f"[Job {job_id}] Species info: {species_info.get('english_name')} "
-                    f"({species_info.get('rarity')})"
+                    f"[Job {job_id}] Species info: "
+                    f"{species_info.get('english_name')} / "
+                    f"{species_info.get('latin_name')} "
+                    f"slug={species_slug} "
+                    f"rarity={species_info.get('rarity')}"
+                )
+            else:
+                logger.warning(
+                    f"[Job {job_id}] Species '{species_slug}' was not found in Czech catalog"
                 )
 
         # --- Step 10: Generate embedding ---
