@@ -4,7 +4,7 @@ import os
 from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Header, Query, Request, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Header, Query, Request, UploadFile, File, Form, BackgroundTasks, status
 
 from app.config import settings
 from app.database import get_db_connection
@@ -98,42 +98,42 @@ async def upload_job_video(
 
     return {"job_id": job_id}
 
-@router.post("/{job_id}/process")
+@router.post("/{job_id}/process", status_code=status.HTTP_202_ACCEPTED)
 async def process_job(
     request: Request,
     job_id: str,
+    background_tasks: BackgroundTasks,
     force: bool = Query(default=False),
     x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
     authorization: Optional[str] = Header(default=None),
 ):
-    """Trigger processing of a registered local job."""
+    """Trigger processing of a registered local job asynchronously."""
     _validate_auth(x_fishdex_client_secret, authorization)
 
-    logger.info(f"Processing local job {job_id} (force={force})")
+    logger.info(f"Scheduling local job {job_id} for background processing (force={force})")
 
-    # We spawn a background thread/task to process, or run it synchronously
-    # for simplicity in this REST API call.
-    try:
-        result = process_identification_job(job_id, force=force)
-        return result
-    except ValueError as e:
-        error_msg = str(e)
-        if "not found" in error_msg.lower():
-            raise HTTPException(status_code=404, detail=error_msg)
-        elif "already completed" in error_msg.lower() or "already being processed" in error_msg.lower():
-            raise HTTPException(status_code=409, detail=error_msg)
-        else:
-            raise HTTPException(status_code=500, detail=error_msg)
-    except Exception as e:
-        logger.error(f"Job {job_id} processing failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "Processing failed",
-                "message": str(e)[:500],
-                "job_id": job_id,
-            },
-        )
+    # Validate that the job exists before scheduling background task
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, status FROM identification_jobs WHERE id = ?", (job_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    current_status = row["status"]
+    if current_status == "completed" and not force:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} already completed")
+    if current_status == "processing" and not force:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is already being processed")
+
+    background_tasks.add_task(process_identification_job, job_id, force=force)
+
+    return {
+        "job_id": job_id,
+        "status": "processing_started",
+    }
 
 @router.get("/{job_id}")
 async def get_job(

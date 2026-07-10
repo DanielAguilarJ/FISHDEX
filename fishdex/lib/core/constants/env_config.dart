@@ -34,6 +34,12 @@ class EnvConfig {
     defaultValue: 'http://160.217.215.92:8000',
   );
 
+  /// Client secret for authenticating requests to the AI server.
+  static const String aiServerSecret = String.fromEnvironment(
+    'AI_SERVER_SECRET',
+    defaultValue: 'change-me',
+  );
+
   /// Appwrite database identifier.
   static const String databaseId = String.fromEnvironment(
     'DATABASE_ID',

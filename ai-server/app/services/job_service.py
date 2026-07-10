@@ -54,12 +54,33 @@ def _emit_progress(job_id: str, status: str, progress: int, message: str):
     except RuntimeError:
         pass
 
-def _crop_fish_from_frame(frame: np.ndarray, detection: dict) -> np.ndarray:
-    """Crop fish region from frame using OBB detection or fallback center crop."""
+def _get_detection_confidence(detection) -> float:
+    if detection is None:
+        return 0.0
+
+    if isinstance(detection, dict):
+        return float(detection.get("confidence", 0.0) or 0.0)
+
+    return float(getattr(detection, "confidence", 0.0) or 0.0)
+
+
+def _get_detection_bbox(detection):
+    if detection is None:
+        return None
+
+    if isinstance(detection, dict):
+        return detection.get("bbox") or detection.get("bbox_xyxy")
+
+    return getattr(detection, "bbox_xyxy", None)
+
+
+def _crop_fish_from_frame(frame: np.ndarray, detection) -> np.ndarray:
+    """Crop fish region from frame using detection or fallback center crop."""
     h, w = frame.shape[:2]
 
-    if detection and detection.get("bbox"):
-        bbox = detection["bbox"]
+    bbox = _get_detection_bbox(detection)
+
+    if bbox:
         x1 = max(0, int(bbox[0]))
         y1 = max(0, int(bbox[1]))
         x2 = min(w, int(bbox[2]))
@@ -207,7 +228,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             detections = detector.detect(frame)
             if detections:
                 for det in detections:
-                    conf = det.get("confidence", 0.0)
+                    conf = _get_detection_confidence(det)
                     if conf > best_detection_confidence:
                         best_detection_confidence = conf
                         best_detection = det
@@ -239,25 +260,43 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         species_info = None
         classification_result = None
         classifier_available = True
+        classification_confidence = 0.0
 
         try:
             classifier = get_classifier_service()
-            _emit_progress(job_id, "classifying_species", 70, f"Classifying species (given: {species_slug})")
+            _emit_progress(
+                job_id,
+                "classifying_species",
+                70,
+                f"Classifying species (given: {species_slug})",
+            )
             logger.info(f"[Job {job_id}] Running classifier")
             classification_result = classifier.classify(cropped_frame)
 
-            if classification_result and classification_result.get("species"):
-                classified_species = classification_result["species"]
-                classification_confidence = classification_result.get("confidence", 0.0)
-                logger.info(
-                    f"[Job {job_id}] Classified as: {classified_species} "
-                    f"(confidence: {classification_confidence:.3f})"
-                )
+            if not classification_result or not classification_result.get("available", False):
+                classifier_available = False
+                logger.warning(f"[Job {job_id}] Classifier unavailable or returned no predictions")
+            else:
+                predictions = classification_result.get("predictions") or []
+                if predictions:
+                    top_prediction = predictions[0]
+                    classified_species = (
+                        top_prediction.get("species_slug")
+                        or top_prediction.get("species")
+                    )
+                    classification_confidence = float(
+                        top_prediction.get("confidence", 0.0) or 0.0
+                    )
 
-                if not species_slug:
-                    species_slug = classified_species
+                    logger.info(
+                        f"[Job {job_id}] Classified as: {classified_species} "
+                        f"(confidence: {classification_confidence:.3f})"
+                    )
+
+                    if not species_slug and classified_species:
+                        species_slug = classified_species
         except Exception as e:
-            logger.warning(f"[Job {job_id}] Classifier unavailable: {e}")
+            logger.warning(f"[Job {job_id}] Classifier failed: {e}")
             classifier_available = False
 
         # Look up species in catalog
@@ -281,16 +320,17 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
 
         # --- Step 11: Run matching ---
         logger.info(f"[Job {job_id}] Running matching against known fish")
-        match_result = matching.find_match(
-            embedding=embedding_vector,
-            species_slug=species_slug,
-            area_code=job_doc.get("area_code"),
-            threshold=settings.similarity_threshold,
-        )
+        if species_slug:
+            matched_fish_id, match_confidence = matching.find_match(
+                embedding=embedding_vector,
+                species_slug=species_slug,
+                area_code=job_doc.get("area_code"),
+                threshold=settings.similarity_threshold,
+            )
+        else:
+            matched_fish_id, match_confidence = None, 0.0
 
-        is_new_fish = not match_result or not match_result.get("fish_id")
-        matched_fish_id = match_result.get("fish_id") if match_result else None
-        match_confidence = match_result.get("confidence", 0.0) if match_result else 0.0
+        is_new_fish = matched_fish_id is None
 
         logger.info(
             f"[Job {job_id}] Match result: "
@@ -334,8 +374,8 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             if not is_new_fish
             else detection_confidence
         )
-        if classification_result:
-            overall_confidence = max(overall_confidence, classification_result.get("confidence", 0.0))
+        if classification_confidence > 0:
+            overall_confidence = max(overall_confidence, classification_confidence)
 
         xp_earned = _calculate_xp(species_info, is_new_fish)
 
@@ -403,17 +443,21 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
 
         # --- Step 18: Store embedding in matching service ---
         logger.info(f"[Job {job_id}] Storing embedding in matching service")
-        matching.store_embedding(
-            fish_id=fish_id,
-            embedding=embedding_vector,
-            species_slug=species_slug,
-            sighting_id=sighting_id,
-        )
+        if species_slug:
+            matching.store_embedding(
+                fish_id=fish_id,
+                embedding=embedding_vector,
+                species_slug=species_slug,
+                area_code=area_code,
+                sighting_id=sighting_id,
+            )
+        else:
+            logger.info(f"[Job {job_id}] Skipping embedding storage because species_slug is missing")
 
         # --- Step 19: Determine final status and update job ---
-        if not species_slug and not classifier_available:
+        if not species_slug:
             final_status = "needs_review"
-            logger.info(f"[Job {job_id}] No species identified and classifier unavailable -> needs_review")
+            logger.info(f"[Job {job_id}] No species identified -> needs_review")
         else:
             final_status = "completed"
 

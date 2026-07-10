@@ -14,6 +14,17 @@ def get_db_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     return conn
 
+def _ensure_columns(cursor, table_name: str, required_columns: dict[str, str]) -> None:
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+
+    for column_name, column_type in required_columns.items():
+        if column_name not in existing_columns:
+            logger.info("Adding missing column %s.%s %s", table_name, column_name, column_type)
+            cursor.execute(
+                f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+            )
+
 def init_db():
     """Create database tables if they do not exist."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -58,11 +69,17 @@ def init_db():
         )
     """)
     
-    # Migration: Add started_at column to identification_jobs if it doesn't exist in existing DB
-    try:
-        cursor.execute("ALTER TABLE identification_jobs ADD COLUMN started_at TEXT")
-    except sqlite3.OperationalError:
-        pass
+    _identification_job_columns = {
+        "started_at": "TEXT",
+        "completed_at": "TEXT",
+        "result_sighting_id": "TEXT",
+        "result_fish_id": "TEXT",
+        "confidence": "REAL",
+        "is_new_fish": "INTEGER",
+        "xp_earned": "INTEGER",
+        "error_message": "TEXT",
+    }
+    _ensure_columns(cursor, "identification_jobs", _identification_job_columns)
     
     # 3. Fish Sightings Table
     cursor.execute("""
@@ -119,4 +136,4 @@ def init_db():
     
     conn.commit()
     conn.close()
-    logger.info(f"Local SQLite database initialized at {DB_PATH}")
+    logger.info(f"Local SQLite database initialized at {DB_PATH.resolve()}")

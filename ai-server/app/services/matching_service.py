@@ -75,6 +75,9 @@ class MatchingService:
         Returns:
             (fish_id, score) if score >= threshold, else (None, best_score).
         """
+        if not species_slug or not area_code:
+            return (None, 0.0)
+
         # Build area filter: exact area + parent area prefix
         area_patterns = [area_code]
         if area_code and "_" in area_code:

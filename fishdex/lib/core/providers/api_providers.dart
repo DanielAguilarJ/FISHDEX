@@ -6,6 +6,6 @@ import '../constants/app_constants.dart';
 final localApiClientProvider = Provider<LocalApiClient>((ref) {
   return LocalApiClient(
     baseUrl: AppConstants.aiServerUrl,
-    clientSecret: 'change-me', // Matches FISHDEX_AI_SERVER_SECRET in server
+    clientSecret: AppConstants.aiServerSecret,
   );
 });

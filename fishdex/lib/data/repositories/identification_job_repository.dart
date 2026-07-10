@@ -64,14 +64,20 @@ class IdentificationJobRepository {
   }
 
   /// Trigger processing for a job on the local AI server.
-  Future<bool> triggerProcessing({
+  Future<Map<String, dynamic>> triggerProcessing({
     required String jobId,
   }) async {
+    final response = await _apiClient.post('/api/v1/jobs/$jobId/process', {});
+    return response as Map<String, dynamic>;
+  }
+
+  /// Get the fish sighting result for a job.
+  Future<Map<String, dynamic>?> getJobResult(String jobId) async {
     try {
-      final response = await _apiClient.post('/api/v1/jobs/$jobId/process', {});
-      return response != null;
+      final response = await _apiClient.get('/api/v1/jobs/$jobId/result');
+      return response as Map<String, dynamic>;
     } catch (e) {
-      return false;
+      return null;
     }
   }
 

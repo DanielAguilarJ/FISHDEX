@@ -22,23 +22,50 @@ class ResultScreen extends ConsumerStatefulWidget {
   /// Primary constructor with IdentifyResult
   const ResultScreen({super.key, required this.result});
 
+  static bool _parseSqliteBool(dynamic value, {bool defaultValue = false}) {
+    if (value == null) return defaultValue;
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    if (value is num) return value.toInt() == 1;
+    if (value is String) {
+      final lower = value.toLowerCase().trim();
+      return lower == '1' || lower == 'true' || lower == 'yes';
+    }
+    return defaultValue;
+  }
+
   /// Factory constructor from job completion data (v2 job-based flow)
   factory ResultScreen.fromJobData({Key? key, required Map<String, dynamic> jobData}) {
-    // Convert job data to IdentifyResult for backward compatibility
+    final isNew = _parseSqliteBool(
+      jobData['is_new_fish'],
+      defaultValue: true,
+    );
+
+    final fishId = jobData['fish_id'] as String? ??
+        jobData['result_fish_id'] as String? ??
+        '';
+
+    final speciesEnglish = jobData['species_english'] as String? ??
+        jobData['species_common'] as String? ??
+        jobData['species_slug'] as String? ??
+        'Unknown';
+
     final result = IdentifyResult(
       success: true,
-      fishId: jobData['result_fish_id'] as String? ?? '',
-      species: jobData['species_common'] as String? ?? 'Unknown',
+      fishId: fishId,
+      species: speciesEnglish,
       scientificName: jobData['species_latin'] as String?,
       confidence: (jobData['confidence'] as num?)?.toDouble() ?? 0.0,
-      isNew: jobData['is_new_fish'] as bool? ?? true,
+      isNew: isNew,
       estimatedSizeCm: (jobData['size_cm'] as num?)?.toDouble() ?? 0.0,
       rarity: jobData['rarity'] as String? ?? 'common',
       xpEarned: (jobData['xp_earned'] as num?)?.toInt() ?? 10,
-      message: jobData['is_new_fish'] == true
+      message: isNew
           ? 'New fish discovered!'
           : 'Recapture! This fish has been seen before.',
-      timestamp: jobData['completed_at'] as String? ?? DateTime.now().toIso8601String(),
+      timestamp: jobData['completed_at'] as String? ??
+          jobData['created_at'] as String? ??
+          DateTime.now().toIso8601String(),
       areaCode: jobData['area_code'] as String?,
       areaName: jobData['area_name'] as String?,
       speciesCzech: jobData['species_czech'] as String?,

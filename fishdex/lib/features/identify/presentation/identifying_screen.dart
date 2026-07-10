@@ -106,22 +106,17 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       
       final status = jobData['status'] as String?;
       
-      if (status == JobStatus.completed) {
-        // Navigate to result
+      if (status == JobStatus.completed || status == JobStatus.needsReview) {
+        final resultData = await jobRepo.getJobResult(jobId);
+        final mergedData = <String, dynamic>{
+          ...jobData,
+          if (resultData != null) ...resultData,
+        };
+
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (_) => ResultScreen.fromJobData(jobData: jobData),
-            ),
-          );
-        }
-        return;
-      } else if (status == JobStatus.needsReview) {
-        // Navigate to manual form
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => ResultScreen.fromJobData(jobData: jobData),
+              builder: (_) => ResultScreen.fromJobData(jobData: mergedData),
             ),
           );
         }

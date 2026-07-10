@@ -383,26 +383,33 @@ CZECH_SPECIES: list[dict] = [
 
 def find_species_by_name(name: str) -> Optional[dict]:
     """
-    Find a species by Czech, English, or Latin name (case-insensitive).
+    Find a species by Czech, English, or Latin name, or slug (case-insensitive).
 
     Args:
-        name: The species name to search for (any language).
+        name: The species name/slug to search for.
 
     Returns:
         The species dict if found, None otherwise.
     """
     if not name:
         return None
+
     name_lower = name.lower().strip()
+    name_slug = name_lower.replace(" ", "_").replace("-", "_")
+
     for species in CZECH_SPECIES:
+        species_slug = species["slug"].lower()
+
         if (
             species["czech_name"].lower() == name_lower
             or species["english_name"].lower() == name_lower
             or species["latin_name"].lower() == name_lower
-            or species["slug"].replace("_", " ") == name_lower
+            or species_slug == name_lower
+            or species_slug == name_slug
+            or species_slug.replace("_", " ") == name_lower
         ):
             return species
-    # Partial match fallback
+
     for species in CZECH_SPECIES:
         if (
             name_lower in species["czech_name"].lower()
@@ -410,6 +417,7 @@ def find_species_by_name(name: str) -> Optional[dict]:
             or name_lower in species["latin_name"].lower()
         ):
             return species
+
     return None
 
 

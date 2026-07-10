@@ -77,6 +77,9 @@ class AppConstants {
   
   /// URL del servidor AI, configurable vía --dart-define=AI_SERVER_URL=...
   static const String aiServerUrl = EnvConfig.aiServerUrl;
+
+  /// Secreto de cliente para el servidor AI, configurable vía --dart-define=AI_SERVER_SECRET=...
+  static const String aiServerSecret = EnvConfig.aiServerSecret;
   
   /// Endpoint de identificación
   static const String identifyEndpoint = '/api/v1/identify';
