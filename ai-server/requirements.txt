@@ -1,5 +1,5 @@
 # =============================================================================
-# FishDex AI Server - Dependencias Python
+# FishDex AI Server - Dependencies
 # =============================================================================
 
 # Framework web
@@ -12,18 +12,22 @@ opencv-python-headless==4.10.0.84
 numpy==1.26.4
 Pillow==10.4.0
 
-# PyTorch (CPU only para desarrollo, cambiar a cu121 para GPU en producción)
+# PyTorch (CPU only for dev, change to cu121 for GPU in production)
 torch==2.4.1
 torchvision==0.19.1
 
-# ONNX Runtime for fish detection model
+# ONNX Runtime for detection/classification models
 onnxruntime==1.19.2
 
 # Scientific computing (Haversine, similarity)
 scipy==1.13.1
 
-# Utilidades
+# Appwrite Python SDK (server-side with API key)
+appwrite==6.1.0
+
+# Utilities
 python-dotenv==1.0.1
 pydantic==2.9.1
 pydantic-settings==2.5.2
 httpx==0.27.2
+slowapi>=0.1.9

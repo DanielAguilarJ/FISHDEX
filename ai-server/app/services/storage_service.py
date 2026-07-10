@@ -3,6 +3,17 @@ FishDex AI Server - Storage Service
 =====================================
 Hierarchical fish storage system on server disk.
 Structure: server-data/{area_code_clean}/{species_slug}/{fish_id}/catch_N/images/ + data.json
+
+IMPORTANT ARCHITECTURAL NOTE:
+This service acts as a **local cache for the AI matching pipeline**.
+Appwrite is the authoritative source of truth for all fish metadata,
+sightings, and user data.  The disk storage here exists solely to:
+  1. Cache frame images for embedding comparison (avoids re-downloading)
+  2. Store pre-computed embeddings (embeddings.npy) for fast matching
+
+If the disk cache is lost, it can be reconstructed by re-processing
+sightings from Appwrite.  The AI server should NEVER be treated as
+the canonical store of fish history or metadata.
 """
 
 import json
@@ -101,8 +112,17 @@ def save_catch(
     with open(data_path, "w", encoding="utf-8") as f:
         json.dump(metadata_with_extras, f, ensure_ascii=False, indent=2)
 
+    # Persist embedding for fast future comparisons (avoids re-extraction)
+    try:
+        from app.services.embedding_service import get_embedding_service
+        emb_service = get_embedding_service()
+        embedding = emb_service.extract_embeddings(frames_to_save)
+        np.save(str(images_dir / "embeddings.npy"), embedding)
+    except Exception as emb_exc:
+        logger.warning("Failed to save embedding for %s: %s", fish_id, emb_exc)
+
     logger.info(
-        "Saved catch %d for %s → %s (%d frames)",
+        "Saved catch %d for %s → %s (%d frames + embedding)",
         catch_num, fish_id, catch_dir, len(frames_to_save),
     )
     return str(catch_dir)

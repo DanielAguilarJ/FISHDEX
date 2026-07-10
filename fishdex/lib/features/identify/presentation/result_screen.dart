@@ -19,7 +19,32 @@ import '../widgets/reunion_info.dart';
 class ResultScreen extends ConsumerStatefulWidget {
   final IdentifyResult result;
 
+  /// Primary constructor with IdentifyResult
   const ResultScreen({super.key, required this.result});
+
+  /// Factory constructor from job completion data (v2 job-based flow)
+  factory ResultScreen.fromJobData({Key? key, required Map<String, dynamic> jobData}) {
+    // Convert job data to IdentifyResult for backward compatibility
+    final result = IdentifyResult(
+      success: true,
+      fishId: jobData['result_fish_id'] as String? ?? '',
+      species: jobData['species_common'] as String? ?? 'Unknown',
+      scientificName: jobData['species_latin'] as String?,
+      confidence: (jobData['confidence'] as num?)?.toDouble() ?? 0.0,
+      isNew: jobData['is_new_fish'] as bool? ?? true,
+      estimatedSizeCm: (jobData['size_cm'] as num?)?.toDouble() ?? 0.0,
+      rarity: jobData['rarity'] as String? ?? 'common',
+      xpEarned: (jobData['xp_earned'] as num?)?.toInt() ?? 10,
+      message: jobData['is_new_fish'] == true
+          ? 'New fish discovered!'
+          : 'Recapture! This fish has been seen before.',
+      timestamp: jobData['completed_at'] as String? ?? DateTime.now().toIso8601String(),
+      areaCode: jobData['area_code'] as String?,
+      areaName: jobData['area_name'] as String?,
+      speciesCzech: jobData['species_czech'] as String?,
+    );
+    return ResultScreen(key: key, result: result);
+  }
 
   @override
   ConsumerState<ResultScreen> createState() => _ResultScreenState();

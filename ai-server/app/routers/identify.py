@@ -17,9 +17,12 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.middleware.auth import AuthenticatedUser, verify_appwrite_jwt
 from app.models.schemas import ErrorResponse, IdentifyResponse
 from app.services.crop_service import get_crop_service
 from app.services.inference import get_inference_service
@@ -34,6 +37,9 @@ from app.utils.video import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Rate limiter (uses the instance stored on app.state by main.py)
+limiter = Limiter(key_func=get_remote_address)
 
 # Tamaño máximo de video (from config)
 MAX_VIDEO_SIZE = settings.max_video_size_mb * 1024 * 1024
@@ -51,12 +57,14 @@ MAX_VIDEO_SIZE = settings.max_video_size_mb * 1024 * 1024
     Receives a short video (5-10 seconds) of a fish, extracts the best frames,
     crops the fish body using the ONNX model, compares against existing fish
     profiles in the same area, and returns identification with full history.
+    Requires a valid Appwrite JWT in the Authorization header.
     """,
 )
+@limiter.limit("10/minute")
 async def identify_fish(
+    request: Request,
     video: UploadFile = File(..., description="Video of the fish (MP4, MOV, AVI)"),
     area_code: str = Form(..., description="Czech fishing area code e.g. '401 001'"),
-    fisherman_id: str = Form(..., description="UUID of the user (from Appwrite)"),
     user_role: str = Form("fisherman", description="'fisherman' or 'researcher'"),
     species: Optional[str] = Form(None, description="Species if already known"),
     fish_state: Optional[str] = Form(None, description="Injury notes or distinguishing marks"),
@@ -67,6 +75,7 @@ async def identify_fish(
     latitude: Optional[float] = Form(None, description="GPS latitude"),
     longitude: Optional[float] = Form(None, description="GPS longitude"),
     confidence_threshold: float = Form(0.70, description="Confidence threshold for manual input flag"),
+    current_user: AuthenticatedUser = Depends(verify_appwrite_jwt),
 ) -> IdentifyResponse:
     """
     7-step fish identification pipeline.
@@ -149,7 +158,8 @@ async def identify_fish(
 
         logger.info("[Step 2] Cropped %d frames", len(cropped_frames))
 
-        # ── Build metadata dict ──
+        # ── Build metadata dict (use authenticated user_id, not form field) ──
+        fisherman_id = current_user.user_id
         metadata = {
             "area_code": area_code,
             "fisherman_id": fisherman_id,

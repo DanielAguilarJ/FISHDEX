@@ -2,8 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 import '../models/identify_result.dart';
 import '../../core/constants/app_constants.dart';
+
+/// Helper to retrieve a JWT from the current Appwrite session.
+/// Import this where needed, or pass the JWT string directly.
+import 'package:appwrite/appwrite.dart' show Account;
 
 /// Servicio que se comunica con el servidor de IA local.
 /// Envía el video/imagen capturado al servidor corriendo en la misma red
@@ -26,6 +31,7 @@ class IdentifyService {
   /// [userId] - ID del usuario (legacy field)
   /// [notes] - Notas adicionales del pescador
   /// [confidenceThreshold] - Umbral de confianza para formulario manual
+  /// [jwt] - Optional JWT token for server-side auth
   Future<IdentifyResult> identifyFish({
     required String videoPath,
     required String areaCode,
@@ -42,6 +48,7 @@ class IdentifyService {
     String? userId,
     String? notes,
     double? confidenceThreshold,
+    String? jwt,
   }) async {
     try {
       final uri = Uri.parse(
@@ -68,6 +75,15 @@ class IdentifyService {
         filename: filename,
       );
       request.files.add(multipartFile);
+
+      // ── JWT auth header ──────────────────────────────────────────────
+      if (jwt != null && jwt.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $jwt';
+      }
+
+      // ── Correlation ID for distributed tracing ──────────────────────
+      final correlationId = const Uuid().v4();
+      request.headers['X-Request-ID'] = correlationId;
 
       // Required fields
       request.fields['area_code'] = areaCode;
@@ -150,13 +166,19 @@ class IdentifyService {
   }
 
   /// Endpoint de prueba (sin archivo, para testing rápido)
-  Future<IdentifyResult> identifyTest() async {
+  /// [jwt] - Optional JWT token for server-side auth
+  Future<IdentifyResult> identifyTest({String? jwt}) async {
     try {
       final uri = Uri.parse(
         '${AppConstants.aiServerUrl}${AppConstants.identifyEndpoint}/test',
       );
 
-      final response = await http.get(uri).timeout(
+      final headers = <String, String>{};
+      if (jwt != null && jwt.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $jwt';
+      }
+
+      final response = await http.get(uri, headers: headers).timeout(
         const Duration(seconds: 60),
       );
 

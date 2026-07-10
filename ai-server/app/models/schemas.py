@@ -58,6 +58,12 @@ class IdentifyResponse(BaseModel):
         None, description="Nombre común alternativo"
     )
     confidence: float = Field(..., description="Confianza de la identificación (0-1)")
+    detection_confidence: float = Field(
+        0.0, description="Confidence from ONNX detection/crop step (0-1)"
+    )
+    match_confidence: float = Field(
+        0.0, description="Raw similarity score from the matching pipeline (0-1)"
+    )
     is_new: bool = Field(..., description="Si es un pez nuevo (primera vez identificado)")
     estimated_size_cm: float = Field(..., description="Tamaño estimado en centímetros")
     rarity: str = Field(..., description="Rareza del pez: common, uncommon, rare, legendary")

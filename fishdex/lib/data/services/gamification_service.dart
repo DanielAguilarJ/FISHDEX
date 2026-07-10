@@ -4,9 +4,24 @@ import '../../core/constants/app_constants.dart';
 // =============================================================================
 // SERVICIO DE GAMIFICACIÓN
 // =============================================================================
+//
+// ⚠️  SERVER-SIDE MIGRATION NOTICE (2026-07)
+// ──────────────────────────────────────────
+// XP crediting and level-up writes have been migrated to the backend
+// (Appwrite Function `process-sighting`).  The client MUST NOT write to
+// the `users.total_xp` / `users.level` fields directly.
+//
+// The methods below (calculateXP, calculateLevel, levelProgress, etc.)
+// are kept **for display purposes only** — e.g. showing the XP bar,
+// previewing XP gain before the server confirms, or animating level-ups.
+//
+// See also: sightings_repository.dart (_updateUserStats is disabled).
+// =============================================================================
 
 /// Servicio que gestiona toda la lógica de gamificación de FishDex:
 /// cálculo de XP, niveles, logros desbloqueados y posición en el ranking.
+///
+/// **Client-side only** — all authoritative writes happen server-side.
 class GamificationService {
   // ===========================================================================
   // CÁLCULO DE XP

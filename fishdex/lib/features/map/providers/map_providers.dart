@@ -354,9 +354,9 @@ final mapCapturesProvider = FutureProvider<List<MapCaptureData>>((ref) async {
             fishId: fishId,
             species: own.species,
             rarity: own.rarity,
-            // Offset ligeramente las coordenadas para no superponer
-            latitude: own.latitude + (Random().nextDouble() - 0.5) * 0.005,
-            longitude: own.longitude + (Random().nextDouble() - 0.5) * 0.005,
+            // Use raw coordinates — no random noise applied
+            latitude: own.latitude,
+            longitude: own.longitude,
             capturedAt: own.capturedAt,
             isOwn: false,
             isAnonymous: true,

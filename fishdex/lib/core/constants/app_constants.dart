@@ -1,19 +1,21 @@
+import 'env_config.dart';
+
 /// Constantes de configuración de FishDex
 class AppConstants {
   AppConstants._();
 
   // ===========================================================================
-  // APPWRITE
+  // APPWRITE  (values come from compile-time --dart-define flags)
   // ===========================================================================
   
-  /// Endpoint de Appwrite (cambiar para producción)
-  static const String appwriteEndpoint = 'https://fra.cloud.appwrite.io/v1';
+  /// Endpoint de Appwrite (cambiar para producción via --dart-define)
+  static const String appwriteEndpoint = EnvConfig.appwriteEndpoint;
   
   /// Project ID en Appwrite
-  static const String appwriteProjectId = '6a43bdeb0026006ff2f8';
+  static const String appwriteProjectId = EnvConfig.appwriteProjectId;
   
   /// Database ID
-  static const String databaseId = 'fishdex_db';
+  static const String databaseId = EnvConfig.databaseId;
 
   // ===========================================================================
   // COLECCIONES (Collection IDs)
@@ -28,22 +30,53 @@ class AppConstants {
   static const String fishingSpotsCollection = 'fishing_spots';
   static const String modelVersionsCollection = 'model_versions';
 
+  /// Identification jobs collection (v2 job-based flow)
+  static const String identificationJobsCollection = 'identification_jobs';
+  
+  /// Media files tracking collection
+  static const String mediaFilesCollection = 'media_files';
+  
+  /// Fishing areas collection  
+  static const String fishingAreasCollection = 'fishing_areas';
+
   // ===========================================================================
   // STORAGE BUCKETS
+  // Legacy (v1) - kept for backward compatibility
   // ===========================================================================
   
   /// Bucket único para videos y fotos (límite plan gratuito)
   static const String fishVideosBucket = 'fish_photos';
   static const String fishPhotosBucket = 'fish_photos';
+  @Deprecated('Use userAvatarsBucketV2 instead')
   static const String userAvatarsBucket = 'fish_photos';
 
   // ===========================================================================
-  // AI SERVER - LOCAL (PC Windows)
+  // STORAGE BUCKETS (v2 - separated by purpose)
+  // NOTE: Free plan only allows 1 bucket. All point to 'fish_photos' for now.
+  // When you upgrade to a paid plan, create separate buckets and update these.
   // ===========================================================================
   
-  /// IP de la PC Windows donde corre el servidor AI.
-  /// Esta IP es accesible desde esta Mac y desde el teléfono en la misma red.
-  static const String aiServerUrl = 'http://160.217.215.92:8000';
+  /// Bucket for raw capture videos (before AI processing)
+  static const String captureRawVideosBucket = 'fish_photos';
+  
+  /// Bucket for processed frames (cropped fish images)
+  static const String captureFramesBucket = 'fish_photos';
+  
+  /// Bucket for fish reference images (best frames per individual)
+  static const String fishReferenceImagesBucket = 'fish_photos';
+  
+  /// Bucket for user avatar images
+  static const String userAvatarsBucketV2 = 'fish_photos';
+  
+  /// Bucket for data exports
+  static const String exportsBucket = 'fish_photos';
+
+  // ===========================================================================
+  // AI SERVER (value comes from compile-time --dart-define)
+  // ===========================================================================
+  
+  /// URL del servidor AI, configurable vía --dart-define=AI_SERVER_URL=...
+  static const String aiServerUrl = EnvConfig.aiServerUrl;
   
   /// Endpoint de identificación
   static const String identifyEndpoint = '/api/v1/identify';
@@ -97,8 +130,8 @@ class AppConstants {
   // SISTEMA DE ROLES
   // ===========================================================================
   
-  /// Radio máximo para matching de fish_id (metros) - 5km
-  static const double fishMatchRadiusMeters = 5000.0;
+  /// Radio máximo para matching de fish_id (metros) — reduced from 5 km to 2 km
+  static const double fishMatchRadiusMeters = 2000.0;
 
   /// Umbral de confianza de IA para auto-rellenar campos
   /// Si confidence < este valor, se muestra formulario manual
@@ -119,4 +152,7 @@ class AppConstants {
 
   /// ID de la función de gestión de aprobaciones
   static const String manageApprovalFunctionId = 'manage-approval';
+
+  /// ID of the XP awarding function
+  static const String awardXpFunctionId = 'award-xp';
 }

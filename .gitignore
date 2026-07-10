@@ -3,6 +3,8 @@
 ai-server/model/*.pt
 ai-server/model/*.pth
 ai-server/model/*.onnx
+*.pt
+labels.cache
 
 # Flutter
 fishdex/.dart_tool/
@@ -33,3 +35,18 @@ venv/
 
 # AI Server runtime data
 server-data/
+ai-server/.env
+
+# Training artifacts
+runs/
+
+# Auto-generated graph
+graphify-out/
+
+# Temp / generated
+all_files.txt
+fish_app_codebase.md
+fish_app_codebase.zip
+fish_app_codebase/
+append_inventory.py
+cultura\ climatica

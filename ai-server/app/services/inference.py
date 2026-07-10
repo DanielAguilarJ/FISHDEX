@@ -5,13 +5,15 @@ Implements the full 7-step identification pipeline:
   0. Receive cropped frames
   1. Resolve species info
   2. (Crop already done by caller)
-  3. Build comparison subset from server-data/
+  3. Build comparison subset from local embedding cache
   4. Similarity scoring against existing fish profiles
   5. Decision: new fish vs recapture
-  6. Save catch data + frames
+  6. Save to local cache (frames + embeddings for future comparisons)
   7. Build role-based response
 
-The PlaceholderModel is kept as an ultimate fallback.
+IMPORTANT: This service proposes a fish_id. Appwrite's `match-fish-id`
+function is the authoritative confirmation step.  The local disk storage
+is a cache for the similarity pipeline, NOT the source of truth.
 """
 
 import logging
@@ -231,7 +233,12 @@ class InferenceService:
             fish_id = f"FISH-{random.randint(1000, 9999)}"
 
         # ─── Step 7: Build response ──────────────────────────────────
-        confidence = min(similarity_score + 0.15, 0.98) if not is_new else random.uniform(0.82, 0.96)
+        # Real confidence: use the actual similarity_score from the pipeline.
+        # For new fish (no match found), confidence = 0.0 (no prior reference).
+        # For recaptures, confidence = the raw similarity score.
+        detection_confidence = 1.0 if cropped_frames else 0.0
+        match_confidence = similarity_score  # raw value from similarity service
+        confidence = similarity_score if not is_new else 0.0
         xp_earned = xp_base + (XP_NEW_FISH_BONUS if is_new else 0)
         estimated_size = metadata.get("size") or 0.0
 
@@ -281,6 +288,8 @@ class InferenceService:
             "family": family,
             "common_name": species_name,
             "confidence": round(confidence, 3),
+            "detection_confidence": round(detection_confidence, 3),
+            "match_confidence": round(match_confidence, 3),
             "is_new": is_new,
             "estimated_size_cm": round(float(estimated_size), 1),
             "rarity": rarity,

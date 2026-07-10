@@ -7,40 +7,89 @@ Run with: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 import logging
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.config import settings
-from app.routers import identify
+from app.middleware.correlation import CorrelationFilter, CorrelationMiddleware
+from app.routers import identify, jobs
 
 # ─── Logging Configuration ───────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    format="%(asctime)s  %(levelname)-8s  [%(correlation_id)s]  %(name)s  %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
+
+# Add CorrelationFilter to the root logger so all loggers inherit it
+_correlation_filter = CorrelationFilter()
+logging.getLogger().addFilter(_correlation_filter)
+
 logger = logging.getLogger("fishdex")
+
+# ─── Rate limiter (slowapi) ─────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+
+# ─── Server start time (for uptime reporting) ───────────────────────────
+_server_start_time: float = 0.0
+
+# ─── Simple request counter ─────────────────────────────────────────────
+_request_count: int = 0
+
+
+def get_server_start_time() -> float:
+    """Return the server start epoch timestamp."""
+    return _server_start_time
+
+
+def get_request_count() -> int:
+    """Return the total number of requests served."""
+    return _request_count
+
+
+def increment_request_count() -> None:
+    """Increment the global request counter."""
+    global _request_count
+    _request_count += 1
 
 
 # ─── Startup / Shutdown lifecycle ────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Run startup tasks before serving and cleanup on shutdown."""
-    # Ensure server-data directory exists
-    Path(settings.server_data_dir).mkdir(parents=True, exist_ok=True)
-    logger.info("server-data directory ready: %s", settings.server_data_dir)
+    global _server_start_time
+    _server_start_time = time.time()
 
-    # Pre-load ONNX crop model so first request is fast
+    # Ensure data directories exist
+    Path(settings.server_data_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.cache_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.embeddings_db_path).parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Data directories ready: %s", settings.server_data_dir)
+
+    # Pre-load ONNX crop model (legacy)
     try:
         from app.services.crop_service import get_crop_service
         crop = get_crop_service()
-        logger.info("ONNX crop model loaded: %s (available=%s)", settings.onnx_model_path, crop.available)
+        logger.info("Legacy ONNX crop model: available=%s", crop.available)
     except Exception as exc:
-        logger.warning("Could not pre-load ONNX model: %s", exc)
+        logger.warning("Could not pre-load legacy ONNX model: %s", exc)
+
+    # Pre-load new OBB detector (v2)
+    try:
+        from app.services.detector_service import get_detector_service
+        detector = get_detector_service()
+        logger.info("OBB Detector model: available=%s", detector.available)
+    except Exception as exc:
+        logger.warning("Could not pre-load OBB detector: %s", exc)
 
     logger.info(
         "═══ FishDex AI Server v2.0.0 started ═══  "
@@ -65,6 +114,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Rate limiter — store on app.state so routers can access it
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── Correlation ID middleware (outermost — added first, runs last) ───────
+app.add_middleware(CorrelationMiddleware)
+
 # CORS — allow ALL origins so the phone app can connect from any IP
 app.add_middleware(
     CORSMiddleware,
@@ -74,8 +130,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register router
+# Register routers
 app.include_router(identify.router, prefix="/api/v1", tags=["Identification"])
+app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs"])
 
 
 # ─── Root endpoints ─────────────────────────────────────────────────────
@@ -85,17 +142,35 @@ async def health_check() -> dict:
     Quick health check for Docker / load balancers.
     For detailed info use /api/v1/health/detailed.
     """
+    increment_request_count()
+
+    uptime_seconds = round(time.time() - _server_start_time, 1) if _server_start_time else 0.0
+
+    # Model status
     try:
         from app.services.crop_service import get_crop_service
         model_loaded = get_crop_service().available
     except Exception:
         model_loaded = False
 
+    # Embedding service status (may be added later)
+    embedding_status = "unknown"
+    try:
+        from app.services.embedding_service import get_embedding_service  # noqa: F401
+        embedding_status = "available"
+    except ImportError:
+        embedding_status = "not_installed"
+    except Exception:
+        embedding_status = "error"
+
     return {
         "status": "healthy",
         "service": "fishdex-ai-server",
         "version": "2.0.0",
+        "uptime_seconds": uptime_seconds,
         "model_loaded": model_loaded,
+        "embedding_service": embedding_status,
+        "request_count": _request_count,
     }
 
 

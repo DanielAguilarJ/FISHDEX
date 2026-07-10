@@ -1,0 +1,70 @@
+# =============================================================================
+# FishDex - Caddy HTTPS Reverse Proxy
+# =============================================================================
+# Reverse-proxies to the FastAPI AI server with automatic TLS,
+# security headers, and a 50 MB request body limit.
+# =============================================================================
+
+{
+	# Global options
+	email {$TLS_EMAIL:admin@fishdex.app}
+
+	# JSON structured logging
+	log {
+		output stdout
+		format json
+	}
+}
+
+{$AI_DOMAIN::443} {
+	# -------------------------------------------------------------------------
+	# TLS – use internal (self-signed) CA for local/dev,
+	# automatic Let's Encrypt when AI_DOMAIN is a real FQDN.
+	# -------------------------------------------------------------------------
+	tls {$TLS_EMAIL:admin@fishdex.app} {
+		on_demand
+	}
+
+	# -------------------------------------------------------------------------
+	# Security headers
+	# -------------------------------------------------------------------------
+	header {
+		Strict-Transport-Security  "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options     "nosniff"
+		X-Frame-Options            "DENY"
+		X-XSS-Protection           "1; mode=block"
+		Referrer-Policy            "strict-origin-when-cross-origin"
+		Content-Security-Policy    "default-src 'self'"
+		-Server
+	}
+
+	# -------------------------------------------------------------------------
+	# Request body limit – 50 MB (for video uploads)
+	# -------------------------------------------------------------------------
+	request_body {
+		max_size 50MB
+	}
+
+	# -------------------------------------------------------------------------
+	# Reverse proxy to AI server
+	# -------------------------------------------------------------------------
+	reverse_proxy ai-server:8000 {
+		# Health-check the upstream
+		health_uri    /health
+		health_interval 30s
+		health_timeout  10s
+
+		# Pass original client info
+		header_up X-Real-IP         {remote_host}
+		header_up X-Forwarded-For   {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# -------------------------------------------------------------------------
+	# Access log
+	# -------------------------------------------------------------------------
+	log {
+		output stdout
+		format json
+	}
+}

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../data/repositories/identification_job_repository.dart';
 import '../../../data/services/identify_service.dart';
 import '../../../data/services/role_guard_service.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -13,9 +14,11 @@ import 'result_screen.dart';
 /// Pantalla de carga mientras se identifica el pez
 /// Muestra animación tipo "escaneando" y luego navega al resultado
 class IdentifyingScreen extends ConsumerStatefulWidget {
-  final String videoPath;
+  final String? jobId;
+  @Deprecated('Use jobId-based flow')
+  final String? videoPath;
 
-  const IdentifyingScreen({super.key, required this.videoPath});
+  const IdentifyingScreen({super.key, this.jobId, this.videoPath});
 
   @override
   ConsumerState<IdentifyingScreen> createState() => _IdentifyingScreenState();
@@ -87,6 +90,53 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
   }
 
   Future<void> _startIdentification() async {
+    if (widget.jobId != null) {
+      await _watchJob(widget.jobId!);
+    } else if (widget.videoPath != null) {
+      // Legacy flow - kept for backward compatibility
+      await _legacyIdentify(widget.videoPath!);
+    }
+  }
+
+  Future<void> _watchJob(String jobId) async {
+    final jobRepo = ref.read(identificationJobRepositoryProvider);
+    
+    await for (final jobData in jobRepo.pollJob(jobId)) {
+      if (!mounted) return;
+      
+      final status = jobData['status'] as String?;
+      
+      if (status == JobStatus.completed) {
+        // Navigate to result
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ResultScreen(jobData: jobData),
+            ),
+          );
+        }
+        return;
+      } else if (status == JobStatus.needsReview) {
+        // Navigate to manual form
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ResultScreen(jobData: jobData),
+            ),
+          );
+        }
+        return;
+      } else if (status == JobStatus.failed) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = jobData['error_message'] as String? ?? 'Processing failed';
+        });
+        return;
+      }
+    }
+  }
+
+  Future<void> _legacyIdentify(String videoPath) async {
     if (!mounted) return;
     final l10n = context.l10n;
     try {
@@ -106,7 +156,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       final location = ref.read(userLocationProvider).valueOrNull;
       final metadata = ref.read(captureMetadataProvider);
       final result = await service.identifyFish(
-        videoPath: widget.videoPath,
+        videoPath: videoPath,
         areaCode: metadata.areaCode ?? '401 001',
         fishermanId: authUser?.$id ?? 'anonymous',
         userRole: ref.read(currentUserRoleProvider).valueOrNull?.role.name ?? 'fisherman',

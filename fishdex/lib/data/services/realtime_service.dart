@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/providers/appwrite_providers.dart';
 
 // =============================================================================
 // MODELOS DE EVENTOS REALTIME
@@ -393,20 +394,6 @@ class RealtimeService {
 // =============================================================================
 // PROVIDERS DE RIVERPOD
 // =============================================================================
-
-/// Provider del cliente Appwrite (debe ser inicializado en la app)
-final appwriteClientProvider = Provider<Client>((ref) {
-  final client = Client()
-      .setEndpoint(AppConstants.appwriteEndpoint)
-      .setProject(AppConstants.appwriteProjectId);
-  return client;
-});
-
-/// Provider de Realtime de Appwrite
-final appwriteRealtimeProvider = Provider<Realtime>((ref) {
-  final client = ref.watch(appwriteClientProvider);
-  return Realtime(client);
-});
 
 /// Provider del ID del usuario actual (se actualiza al hacer login)
 final currentUserIdProvider = StateProvider<String>((ref) => '');

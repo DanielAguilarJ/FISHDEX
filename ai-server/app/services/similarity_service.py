@@ -4,8 +4,9 @@ FishDex AI Server - Similarity Service
 Step 4 of the pipeline: compare cropped frames of a new fish
 against stored frames of existing fish profiles.
 
-Current implementation: HSV histogram correlation (cv2.compareHist).
-Future: replace with Mehdi's embedding-based cosine similarity.
+Implementation: ResNet50 embeddings + cosine similarity.
+Pre-computed embeddings are loaded from .npy files when available,
+avoiding redundant extraction on every comparison.
 """
 
 import logging
@@ -15,16 +16,18 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from app.services.embedding_service import get_embedding_service
+
 logger = logging.getLogger(__name__)
 
 
 class SimilarityService:
-    """Compare fish images using histogram-based similarity (placeholder for future embeddings)."""
+    """Compare fish images using ResNet50 embedding cosine similarity."""
 
     def __init__(self) -> None:
-        """Initialize. Future: load Mehdi's embedding model here."""
-        self._hist_method = cv2.HISTCMP_CORREL  # 1.0 = identical, 0.0 = no correlation
-        logger.info("SimilarityService initialized (histogram mode)")
+        """Initialize. The EmbeddingService is accessed via its singleton."""
+        self._emb_service = get_embedding_service()
+        logger.info("SimilarityService initialized (resnet50_cosine mode)")
 
     # ------------------------------------------------------------------
     # public API
@@ -36,39 +39,39 @@ class SimilarityService:
         """
         Compare new cropped frames against an existing fish's stored frames.
 
-        Computes pairwise HSV histogram correlation between every new frame
-        and every stored frame, then returns the average of the per-new-frame
-        best matches.
+        If a pre-computed embeddings.npy exists in existing_images_dir, it is
+        loaded directly.  Otherwise, stored frames are loaded and their
+        embedding is computed on the fly.
 
         Args:
             new_frames:          List of BGR numpy arrays (the new catch).
             existing_images_dir: Path to an existing fish's images/ folder.
 
         Returns:
-            Similarity score between 0.0 and 1.0.
+            Cosine similarity score between 0.0 and 1.0.
         """
-        stored_frames = self._load_frames(existing_images_dir)
-        if not stored_frames or not new_frames:
+        if not new_frames:
             return 0.0
 
-        new_hists = [self._compute_hist(f) for f in new_frames]
-        stored_hists = [self._compute_hist(f) for f in stored_frames]
+        # Compute embedding for the new catch
+        new_embedding = self._emb_service.extract_embeddings(new_frames)
 
-        # For each new frame, find its best match among stored frames
-        best_scores: list[float] = []
-        for nh in new_hists:
-            best = max(
-                cv2.compareHist(nh, sh, self._hist_method) for sh in stored_hists
-            )
-            best_scores.append(max(0.0, best))  # clamp negatives
+        # Try to load pre-computed embedding for the existing fish
+        stored_embedding = self._load_embedding(existing_images_dir)
+        if stored_embedding is None:
+            # Fall back to extracting from stored frames
+            stored_frames = self._load_frames(existing_images_dir)
+            if not stored_frames:
+                return 0.0
+            stored_embedding = self._emb_service.extract_embeddings(stored_frames)
 
-        return float(np.mean(best_scores)) if best_scores else 0.0
+        return self._emb_service.compute_cosine_similarity(new_embedding, stored_embedding)
 
     def find_best_match(
         self,
         new_frames: list[np.ndarray],
         subset: list[dict],
-        threshold: float = 0.70,
+        threshold: float = 0.60,
     ) -> tuple[Optional[str], float]:
         """
         Find the best matching fish in the comparison subset.
@@ -76,7 +79,7 @@ class SimilarityService:
         Args:
             new_frames: List of cropped BGR frames of the new fish.
             subset:     List of fish profile dicts from SubsetService.
-            threshold:  Minimum similarity to consider a match.
+            threshold:  Minimum cosine similarity to consider a match.
 
         Returns:
             (fish_id, similarity_score) if a match is found above threshold,
@@ -84,6 +87,9 @@ class SimilarityService:
         """
         if not subset or not new_frames:
             return None, 0.0
+
+        # Pre-compute embedding for the new catch once
+        new_embedding = self._emb_service.extract_embeddings(new_frames)
 
         best_id: Optional[str] = None
         best_score: float = 0.0
@@ -93,7 +99,19 @@ class SimilarityService:
             if images_dir is None:
                 continue
 
-            score = self.compute_similarity(new_frames, Path(images_dir))
+            images_dir = Path(images_dir)
+
+            # Try pre-computed embedding, fall back to frame extraction
+            stored_embedding = self._load_embedding(images_dir)
+            if stored_embedding is None:
+                stored_frames = self._load_frames(images_dir)
+                if not stored_frames:
+                    continue
+                stored_embedding = self._emb_service.extract_embeddings(stored_frames)
+
+            score = self._emb_service.compute_cosine_similarity(
+                new_embedding, stored_embedding
+            )
             logger.debug(
                 "Similarity %s vs %s: %.4f", "new_fish", profile["fish_id"], score
             )
@@ -114,22 +132,24 @@ class SimilarityService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _compute_hist(frame: np.ndarray) -> np.ndarray:
+    def _load_embedding(images_dir: Path) -> Optional[np.ndarray]:
         """
-        Compute a normalised HSV histogram for a BGR frame.
+        Load a pre-computed embedding from images_dir/embeddings.npy.
 
         Args:
-            frame: BGR image as numpy array.
+            images_dir: Path to the images/ folder.
 
         Returns:
-            Flattened, normalised histogram array.
+            2048-d numpy vector if file exists, None otherwise.
         """
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        hist = cv2.calcHist(
-            [hsv], [0, 1], None, [50, 60], [0, 180, 0, 256]
-        )
-        cv2.normalize(hist, hist)
-        return hist
+        emb_path = images_dir / "embeddings.npy"
+        if emb_path.is_file():
+            try:
+                embedding = np.load(str(emb_path))
+                return embedding.astype(np.float32)
+            except Exception as exc:
+                logger.warning("Failed to load %s: %s", emb_path, exc)
+        return None
 
     @staticmethod
     def _load_frames(images_dir: Path) -> list[np.ndarray]:
