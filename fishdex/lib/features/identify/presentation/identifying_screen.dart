@@ -111,7 +111,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (_) => ResultScreen(jobData: jobData),
+              builder: (_) => ResultScreen.fromJobData(jobData: jobData),
             ),
           );
         }
@@ -121,7 +121,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (_) => ResultScreen(jobData: jobData),
+              builder: (_) => ResultScreen.fromJobData(jobData: jobData),
             ),
           );
         }

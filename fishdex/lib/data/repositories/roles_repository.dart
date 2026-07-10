@@ -43,14 +43,18 @@ class RolesRepository {
   /// Guarda el rol del usuario al registrarse.
   /// Para fisherman: approval_status = approved (acceso inmediato)
   /// Para researcher: approval_status = pending (requiere aprobación)
-  Future<void> saveUserRole(UserRoleModel roleModel) async {
+  Future<void> saveUserRole(UserRoleModel roleModel, {String? name}) async {
     try {
       // Intentar actualizar si ya existe
       await _databases.updateDocument(
         databaseId: AppConstants.databaseId,
         collectionId: AppConstants.usersCollection,
         documentId: roleModel.userId,
-        data: roleModel.toMap(),
+        data: {
+          ...roleModel.toMap(),
+          if (name != null) 'name': name,
+          if (name != null) 'username': name,
+        },
       );
     } on AppwriteException catch (e) {
       if (e.code == 404) {
@@ -61,6 +65,8 @@ class RolesRepository {
           documentId: roleModel.userId,
           data: {
             ...roleModel.toMap(),
+            if (name != null) 'name': name,
+            if (name != null) 'username': name,
             'createdAt': DateTime.now().toIso8601String(),
             'total_xp': 0,
             'level': 1,

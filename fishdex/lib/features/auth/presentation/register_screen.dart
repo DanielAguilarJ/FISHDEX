@@ -101,7 +101,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           reason: _reasonController.text.trim(),
         );
 
-        await rolesRepo.saveUserRole(roleModel);
+        await rolesRepo.saveUserRole(roleModel, name: _nameController.text.trim());
 
         // Crear solicitud de aprobación
         await rolesRepo.requestResearcherAccess(
@@ -124,7 +124,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         final user = await appwriteAccount.get();
 
         final roleModel = UserRoleModel.fisherman(user.$id);
-        await rolesRepo.saveUserRole(roleModel);
+        await rolesRepo.saveUserRole(roleModel, name: _nameController.text.trim());
 
         // Guardar rol en prefs
         await prefs.setString('cached_user_role', 'fisherman');

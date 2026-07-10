@@ -230,8 +230,8 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
         rawVideoFileId: videoFileId,
         areaCode: captureMetadata?.areaCode,
         areaName: captureMetadata?.areaName,
-        latitude: captureMetadata?.latitude,
-        longitude: captureMetadata?.longitude,
+        latitude: captureMetadata?.lat,
+        longitude: captureMetadata?.lon,
       );
 
       // 3. Trigger AI Server processing (fire-and-forget)
