@@ -8,8 +8,11 @@ Example: FISHDEX_SIMILARITY_THRESHOLD=0.80
 
 import logging
 import os
-
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 

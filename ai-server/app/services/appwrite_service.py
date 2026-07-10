@@ -12,6 +12,18 @@ from appwrite.services.databases import Databases
 from appwrite.services.storage import Storage
 from appwrite.input_file import InputFile
 from appwrite.id import ID
+import appwrite.client
+
+# Monkeypatch Appwrite Python SDK Client to fix GET request body bug in v6.1.0
+_original_call = appwrite.client.Client.call
+
+def _patched_call(self, method, path='', headers=None, params=None, response_type='json'):
+    if method.lower() == 'get' and headers:
+        # Case-insensitive removal of content-type for GET requests
+        headers = {k: v for k, v in headers.items() if k.lower() != 'content-type'}
+    return _original_call(self, method, path, headers, params, response_type)
+
+appwrite.client.Client.call = _patched_call
 
 from app.config import settings
 
