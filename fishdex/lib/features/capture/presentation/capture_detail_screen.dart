@@ -25,6 +25,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   CzechSpecies? _selectedSpecies;
   final _sizeController = TextEditingController();
   final _notesController = TextEditingController();
+  final _customNameController = TextEditingController();
   
   String? _selectedWeather;
   String? _selectedBite;
@@ -34,6 +35,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   void dispose() {
     _sizeController.dispose();
     _notesController.dispose();
+    _customNameController.dispose();
     super.dispose();
   }
 
@@ -69,6 +71,9 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       if (_notesController.text.trim().isNotEmpty) {
         captureMetadataNotifier.setFishState(_notesController.text.trim());
       }
+      if (_customNameController.text.trim().isNotEmpty) {
+        captureMetadataNotifier.setCustomName(_customNameController.text.trim());
+      }
 
       // 1. Upload video and register job directly to local SQLite
       final createdJobId = await jobRepo.uploadAndStartJob(
@@ -80,6 +85,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         longitude: captureMetadata.lon,
         speciesSlug: _selectedSpecies?.slug,
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        weather: _selectedWeather,
+        bite: _selectedBite,
+        sizeCm: parsedSize,
+        fishState: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        customName: _customNameController.text.trim().isEmpty ? null : _customNameController.text.trim(),
       );
 
       // 2. Trigger processing pipeline on local AI Server
@@ -204,6 +214,17 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                         DropdownMenuItem(value: 'corn', child: Text('Maíz')),
                         DropdownMenuItem(value: 'other', child: Text('Otro')),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Nombre personalizado
+                    TextFormField(
+                      controller: _customNameController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre personalizado (opcional)',
+                        prefixIcon: Icon(Icons.badge, color: AppTheme.accentBlue),
+                      ),
                     ),
                     const SizedBox(height: 16),
 

@@ -100,6 +100,10 @@ async def lifespan(app: FastAPI):
     Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.cache_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.embeddings_db_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(settings.private_data_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.fish_documents_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.fish_media_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.job_artifacts_dir).mkdir(parents=True, exist_ok=True)
     logger.info("Data directories ready: %s", settings.server_data_dir)
 
     # Pre-load ONNX crop model (legacy)

@@ -78,6 +78,14 @@ def init_db():
         "is_new_fish": "INTEGER",
         "xp_earned": "INTEGER",
         "error_message": "TEXT",
+        "weather": "TEXT",
+        "bite": "TEXT",
+        "size_cm": "REAL",
+        "fish_state": "TEXT",
+        "custom_name": "TEXT",
+        "artifact_dir": "TEXT",
+        "document_filename": "TEXT",
+        "preview_filename": "TEXT",
     }
     _ensure_columns(cursor, "identification_jobs", _identification_job_columns)
     
@@ -104,6 +112,24 @@ def init_db():
             location_lng REAL
         )
     """)
+
+    _fish_sightings_columns = {
+        "area_name": "TEXT",
+        "weather": "TEXT",
+        "bite": "TEXT",
+        "size_cm": "REAL",
+        "fish_state": "TEXT",
+        "custom_name": "TEXT",
+        "notes": "TEXT",
+        "artifact_dir": "TEXT",
+        "document_filename": "TEXT",
+        "preview_filename": "TEXT",
+        "detection_confidence": "REAL",
+        "classification_confidence": "REAL",
+        "match_confidence": "REAL",
+        "catch_number": "INTEGER",
+    }
+    _ensure_columns(cursor, "fish_sightings", _fish_sightings_columns)
     
     # 4. Fish Individuals Table
     cursor.execute("""
@@ -121,6 +147,13 @@ def init_db():
             best_frame_filename TEXT
         )
     """)
+
+    _fish_individuals_columns = {
+        "area_name": "TEXT",
+        "latest_sighting_id": "TEXT",
+        "latest_document_filename": "TEXT",
+    }
+    _ensure_columns(cursor, "fish_individuals", _fish_individuals_columns)
     
     # 5. User Stats Table
     cursor.execute("""

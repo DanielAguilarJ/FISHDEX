@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     temp_dir: str = "data/temp"
     cache_dir: str = "data/cache"
     embeddings_db_path: str = "data/embeddings/fishdex_embeddings.sqlite"
+    private_data_dir: str = "data/private"
+    fish_documents_dir: str = "data/private/fish_documents"
+    fish_media_dir: str = "data/storage/fish_media"
+    job_artifacts_dir: str = "data/storage/jobs"
 
     # ── Legacy: ONNX model (kept for backward compat with old crop_service)
     onnx_model_path: str = "norway fish/fin_detector_best.onnx"

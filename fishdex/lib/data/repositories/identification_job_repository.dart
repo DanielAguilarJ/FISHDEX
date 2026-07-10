@@ -33,6 +33,11 @@ class IdentificationJobRepository {
     double? longitude,
     String? speciesSlug,
     String? notes,
+    String? weather,
+    String? bite,
+    double? sizeCm,
+    String? fishState,
+    String? customName,
   }) async {
     final fields = <String, String>{
       'user_id': userId,
@@ -43,6 +48,11 @@ class IdentificationJobRepository {
     if (longitude != null) fields['longitude'] = longitude.toString();
     if (speciesSlug != null) fields['species_slug'] = speciesSlug;
     if (notes != null) fields['notes'] = notes;
+    if (weather != null) fields['weather'] = weather;
+    if (bite != null) fields['bite'] = bite;
+    if (sizeCm != null) fields['size_cm'] = sizeCm.toString();
+    if (fishState != null) fields['fish_state'] = fishState;
+    if (customName != null) fields['custom_name'] = customName;
 
     final response = await _apiClient.multipartPost(
       '/api/v1/jobs/upload',

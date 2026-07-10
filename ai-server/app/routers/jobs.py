@@ -45,6 +45,11 @@ async def upload_job_video(
     longitude: Optional[float] = Form(default=None),
     species_slug: Optional[str] = Form(default=None),
     notes: Optional[str] = Form(default=None),
+    weather: Optional[str] = Form(default=None),
+    bite: Optional[str] = Form(default=None),
+    size_cm: Optional[float] = Form(default=None),
+    fish_state: Optional[str] = Form(default=None),
+    custom_name: Optional[str] = Form(default=None),
     x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
     authorization: Optional[str] = Header(default=None),
 ):
@@ -78,11 +83,15 @@ async def upload_job_video(
         cursor.execute(
             """INSERT INTO identification_jobs (
                 id, user_id, status, raw_video_filename, area_code, area_name, 
-                latitude, longitude, species_slug, notes, created_at
-            ) VALUES (?, ?, 'uploaded', ?, ?, ?, ?, ?, ?, ?, ?)""",
+                latitude, longitude, species_slug, notes,
+                weather, bite, size_cm, fish_state, custom_name,
+                created_at
+            ) VALUES (?, ?, 'uploaded', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 job_id, user_id, raw_video_filename, area_code, area_name,
-                latitude, longitude, species_slug, notes, now_str
+                latitude, longitude, species_slug, notes,
+                weather, bite, size_cm, fish_state, custom_name,
+                now_str
             )
         )
         conn.commit()
