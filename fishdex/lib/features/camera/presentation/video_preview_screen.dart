@@ -11,6 +11,7 @@ import '../../../data/repositories/identification_job_repository.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camera/providers/capture_metadata_provider.dart';
 import '../../identify/presentation/identifying_screen.dart';
+import '../../capture/presentation/capture_detail_screen.dart';
 
 /// Pantalla de preview del video grabado
 /// Permite al usuario revisar el video y decidir si enviarlo o regrabarlo
@@ -192,79 +193,11 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
     );
   }
 
-  Future<void> _submitVideo(BuildContext context) async {
-    // Show loading state
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(color: AppTheme.accentBlue),
+  void _submitVideo(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CaptureDetailScreen(videoPath: widget.videoPath),
       ),
     );
-
-    try {
-      final authUser = ref.read(authStateProvider).valueOrNull;
-      if (authUser == null) {
-        if (context.mounted) Navigator.pop(context); // dismiss loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Not authenticated')),
-        );
-        return;
-      }
-
-      final mediaService = ref.read(mediaUploadServiceProvider);
-      final jobRepo = ref.read(identificationJobRepositoryProvider);
-      final captureMetadata = ref.read(captureMetadataProvider);
-
-      // 1. Upload raw video to Appwrite Storage
-      final jobId = ID.unique();
-      final videoFileId = await mediaService.uploadRawVideo(
-        videoPath: widget.videoPath,
-        userId: authUser.$id,
-        jobId: jobId,
-      );
-
-      // 2. Create identification job document
-      final createdJobId = await jobRepo.createJob(
-        userId: authUser.$id,
-        rawVideoFileId: videoFileId,
-        areaCode: captureMetadata?.areaCode,
-        areaName: captureMetadata?.areaName,
-        latitude: captureMetadata?.lat,
-        longitude: captureMetadata?.lon,
-      );
-
-      // 3. Trigger AI Server processing (fire-and-forget)
-      // Get JWT for auth
-      final account = ref.read(appwriteAccountProvider);
-      String? jwt;
-      try {
-        final jwtResponse = await account.createJWT();
-        jwt = jwtResponse.jwt;
-      } catch (_) {}
-      
-      jobRepo.triggerProcessing(jobId: createdJobId, jwt: jwt);
-
-      // 4. Navigate to identifying screen with job ID
-      if (context.mounted) {
-        Navigator.pop(context); // dismiss loading
-        Future.microtask(() {
-          if (context.mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => IdentifyingScreen(jobId: createdJobId),
-              ),
-            );
-          }
-        });
-      }
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // dismiss loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      }
-    }
   }
 }
