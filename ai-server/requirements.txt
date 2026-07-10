@@ -12,9 +12,9 @@ opencv-python-headless==4.10.0.84
 numpy==1.26.4
 Pillow==10.4.0
 
-# PyTorch (CPU only for dev, change to cu121 for GPU in production)
-torch==2.4.1
-torchvision==0.19.1
+# PyTorch (use CUDA-enabled version if already installed, or let pip install default)
+torch>=2.4.1
+torchvision>=0.19.1
 
 # ONNX Runtime for detection/classification models
 onnxruntime==1.19.2

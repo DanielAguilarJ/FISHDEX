@@ -25,8 +25,8 @@ TRAIN_RATIO = 0.8
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-SOURCE_DIR = PROJECT_ROOT / "ai-server" / "model" / "project-115-at-2026-07-10-11-36-a28e1f28"
-OUTPUT_DIR = PROJECT_ROOT / "ai-server" / "model" / "fish_obb_dataset"
+SOURCE_DIR = PROJECT_ROOT / "ai-server" / "models"
+OUTPUT_DIR = PROJECT_ROOT / "ai-server" / "models" / "fish_obb_dataset"
 
 def main():
     images_dir = SOURCE_DIR / "images"

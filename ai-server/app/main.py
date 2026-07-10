@@ -22,6 +22,15 @@ from app.middleware.correlation import CorrelationFilter, CorrelationMiddleware
 from app.routers import identify, jobs
 
 # ─── Logging Configuration ───────────────────────────────────────────────
+# Use a custom LogRecord factory to ensure 'correlation_id' is always present
+# and prevent KeyError crashes during internal uvicorn/fastapi logging
+old_factory = logging.getLogRecordFactory()
+def record_factory(*args, **kwargs):
+    record = old_factory(*args, **kwargs)
+    record.correlation_id = "-"
+    return record
+logging.setLogRecordFactory(record_factory)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  [%(correlation_id)s]  %(name)s  %(message)s",
@@ -92,7 +101,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Could not pre-load OBB detector: %s", exc)
 
     logger.info(
-        "═══ FishDex AI Server v2.0.0 started ═══  "
+        "=== FishDex AI Server v2.0.0 started ===  "
         "threshold=%.2f  radius=%.1fkm  data=%s",
         settings.similarity_threshold,
         settings.nearby_area_radius_km,
@@ -101,7 +110,7 @@ async def lifespan(app: FastAPI):
 
     yield  # ← app is running
 
-    logger.info("═══ FishDex AI Server shutting down ═══")
+    logger.info("=== FishDex AI Server shutting down ===")
 
 
 # ─── Create FastAPI app ──────────────────────────────────────────────────
