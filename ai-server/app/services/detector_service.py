@@ -64,6 +64,43 @@ def _polygon_to_bbox_xyxy(polygon: list[tuple[float, float]]) -> tuple[float, fl
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+def _nms_axis_aligned(
+    detections: list,
+    iou_threshold: float = 0.45,
+) -> list:
+    """
+    Apply axis-aligned NMS to a list of DetectionResult objects.
+    Uses cv2.dnn.NMSBoxes on the bbox_xyxy of each detection.
+    Returns the surviving subset, sorted by confidence descending.
+    """
+    if not detections:
+        return []
+
+    boxes = []
+    scores = []
+    for d in detections:
+        x1, y1, x2, y2 = d.bbox_xyxy
+        bw = max(1, int(x2 - x1))
+        bh = max(1, int(y2 - y1))
+        boxes.append([int(max(0, x1)), int(max(0, y1)), bw, bh])
+        scores.append(float(d.confidence))
+
+    indices = cv2.dnn.NMSBoxes(
+        boxes,
+        scores,
+        score_threshold=0.0,   # pre-filtered already
+        nms_threshold=iou_threshold,
+    )
+
+    if len(indices) == 0:
+        return []
+
+    flat = np.array(indices).flatten().tolist()
+    kept = [detections[i] for i in flat]
+    kept.sort(key=lambda d: d.confidence, reverse=True)
+    return kept
+
+
 class DetectorService:
     """YOLOv8 OBB fish detector using ONNX runtime with letterbox preprocessing."""
 
@@ -146,15 +183,18 @@ class DetectorService:
         """
         Parse YOLOv8 OBB ONNX output.
 
-        Standard YOLOv8-OBB ONNX export:
-          Shape [1, 5+nc, N]  (nc=num classes, N=num predictions)
-          Rows 0-4: cx, cy, w, h, angle (in 640x640 letterbox space)
-          Rows 5+: per-class confidence scores
+        Column layout is controlled by settings.detector_output_layout:
+          "xywh_conf_angle"  (default): [cx, cy, w, h, conf, angle]  ← Ultralytics YOLOv8 OBB nc=1
+          "xywh_angle_conf"           : [cx, cy, w, h, angle, conf]  ← older/custom exports
 
-        Coordinates are converted from letterbox space back to original
-        image space by subtracting padding and dividing by ratio.
+        For nc>1 (n_cols > 6) the generic format is used:
+          [cx, cy, w, h, class_scores..., angle]  (angle in last column)
+
+        All coordinates are converted from letterbox 640×640 space back to
+        original image space by removing padding and dividing by ratio.
         """
         threshold = conf_threshold if conf_threshold is not None else self.confidence_threshold
+        layout = settings.detector_output_layout  # "xywh_conf_angle" or "xywh_angle_conf"
 
         out = output[0]  # Remove batch dim
 
@@ -176,26 +216,44 @@ class DetectorService:
 
         results = []
         for pred in out:
-            cx_lb = pred[0]
-            cy_lb = pred[1]
-            w_lb = pred[2]
-            h_lb = pred[3]
-            angle = pred[4]
+            cx_lb = float(pred[0])
+            cy_lb = float(pred[1])
+            w_lb  = float(pred[2])
+            h_lb  = float(pred[3])
 
-            # Confidence: max of class scores in columns 5:
-            if n_cols == 7:
-                # Legacy format: [cx, cy, w, h, angle, conf, class_id]
-                conf = float(pred[5])
+            # ── Column layout: derive conf and angle ───────────────────────────
+            if n_cols == 6:
+                # nc=1: exactly 6 columns. Layout determined by config.
+                if layout == "xywh_angle_conf":
+                    angle = float(pred[4])
+                    conf  = float(pred[5])
+                else:
+                    # Default: Ultralytics YOLOv8 OBB nc=1
+                    # [cx, cy, w, h, conf, angle]
+                    conf  = float(pred[4])
+                    angle = float(pred[5])
+                class_id = 0
+            elif n_cols == 7:
+                # Legacy explicit: [cx, cy, w, h, angle, conf, class_id]
+                angle    = float(pred[4])
+                conf     = float(pred[5])
                 class_id = int(pred[6])
             else:
-                class_scores = pred[5:]
+                # Generic YOLO OBB nc>1: [cx, cy, w, h, class_scores..., angle]
+                class_scores = pred[4:-1]
+                angle    = float(pred[-1])
                 class_id = int(np.argmax(class_scores))
-                conf = float(class_scores[class_id])
+                conf     = float(class_scores[class_id])
 
-            if conf < threshold:
+            # ── Validity guards ────────────────────────────────────────────────
+            if not np.isfinite(conf) or conf < threshold or conf > 1.0:
+                continue
+            if not np.isfinite(angle):
+                continue
+            if w_lb <= 2.0 or h_lb <= 2.0:
                 continue
 
-            # Convert corners from letterbox 640x640 space to original image coords
+            # ── Convert corners from letterbox 640×640 space to original coords ─
             corners_lb = _obb_to_corners(cx_lb, cy_lb, w_lb, h_lb, angle)
 
             corners_orig = []
@@ -219,7 +277,12 @@ class DetectorService:
                 )
             )
 
-        results.sort(key=lambda d: d.confidence, reverse=True)
+        # ── NMS: remove duplicate / overlapping raw predictions ────────────────
+        results = _nms_axis_aligned(
+            results,
+            iou_threshold=settings.detector_nms_iou_threshold,
+        )
+        # _nms_axis_aligned already sorts by confidence descending
         return results
 
     def detect(self, frame: np.ndarray, conf_threshold: float | None = None) -> list[DetectionResult]:

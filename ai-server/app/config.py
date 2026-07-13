@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     similarity_threshold: float = 0.70
     nearby_area_radius_km: float = 5.0
 
+    # ── Detector output layout ───────────────────────────────────────
+    # Ultralytics YOLOv8 OBB nc=1: [cx, cy, w, h, conf, angle]  → "xywh_conf_angle"
+    # Alternative (older exports): [cx, cy, w, h, angle, conf]  → "xywh_angle_conf"
+    # Override with FISHDEX_DETECTOR_OUTPUT_LAYOUT=xywh_angle_conf if needed.
+    detector_output_layout: str = "xywh_conf_angle"
+    detector_nms_iou_threshold: float = 0.45
+
     # ── Video/Frame processing ───────────────────────────────────────
     max_frames_to_save: int = 5
     max_frames_to_extract: int = 10

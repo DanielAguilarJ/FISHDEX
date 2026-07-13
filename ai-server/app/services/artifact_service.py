@@ -323,10 +323,17 @@ def save_fish_capture_artifacts(
     if all_dataset_detections:
         for idx, (d_frame, d_det, d_conf) in enumerate(all_dataset_detections):
             try:
-                # --- OBB-rotated crop ---
-                obb_crop = crop_obb_rotated(d_frame, d_det)
+                # --- OBB-rotated crop (strict — no center-crop fallback) ---
+                obb_crop = crop_obb_rotated(d_frame, d_det, pad_frac=0.03)
                 if obb_crop is None or obb_crop.size == 0:
-                    obb_crop = crop_bbox_aligned(d_frame, d_det)
+                    obb_crop = crop_bbox_aligned_strict(d_frame, d_det, pad_frac=0.03)
+
+                if obb_crop is None or obb_crop.size == 0:
+                    logger.warning(
+                        "Dataset frame %d: strict crop failed (no valid OBB/bbox), skipping", idx
+                    )
+                    continue
+
                 crop_rel = f"{rel_base}/dataset/crop_{idx:03d}.jpg"
                 crop_abs = Path(settings.server_data_dir) / "storage" / crop_rel
                 _write_jpg(crop_abs, obb_crop)
