@@ -1206,7 +1206,9 @@
             }));
 
             if (coords.length === 0) {
-                return 'about:blank';
+                // No GPS data — show a styled placeholder instead of a blank page
+                const noGpsHtml = '<!DOCTYPE html><html><head><style>*{margin:0;padding:0}body{background:#02060c;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px;font-family:system-ui,sans-serif}.icon{font-size:32px;opacity:.35}.msg{color:rgba(255,255,255,.3);font-size:13px;text-align:center;line-height:1.7}</style></head><body><div class="icon">&#128205;</div><div class="msg">Sin coordenadas GPS<br>Esta captura no tiene ubicaci\u00f3n registrada</div></body></html>';
+                return 'data:text/html;charset=utf-8,' + encodeURIComponent(noGpsHtml);
             }
 
             const center = coords[coords.length - 1]; // Latest catch as center

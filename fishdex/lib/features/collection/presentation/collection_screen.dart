@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/czech_fish_catalog.dart';
+import '../../../data/models/fish_capture.dart';
+import '../../../data/repositories/captures_repository.dart';
 import '../../../widgets/pressable_scale.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -18,7 +17,7 @@ class CollectionFish {
   final int timesSpotted;
   final DateTime firstSeen;
   final bool isDiscovered;
-  final String? imageBase64;
+  final String? imageBase64; // URL or base64 string
   final String? czechName;
   final String? latinName;
 
@@ -36,62 +35,68 @@ class CollectionFish {
   });
 }
 
-/// Provider de la colección del usuario — carga desde fish_individuals de Appwrite
-/// y cruza con el catálogo de 45 especies checas para mostrar la colección completa.
+/// Provider de la colección del usuario — carga desde el servidor local (SQLite)
+/// a través del CapturesRepository, y cruza con el catálogo de 45 especies checas.
 final collectionProvider = FutureProvider<List<CollectionFish>>((ref) async {
-  // 1. Obtener capturas reales del usuario desde Appwrite
   List<CollectionFish> discovered = [];
 
   try {
-    final prefs = await SharedPreferences.getInstance();
-    final isDemoMode = prefs.getBool('is_demo_mode') ?? false;
+    final authUser = ref.read(authStateProvider).valueOrNull;
+    if (authUser != null) {
+      final capturesRepo = ref.read(capturesRepositoryProvider);
+      final captures = await capturesRepo.getCapturesForUser(
+        userId: authUser.$id,
+        userRole: 'fisherman',
+        limit: 200,
+      );
 
-    if (!isDemoMode) {
-      final authUser = ref.read(authStateProvider).valueOrNull;
-      if (authUser != null) {
-        final databases = ref.read(appwriteDatabasesProvider);
-        final response = await databases.listDocuments(
-          databaseId: AppConstants.databaseId,
-          collectionId: AppConstants.fishIndividualsCollection,
-          queries: [
-            'equal("first_seen_by", ["${authUser.$id}"])',
-            'orderDesc("\$createdAt")',
-            'limit(100)',
-          ],
-        );
+      // Deduplicate by fishId — keep the entry with the latest capturedAt and
+      // count total sightings per individual fish.
+      final Map<String, FishCapture> fishMap = {};
+      final Map<String, int> sightingCount = {};
 
-        discovered = response.documents.map((doc) {
-          final data = doc.data;
-          final speciesName = data['species'] as String? ?? 'Desconocido';
-          final catalogMatch = findCzechSpeciesByAnyName(speciesName);
-          return CollectionFish(
-            fishId: doc.$id,
-            species: catalogMatch?.englishName ?? speciesName,
-            rarity: data['rarity'] as String? ?? catalogMatch?.rarity ?? 'common',
-            sizeCm: (data['estimated_size_cm'] as num?)?.toDouble() ?? 0.0,
-            timesSpotted: (data['total_sightings'] as num?)?.toInt() ?? 1,
-            firstSeen: data['first_seen_date'] != null
-                ? DateTime.tryParse(data['first_seen_date'] as String) ??
-                    DateTime.now()
-                : DateTime.now(),
-            isDiscovered: true,
-            czechName: catalogMatch?.czechName,
-            latinName: catalogMatch?.latinName,
-          );
-        }).toList();
+      for (final capture in captures) {
+        final id = capture.fishId;
+        sightingCount[id] = (sightingCount[id] ?? 0) + 1;
+        if (!fishMap.containsKey(id) ||
+            capture.capturedAt.isAfter(fishMap[id]!.capturedAt)) {
+          fishMap[id] = capture;
+        }
       }
+
+      // Convert FishCapture → CollectionFish
+      discovered = fishMap.entries.map((entry) {
+        final capture = entry.value;
+        final catalogMatch = findCzechSpeciesByAnyName(capture.species);
+
+        return CollectionFish(
+          fishId: capture.fishId,
+          species: catalogMatch?.englishName ?? capture.species,
+          rarity: capture.rarity,
+          sizeCm: capture.lengthCm ?? 0.0,
+          timesSpotted: sightingCount[capture.fishId] ?? 1,
+          firstSeen: capture.capturedAt,
+          isDiscovered: true,
+          imageBase64: capture.imageUrl,
+          czechName: catalogMatch?.czechName,
+          latinName: capture.scientificName ?? catalogMatch?.latinName,
+        );
+      }).toList();
+
+      // Newest first
+      discovered.sort((a, b) => b.firstSeen.compareTo(a.firstSeen));
     }
   } catch (e) {
-    // Si falla Appwrite, seguimos con discovered vacío
+    debugPrint('❌ Collection load error: $e');
   }
 
-  // 2. Cruzar con el catálogo: las especies no descubiertas se añaden como siluetas
-  final discoveredNames = discovered
+  // 2. Cross with catalog: undiscovered species shown as silhouettes
+  final discoveredSpecies = discovered
       .map((f) => f.species.toLowerCase())
       .toSet();
 
   final undiscovered = czechFishCatalog
-      .where((sp) => !discoveredNames.contains(sp.englishName.toLowerCase()))
+      .where((sp) => !discoveredSpecies.contains(sp.englishName.toLowerCase()))
       .map((sp) => CollectionFish(
             fishId: 'FISH-????',
             species: sp.englishName,
@@ -105,7 +110,6 @@ final collectionProvider = FutureProvider<List<CollectionFish>>((ref) async {
           ))
       .toList();
 
-  // 3. Descubiertos primero, luego no descubiertos
   return [...discovered, ...undiscovered];
 });
 
@@ -313,7 +317,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Imagen del pez
+            // Imagen del pez (annotated preview from server or placeholder)
             Expanded(
               flex: 3,
               child: Container(
@@ -325,16 +329,38 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   color: Colors.black.withOpacity(0.3),
                 ),
                 child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Center(
-                      child: Icon(
-                        Icons.phishing,
-                        size: 48,
-                        color: AppTheme.getRarityColor(fish.rarity)
-                            .withOpacity(0.6),
+                    // Fish image (URL from server) or placeholder icon
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(15),
                       ),
+                      child: fish.imageBase64 != null &&
+                              fish.imageBase64!.isNotEmpty
+                          ? Image.network(
+                              fish.imageBase64!,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.center,
+                              errorBuilder: (_, __, ___) => Center(
+                                child: Icon(
+                                  Icons.phishing,
+                                  size: 48,
+                                  color: AppTheme.getRarityColor(fish.rarity)
+                                      .withOpacity(0.6),
+                                ),
+                              ),
+                            )
+                          : Center(
+                              child: Icon(
+                                Icons.phishing,
+                                size: 48,
+                                color: AppTheme.getRarityColor(fish.rarity)
+                                    .withOpacity(0.6),
+                              ),
+                            ),
                     ),
-                    // Badge de veces visto
+                    // Overlay: times spotted badge (top-right)
                     Positioned(
                       top: 8,
                       right: 8,
@@ -356,7 +382,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         ),
                       ),
                     ),
-                    // Indicador de rareza
+                    // Rarity dot (top-left)
                     Positioned(
                       top: 8,
                       left: 8,
@@ -403,7 +429,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                       Text(
                         fish.latinName!,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(AppTheme.opacityMuted),
+                          color: Colors.white
+                              .withOpacity(AppTheme.opacityMuted),
                           fontSize: 11,
                           fontStyle: FontStyle.italic,
                         ),
@@ -419,7 +446,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${fish.sizeCm} cm',
+                          '${fish.sizeCm > 0 ? fish.sizeCm.toStringAsFixed(0) : '?'} cm',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.6),
                             fontSize: 11,
@@ -455,7 +482,6 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Silueta del pez con más presencia
           Container(
             width: 64,
             height: 64,
@@ -527,28 +553,57 @@ class _FishDetailSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header del pez
+                  // Fish image (large, annotated preview)
+                  if (fish.imageBase64 != null && fish.imageBase64!.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      height: 200,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppTheme.getRarityColor(fish.rarity)
+                              .withOpacity(0.4),
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: Image.network(
+                          fish.imageBase64!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Icon(
+                              Icons.phishing,
+                              size: 64,
+                              color: AppTheme.getRarityColor(fish.rarity)
+                                  .withOpacity(0.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Header
                   Row(
                     children: [
-                      // Icono grande
                       Container(
-                        width: 64,
-                        height: 64,
+                        width: 56,
+                        height: 56,
                         decoration: BoxDecoration(
                           color: AppTheme.getRarityColor(fish.rarity)
                               .withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(
                           Icons.phishing,
-                          size: 32,
+                          size: 28,
                           color: AppTheme.getRarityColor(fish.rarity),
                         ),
                       ),
@@ -561,16 +616,25 @@ class _FishDetailSheet extends StatelessWidget {
                               fish.species,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 22,
+                                fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            if (fish.latinName != null)
+                              Text(
+                                fish.latinName!,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 13,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            const SizedBox(height: 2),
                             Text(
                               fish.fishId,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
-                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.4),
+                                fontSize: 12,
                                 fontFamily: 'monospace',
                               ),
                             ),
@@ -580,18 +644,29 @@ class _FishDetailSheet extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Stats
                   Row(
                     children: [
-                      _buildStat(context.l10n.collectionSizeLabel, '${fish.sizeCm} cm'),
-                      _buildStat(context.l10n.collectionSightingsLabel, '${fish.timesSpotted}'),
-                      _buildStat(context.l10n.collectionRarityLabel, fish.rarity.toUpperCase()),
+                      _buildStat(
+                        context.l10n.collectionSizeLabel,
+                        fish.sizeCm > 0
+                            ? '${fish.sizeCm.toStringAsFixed(0)} cm'
+                            : '-',
+                      ),
+                      _buildStat(
+                        context.l10n.collectionSightingsLabel,
+                        '${fish.timesSpotted}',
+                      ),
+                      _buildStat(
+                        context.l10n.collectionRarityLabel,
+                        fish.rarity.toUpperCase(),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  
-                  // Timeline de avistamientos
+
+                  // Timeline entry
                   Text(
                     context.l10n.collectionHistoryTitle,
                     style: const TextStyle(
@@ -602,8 +677,6 @@ class _FishDetailSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
-                  // Avistamiento de ejemplo
                   _buildSightingEntry(
                     context.l10n.collectionFirstSighting,
                     fish.firstSeen,
@@ -682,7 +755,8 @@ class _FishDetailSheet extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${date.day}/${date.month}/${date.year} - $size cm',
+                  '${date.day}/${date.month}/${date.year}'
+                  '${size > 0 ? ' — ${size.toStringAsFixed(0)} cm' : ''}',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
                     fontSize: 12,
