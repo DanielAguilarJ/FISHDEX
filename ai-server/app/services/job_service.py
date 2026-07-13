@@ -187,6 +187,7 @@ def _load_frames_from_media(path: str, media_type: str) -> list[np.ndarray]:
     return extract_frames_from_video(
         path,
         max_frames=settings.max_frames_to_extract or 10,
+        max_side=settings.frame_max_side or 960,
     )
 
 def _generate_fish_id(cursor, area_code: str, species_slug: str) -> str:
@@ -376,8 +377,9 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 raw_video_path=temp_video_path,
             )
 
-            # Use the first frame as a temporary preview
-            temp_preview = f"jobs/{job_id}/selected_frames/frame_00.jpg"
+            # Strict mode: do NOT expose the raw frame as preview.
+            # selected_frames are kept as internal artefacts for debugging/retry.
+            temp_preview = None
 
             cursor.execute(
                 """UPDATE identification_jobs
@@ -430,14 +432,58 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         logger.info(f"[Job {job_id}] Cropping fish: OBB-rotated deskew + axis-aligned bbox")
 
         # Primary crop from the best candidate
-        cropped_frame = crop_fish_best(best_detection_frame, best_detection)
-        cropped_frame_bbox = crop_bbox_aligned_strict(best_detection_frame, best_detection)
+        cropped_frame = crop_fish_best(
+            best_detection_frame, best_detection,
+            pad_frac=settings.crop_padding_frac,
+        )
+        cropped_frame_bbox = crop_bbox_aligned_strict(
+            best_detection_frame, best_detection,
+            pad_frac=settings.crop_padding_frac,
+        )
 
-        # Safety: if even the best candidate fails to produce a crop, use pending_crop
-        if cropped_frame is None:
-            logger.error(f"[Job {job_id}] crop_fish_best returned None for best candidate!")
-            # Fall through — classifier/embedding will use the frame directly
-            cropped_frame = best_detection_frame
+        # Safety: if the best candidate fails to produce a tight crop,
+        # mark the job as pending_crop (NOT failed, NOT frame-complete fallback).
+        if cropped_frame is None or cropped_frame.size == 0:
+            logger.warning(
+                "[Job %s] crop_fish_best returned None for best candidate. "
+                "Marking pending_crop (strict mode — no frame fallback).",
+                job_id,
+            )
+            _emit_progress(
+                job_id,
+                "pending_crop",
+                100,
+                "Fish detected but no valid tight crop could be produced",
+            )
+
+            job_artifacts = save_job_artifacts(
+                job_id=job_id,
+                selected_frames=best_frames,
+                cropped_frames=[],
+                raw_video_path=temp_video_path,
+            )
+
+            cursor.execute(
+                """UPDATE identification_jobs
+                   SET status = 'pending_crop', error_message = ?,
+                       preview_filename = ?, artifact_dir = ?, completed_at = ?
+                   WHERE id = ?""",
+                (
+                    "Fish detected but crop_fish_best returned no valid tight crop.",
+                    None,  # strict: no frame-complete preview exposed
+                    job_artifacts.get("job_artifact_dir"),
+                    datetime.now(timezone.utc).isoformat(),
+                    job_id,
+                ),
+            )
+            conn.commit()
+
+            return {
+                "status": "pending_crop",
+                "job_id": job_id,
+                "reason": "crop_failed_after_detection",
+                "preview_filename": None,
+            }
 
         cropped_frames = [cropped_frame]
         cropped_frames_bbox = [cropped_frame_bbox] if cropped_frame_bbox is not None else []
@@ -446,10 +492,12 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         for _, frame, det, _ in valid_candidates[1:]:
             if len(cropped_frames) >= max_save:
                 break
-            crop = crop_fish_best(frame, det)
+            crop = crop_fish_best(frame, det, pad_frac=settings.crop_padding_frac)
             if crop is not None:
                 cropped_frames.append(crop)
-                bbox_crop = crop_bbox_aligned_strict(frame, det)
+                bbox_crop = crop_bbox_aligned_strict(
+                    frame, det, pad_frac=settings.crop_padding_frac
+                )
                 if bbox_crop is not None:
                     cropped_frames_bbox.append(bbox_crop)
 

@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     max_video_size_mb: int = 50
     max_video_duration_seconds: int = 15
     jpeg_quality: int = 90
+    # Max pixel dimension (longest side) for extracted frames.
+    # Preserves aspect ratio; does NOT force landscape. Override: FISHDEX_FRAME_MAX_SIDE
+    frame_max_side: int = 960
+    # Padding fraction added around every fish crop (0.01 = 1% per side).
+    # Override: FISHDEX_CROP_PADDING_FRAC
+    crop_padding_frac: float = 0.01
 
     # ── Storage directories ──────────────────────────────────────────
     server_data_dir: str = "data"

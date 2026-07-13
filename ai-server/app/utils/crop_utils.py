@@ -4,14 +4,14 @@ FishDex AI Server — OBB Crop Utilities
 Tight fish crops using the OBB polygon from YOLOv8 detection.
 NO fallback to center-crop — if there's no valid detection, returns None.
 
-  crop_obb_rotated(frame, detection, pad_frac=0.03)
+  crop_obb_rotated(frame, detection, pad_frac=0.01)
     Perspective-warps the exact OBB polygon to a tight rectangle.
     Fish body axis → horizontal.  Returns None if polygon unavailable.
 
-  crop_bbox_aligned_strict(frame, detection, pad_frac=0.03)
+  crop_bbox_aligned_strict(frame, detection, pad_frac=0.01)
     Axis-aligned bbox crop. Returns None if no bbox (NO fallback 70%).
 
-  crop_fish_best(frame, detection, pad_frac=0.03)
+  crop_fish_best(frame, detection, pad_frac=0.01)
     Tries OBB first, then bbox_strict. Returns None if neither works.
 """
 
@@ -45,14 +45,14 @@ def _get_bbox(detection) -> Optional[tuple]:
 def crop_obb_rotated(
     frame: np.ndarray,
     detection,
-    pad_frac: float = 0.03,
+    pad_frac: float = 0.01,
 ) -> Optional[np.ndarray]:
     """
     Perspective-warp the OBB polygon to a tight rectangular crop.
 
     Uses the 4 polygon corners directly with cv2.getPerspectiveTransform.
     The long side of the OBB maps to the output width (fish horizontal).
-    pad_frac = 3% padding on each side.
+    pad_frac = 1% padding on each side (tight; override to 0.0 for zero margin).
 
     Returns None if polygon is unavailable or degenerate.
     """
@@ -107,10 +107,10 @@ def crop_obb_rotated(
 def crop_bbox_aligned_strict(
     frame: np.ndarray,
     detection,
-    pad_frac: float = 0.03,
+    pad_frac: float = 0.01,
 ) -> Optional[np.ndarray]:
     """
-    Axis-aligned bounding-box crop with 3% padding.
+    Axis-aligned bounding-box crop with 1% padding.
     Returns None if no valid bbox is available.
     NO fallback to center crop — strict mode.
     """
@@ -143,7 +143,7 @@ def crop_bbox_aligned_strict(
 def crop_fish_best(
     frame: np.ndarray,
     detection,
-    pad_frac: float = 0.03,
+    pad_frac: float = 0.01,
 ) -> Optional[np.ndarray]:
     """
     Primary crop selector. Returns None if no valid crop is possible.

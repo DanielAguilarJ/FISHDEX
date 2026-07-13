@@ -51,6 +51,31 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
     super.dispose();
   }
 
+  /// Computes the correct aspect ratio for display, compensating for
+  /// the rotation metadata embedded in the video file.
+  ///
+  /// On many Android devices, portrait videos are stored internally as
+  /// landscape + 90°/270° rotation metadata. The video_player plugin
+  /// exposes this as [VideoPlayerValue.rotationCorrection].
+  /// Without compensation the [AspectRatio] widget uses the raw (landscape)
+  /// ratio, making the preview appear as a narrow horizontal strip.
+  double _effectiveVideoAspectRatio() {
+    final value = _videoController.value;
+    final rawAspectRatio = value.aspectRatio;
+
+    if (rawAspectRatio <= 0) return 9 / 16; // safe fallback for portrait
+
+    final rotation = value.rotationCorrection % 360;
+
+    // If the file is stored as landscape but will be displayed rotated,
+    // the layout must use the inverse ratio to appear portrait.
+    if (rotation == 90 || rotation == 270) {
+      return 1.0 / rawAspectRatio;
+    }
+
+    return rawAspectRatio;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -62,7 +87,7 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
           if (_isInitialized)
             Center(
               child: AspectRatio(
-                aspectRatio: _videoController.value.aspectRatio,
+                aspectRatio: _effectiveVideoAspectRatio(),
                 child: VideoPlayer(_videoController),
               ),
             )

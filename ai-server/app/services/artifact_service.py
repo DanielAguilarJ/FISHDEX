@@ -324,9 +324,9 @@ def save_fish_capture_artifacts(
         for idx, (d_frame, d_det, d_conf) in enumerate(all_dataset_detections):
             try:
                 # --- OBB-rotated crop (strict — no center-crop fallback) ---
-                obb_crop = crop_obb_rotated(d_frame, d_det, pad_frac=0.03)
+                obb_crop = crop_obb_rotated(d_frame, d_det, pad_frac=settings.crop_padding_frac)
                 if obb_crop is None or obb_crop.size == 0:
-                    obb_crop = crop_bbox_aligned_strict(d_frame, d_det, pad_frac=0.03)
+                    obb_crop = crop_bbox_aligned_strict(d_frame, d_det, pad_frac=settings.crop_padding_frac)
 
                 if obb_crop is None or obb_crop.size == 0:
                     logger.warning(

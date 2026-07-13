@@ -101,8 +101,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_controller == null || _isRecording) return;
 
     try {
+      // Lock orientation before starting so rotation metadata is stable.
+      await _controller!.lockCaptureOrientation();
       await _controller!.startVideoRecording();
-      
+
       setState(() {
         _isRecording = true;
         _recordingProgress = 0.0;
@@ -127,6 +129,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _stopRecording,
       );
     } catch (e) {
+      // Make sure the orientation lock is released if recording never started.
+      try {
+        await _controller?.unlockCaptureOrientation();
+      } catch (_) {}
+
       setState(() => _errorMessage = context.l10n.cameraRecordError);
     }
   }
@@ -139,7 +146,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     try {
       final videoFile = await _controller!.stopVideoRecording();
-      
+
+      // Release the orientation lock after the file is written.
+      try {
+        await _controller!.unlockCaptureOrientation();
+      } catch (_) {}
+
       setState(() {
         _isRecording = false;
         _recordingProgress = 0.0;
@@ -154,6 +166,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         );
       }
     } catch (e) {
+      // Also unlock if stopVideoRecording() itself fails.
+      try {
+        await _controller?.unlockCaptureOrientation();
+      } catch (_) {}
+
       setState(() {
         _isRecording = false;
         _recordingProgress = 0.0;
