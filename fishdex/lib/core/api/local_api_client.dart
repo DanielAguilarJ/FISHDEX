@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
-import '../../core/constants/app_constants.dart';
 
 class LocalApiClient {
   final String baseUrl;
@@ -88,11 +88,35 @@ class LocalApiClient {
     try {
       final request = http.MultipartRequest('POST', uri);
       request.headers.addAll(_getHeaders(isJson: false));
-      
+
       // Add text fields
       request.fields.addAll(fields);
-      
-      // Add video file
+
+      // Infer correct MIME type from file extension so the server
+      // never receives a generic application/octet-stream.
+      final ext = file.path.split('.').last.toLowerCase();
+      final videoExtensions = {
+        'mp4': MediaType('video', 'mp4'),
+        'mov': MediaType('video', 'quicktime'),
+        'avi': MediaType('video', 'x-msvideo'),
+        'mkv': MediaType('video', 'x-matroska'),
+        '3gp': MediaType('video', '3gpp'),
+        'webm': MediaType('video', 'webm'),
+      };
+      final imageExtensions = {
+        'jpg': MediaType('image', 'jpeg'),
+        'jpeg': MediaType('image', 'jpeg'),
+        'png': MediaType('image', 'png'),
+        'webp': MediaType('image', 'webp'),
+        'heic': MediaType('image', 'heic'),
+      };
+      final contentType = videoExtensions[ext] ??
+          imageExtensions[ext] ??
+          MediaType('video', 'mp4'); // safe default: camera always records video
+
+      debugPrint('📹 Uploading file: ${file.path.split('/').last}'
+          ' | ext=$ext | contentType=$contentType');
+
       final stream = http.ByteStream(file.openRead());
       final length = await file.length();
       final multipartFile = http.MultipartFile(
@@ -100,6 +124,7 @@ class LocalApiClient {
         stream,
         length,
         filename: file.path.split('/').last,
+        contentType: contentType,
       );
       request.files.add(multipartFile);
 

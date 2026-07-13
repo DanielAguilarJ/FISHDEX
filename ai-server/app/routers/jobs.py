@@ -67,14 +67,26 @@ async def upload_job_video(
         raise HTTPException(status_code=400, detail="No se proporcionó ningún archivo (video o file)")
 
     # MIME / Content-type validation
-    content_type = (upload_file.content_type or "").lower()
+    content_type = (upload_file.content_type or "").lower().strip()
     original_filename = upload_file.filename or "unknown"
-    
-    # Infer media type
-    if content_type.startswith("image/") or original_filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+    fname_lower = original_filename.lower()
+
+    # Infer media type: check content-type first, then file extension.
+    # application/octet-stream is accepted and falls through to extension check.
+    if content_type.startswith("image/") or fname_lower.endswith((".jpg", ".jpeg", ".png", ".webp", ".heic")):
         media_type = "image"
-    elif content_type.startswith("video/") or original_filename.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
+    elif (
+        content_type.startswith("video/")
+        or fname_lower.endswith((".mp4", ".mov", ".avi", ".mkv", ".3gp", ".webm"))
+    ):
         media_type = "video"
+    elif content_type in ("application/octet-stream", "binary/octet-stream", ""):
+        # Generic binary — the field is named 'video', so assume video.
+        media_type = "video"
+        logger.warning(
+            f"[upload] Received generic content_type '{content_type}' for file "
+            f"'{original_filename}'. Treating as video (field='video')."
+        )
     else:
         raise HTTPException(
             status_code=400,
