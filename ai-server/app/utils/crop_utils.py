@@ -3,19 +3,22 @@ FishDex AI Server — OBB Crop Utilities
 =======================================
 Two crop strategies for fish detections from YOLOv8 OBB models:
 
-  crop_obb_rotated(frame, detection, pad_frac=0.10)
-    Deskews the frame so the fish lies axis-aligned, then crops it.
-    Uses cv2.minAreaRect on the OBB polygon corners, rotates the image
-    around the fish center, then extracts the straightened rectangle.
-    → Best for ML embeddings, display, and training with fish aligned.
+  crop_obb_rotated(frame, detection, pad_frac=0.08)
+    Perspective-warps the exact OBB polygon region to a tight rectangle.
+    Uses the 4 polygon corners from the detector (already in TL→TR→BR→BL
+    order from detector_service._obb_to_corners).  No rotation matrix
+    angle arithmetic — cv2.getPerspectiveTransform maps the parallelogram
+    directly to a rectangle, so the fish is always deskewed regardless of
+    which direction it is tilted.
+    Long side → output width (fish body horizontal).
 
   crop_bbox_aligned(frame, detection, pad_frac=0.08)
-    Standard axis-aligned bounding-box crop (no rotation).
-    → Simpler crop, good for diversity in training datasets.
+    Standard axis-aligned bounding-box crop.
+    Uses bbox_xyxy from the detection, adds padding, clips to frame.
 
   crop_fish_best(frame, detection)
-    Tries OBB-rotated first, falls back to axis-aligned.
-    → Use this as the primary crop in the pipeline.
+    Primary selector: tries OBB perspective warp first, falls back to
+    axis-aligned bbox crop.
 """
 
 import logging
@@ -48,72 +51,81 @@ def _get_bbox(detection) -> Optional[tuple]:
 def crop_obb_rotated(
     frame: np.ndarray,
     detection,
-    pad_frac: float = 0.10,
+    pad_frac: float = 0.08,
 ) -> Optional[np.ndarray]:
     """
-    Crop the fish region by rotating the frame to align with the OBB.
+    Perspective-warp the OBB polygon to a tight rectangular crop.
 
-    Algorithm:
-      1. Feed the OBB polygon corners into cv2.minAreaRect to get a clean
-         (center, (w_rect, h_rect), angle_deg) representation.
-      2. Ensure width >= height so the fish body axis is horizontal in the output.
-      3. Expand the canvas with BORDER_REPLICATE padding to prevent edge clipping.
-      4. Rotate the padded frame by angle_deg around the fish center so the OBB
-         becomes axis-aligned.
-      5. Extract [cy ± h_rect/2, cx ± w_rect/2] + pad_frac from the rotated frame.
+    The 4 polygon corners from detector_service are ordered:
+      polygon[0] = TL (top-left in unrotated space)
+      polygon[1] = TR (top-right)
+      polygon[2] = BR (bottom-right)
+      polygon[3] = BL (bottom-left)
 
-    Returns:
-        BGR ndarray of the deskewed fish crop, or None if polygon is unavailable.
+    Side lengths:
+      polygon[0]→polygon[1] = OBB "width"  (w)
+      polygon[1]→polygon[2] = OBB "height" (h)
+
+    To make the fish horizontal in the output, we ensure the long
+    side maps to the output width. If h > w we rotate the corner
+    assignment by one position so h becomes the width.
+
+    Returns a BGR ndarray of exactly the OBB region + pad_frac,
+    or None if the polygon is unavailable / degenerate.
     """
     polygon = _get_polygon(detection)
     if polygon is None or len(polygon) < 4:
         return None
 
-    h_img, w_img = frame.shape[:2]
-    pts = np.array(
-        [[float(p[0]), float(p[1])] for p in polygon], dtype=np.float32
-    )
+    # Build corner vectors from the polygon
+    p = [np.array([float(v[0]), float(v[1])], dtype=np.float64) for v in polygon[:4]]
 
-    rect = cv2.minAreaRect(pts)
-    center, (w_rect, h_rect), angle_deg = rect
+    # Measure both side lengths of the OBB
+    w_side = float(np.linalg.norm(p[1] - p[0]))   # TL → TR
+    h_side = float(np.linalg.norm(p[2] - p[1]))   # TR → BR
 
-    if w_rect < 4.0 or h_rect < 4.0:
-        return None  # degenerate / empty box
+    if w_side < 2.0 or h_side < 2.0:
+        return None  # degenerate box
 
-    # ── Ensure the long side is the "width" (fish body axis = horizontal) ──
-    if w_rect < h_rect:
-        w_rect, h_rect = h_rect, w_rect
-        angle_deg += 90.0
+    # Choose which side is "width" (long) and orient the corners accordingly
+    if w_side >= h_side:
+        # Already landscape: p[0]=TL, p[1]=TR, p[2]=BR, p[3]=BL
+        src_pts = np.float32([p[0], p[1], p[2], p[3]])
+        w_out, h_out = w_side, h_side
+    else:
+        # Portrait → rotate 90° so h becomes the width
+        # New TL=p[3], TR=p[0], BR=p[1], BL=p[2]
+        src_pts = np.float32([p[3], p[0], p[1], p[2]])
+        w_out, h_out = h_side, w_side
 
-    # ── Expand canvas so the fish is never clipped near image borders ──────
-    border = int(max(w_rect, h_rect) * 0.30) + 20
-    padded = cv2.copyMakeBorder(
-        frame, border, border, border, border, cv2.BORDER_REPLICATE
-    )
-    # Shift OBB center to padded-frame coordinate space
-    pcx = float(center[0]) + border
-    pcy = float(center[1]) + border
+    # Output canvas dimensions + symmetrical padding
+    pw = w_out * pad_frac
+    ph = h_out * pad_frac
+    out_w = max(4, int(round(w_out + 2.0 * pw)))
+    out_h = max(4, int(round(h_out + 2.0 * ph)))
 
-    # ── Rotate the padded frame around the fish center ──────────────────────
-    M = cv2.getRotationMatrix2D((pcx, pcy), angle_deg, 1.0)
-    rotated = cv2.warpAffine(
-        padded, M,
-        (padded.shape[1], padded.shape[0]),
+    dst_pts = np.float32([
+        [pw,            ph           ],   # TL
+        [out_w - pw,    ph           ],   # TR
+        [out_w - pw,    out_h - ph   ],   # BR
+        [pw,            out_h - ph   ],   # BL
+    ])
+
+    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    warped = cv2.warpPerspective(
+        frame, M, (out_w, out_h),
         flags=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_REPLICATE,
     )
 
-    # ── Crop the now axis-aligned fish rectangle (+ padding fraction) ───────
-    half_w = w_rect / 2.0 * (1.0 + pad_frac)
-    half_h = h_rect / 2.0 * (1.0 + pad_frac)
-    x1 = max(0, int(pcx - half_w))
-    y1 = max(0, int(pcy - half_h))
-    x2 = min(rotated.shape[1], int(pcx + half_w))
-    y2 = min(rotated.shape[0], int(pcy + half_h))
+    if warped is None or warped.size == 0:
+        return None
 
-    if x2 > x1 and y2 > y1:
-        return rotated[y1:y2, x1:x2]
-    return None
+    logger.debug(
+        "OBB crop: %.0fx%.0f OBB → %dx%d output (pad=%.0f%%)",
+        w_out, h_out, out_w, out_h, pad_frac * 100,
+    )
+    return warped
 
 
 def crop_bbox_aligned(
@@ -124,19 +136,23 @@ def crop_bbox_aligned(
     """
     Axis-aligned bounding-box crop with optional padding.
 
-    Uses the bbox_xyxy (min axis-aligned rect) from the detection.
-    Falls back to a 70 % center crop if no detection is available.
+    Uses bbox_xyxy from the detection. Falls back to a 70 % center crop
+    if no detection is available.
     """
     h_img, w_img = frame.shape[:2]
     bbox = _get_bbox(detection)
     if bbox and len(bbox) >= 4:
-        bw = bbox[2] - bbox[0]
-        bh = bbox[3] - bbox[1]
-        if bw > 0 and bh > 0:
-            x1 = max(0, int(bbox[0] - bw * pad_frac))
-            y1 = max(0, int(bbox[1] - bh * pad_frac))
-            x2 = min(w_img, int(bbox[2] + bw * pad_frac))
-            y2 = min(h_img, int(bbox[3] + bh * pad_frac))
+        x1_f, y1_f, x2_f, y2_f = (
+            float(bbox[0]), float(bbox[1]),
+            float(bbox[2]), float(bbox[3]),
+        )
+        bw = x2_f - x1_f
+        bh = y2_f - y1_f
+        if bw > 1.0 and bh > 1.0:
+            x1 = max(0, int(x1_f - bw * pad_frac))
+            y1 = max(0, int(y1_f - bh * pad_frac))
+            x2 = min(w_img, int(x2_f + bw * pad_frac))
+            y2 = min(h_img, int(y2_f + bh * pad_frac))
             if x2 > x1 and y2 > y1:
                 return frame[y1:y2, x1:x2]
 
@@ -154,7 +170,7 @@ def crop_fish_best(frame: np.ndarray, detection) -> np.ndarray:
     """
     Primary crop selector.
 
-    Tries OBB-rotated first (aligned with fish body axis).
+    Tries OBB perspective warp first (exact OBB region, fish horizontal).
     Falls back to axis-aligned bbox crop if polygon is unavailable.
     """
     obb = crop_obb_rotated(frame, detection)
