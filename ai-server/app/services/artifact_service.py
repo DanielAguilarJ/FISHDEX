@@ -323,29 +323,29 @@ def save_fish_capture_artifacts(
     if all_dataset_detections:
         for idx, (d_frame, d_det, d_conf) in enumerate(all_dataset_detections):
             try:
-                # --- OBB-rotated crop (strict — no center-crop fallback) ---
-                obb_crop = crop_obb_rotated(d_frame, d_det, pad_frac=settings.crop_padding_frac)
-                if obb_crop is None or obb_crop.size == 0:
-                    obb_crop = crop_bbox_aligned_strict(d_frame, d_det, pad_frac=settings.crop_padding_frac)
+                # --- Axis-aligned crop (primary — preserving capture orientation) ---
+                primary_crop = crop_bbox_aligned_strict(d_frame, d_det, pad_frac=settings.crop_padding_frac)
+                if primary_crop is None or primary_crop.size == 0:
+                    primary_crop = crop_obb_rotated(d_frame, d_det, pad_frac=settings.crop_padding_frac)
 
-                if obb_crop is None or obb_crop.size == 0:
+                if primary_crop is None or primary_crop.size == 0:
                     logger.warning(
-                        "Dataset frame %d: strict crop failed (no valid OBB/bbox), skipping", idx
+                        "Dataset frame %d: strict crop failed (no valid bbox/OBB), skipping", idx
                     )
                     continue
 
                 crop_rel = f"{rel_base}/dataset/crop_{idx:03d}.jpg"
                 crop_abs = Path(settings.server_data_dir) / "storage" / crop_rel
-                _write_jpg(crop_abs, obb_crop)
+                _write_jpg(crop_abs, primary_crop)
                 dataset_crop_files.append(crop_rel)
 
-                # --- Axis-aligned bbox crop ---
-                bbox_crop = crop_bbox_aligned_strict(d_frame, d_det)
-                if bbox_crop is not None:
-                    bbox_rel = f"{rel_base}/dataset/crop_{idx:03d}_bbox.jpg"
-                    bbox_abs = Path(settings.server_data_dir) / "storage" / bbox_rel
-                    _write_jpg(bbox_abs, bbox_crop)
-                    dataset_bbox_files.append(bbox_rel)
+                # --- OBB-rotated crop (secondary — fish body horizontal) ---
+                obb_crop = crop_obb_rotated(d_frame, d_det, pad_frac=settings.crop_padding_frac)
+                if obb_crop is not None:
+                    obb_rel = f"{rel_base}/dataset/crop_{idx:03d}_bbox.jpg"
+                    obb_abs = Path(settings.server_data_dir) / "storage" / obb_rel
+                    _write_jpg(obb_abs, obb_crop)
+                    dataset_bbox_files.append(obb_rel)
 
                 # --- Annotated full frame ---
                 ann_rel = f"{rel_base}/annotated/frame_{idx:03d}.jpg"

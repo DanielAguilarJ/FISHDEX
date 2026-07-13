@@ -74,16 +74,48 @@ class ClassifierService:
     def available(self) -> bool:
         return self._available
 
+    def _letterbox_rgb(self, rgb: np.ndarray, size: int = INPUT_SIZE) -> np.ndarray:
+        """
+        Resize image using letterbox padding to preserve aspect ratio.
+        """
+        h, w = rgb.shape[:2]
+
+        ratio = min(size / w, size / h)
+        new_w = int(round(w * ratio))
+        new_h = int(round(h * ratio))
+
+        resized = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+        pad_w = size - new_w
+        pad_h = size - new_h
+
+        pad_left = pad_w // 2
+        pad_right = pad_w - pad_left
+        pad_top = pad_h // 2
+        pad_bottom = pad_h - pad_top
+
+        padded = cv2.copyMakeBorder(
+            resized,
+            pad_top,
+            pad_bottom,
+            pad_left,
+            pad_right,
+            cv2.BORDER_CONSTANT,
+            value=(114, 114, 114),
+        )
+
+        return padded
+
     def _preprocess(self, image: np.ndarray) -> np.ndarray:
         """
         Preprocess a BGR cropped fish image for classification.
-        Resize to 224x224, normalize with ImageNet mean/std, HWC -> CHW.
+        Resize via letterbox to 224x224, normalize with ImageNet mean/std, HWC -> CHW.
         """
         # BGR to RGB
         rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        # Resize
-        resized = cv2.resize(rgb, (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_LINEAR)
+        # Resize preserving aspect ratio
+        resized = self._letterbox_rgb(rgb, INPUT_SIZE)
 
         # Normalize to 0-1 then apply ImageNet stats
         normalized = resized.astype(np.float32) / 255.0
