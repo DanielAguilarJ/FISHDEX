@@ -283,6 +283,9 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         # --- Step 7b: Dataset pass — detect on ALL extracted frames ---
         # Runs detection on the full set of extracted frames (not just the top-5 best)
         # so that every valid fish detection is saved as a training crop.
+        # Only keeps detections that:
+        #   - Pass the confidence threshold (0.30)
+        #   - Cover ≤ 50% of the frame area (rejects fallback / bad detections)
         thresh = settings.detector_confidence_threshold or 0.30
         dataset_frame_detections: list[tuple] = []  # (frame, detection, conf)
         logger.info(f"[Job {job_id}] Dataset pass: scanning {len(all_frames)} frames")
@@ -292,29 +295,62 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 top_det = max(d_dets, key=lambda d: _get_detection_confidence(d))
                 conf = _get_detection_confidence(top_det)
                 if conf >= thresh:
-                    dataset_frame_detections.append((d_frame, top_det, conf))
+                    # Area guard: reject if OBB covers > 50% of frame
+                    polygon = getattr(top_det, "polygon", None)
+                    if polygon and len(polygon) >= 4:
+                        h_f, w_f = d_frame.shape[:2]
+                        pts = np.array([[p[0], p[1]] for p in polygon[:4]], dtype=np.float32)
+                        obb_area = float(cv2.contourArea(pts))
+                        if obb_area <= h_f * w_f * 0.50:
+                            dataset_frame_detections.append((d_frame, top_det, conf))
+                        else:
+                            logger.debug(f"[Job {job_id}] Dataset: skipping frame (OBB area {obb_area:.0f} > 50%% of frame)")
         logger.info(
             f"[Job {job_id}] Dataset pass: {len(dataset_frame_detections)}"
-            f"/{len(all_frames)} frames with confident detections"
+            f"/{len(all_frames)} frames with valid tight detections"
         )
 
         # --- Step 8: Crop fish — OBB-rotated (primary) + axis-aligned (secondary) ---
+        # IMPORTANT: detect EACH frame individually. Reusing best_detection from one
+        # frame on other frames is wrong because the fish moves between frames.
         logger.info(f"[Job {job_id}] Cropping fish: OBB-rotated deskew + axis-aligned bbox")
 
-        # Primary: rotate frame so fish body is horizontal, then crop
+        def _is_valid_detection(det, frame_shape) -> bool:
+            """Return True if the detection is a real model output (not fallback).
+            Rejects detections that cover > 50% of the frame area (likely fallback)."""
+            conf = _get_detection_confidence(det)
+            if conf < 0.20:
+                return False
+            polygon = getattr(det, "polygon", None) or (det.get("polygon") if isinstance(det, dict) else None)
+            if not polygon or len(polygon) < 4:
+                return False
+            # Area guard: OBB area vs frame area
+            h_f, w_f = frame_shape[:2]
+            frame_area = h_f * w_f
+            pts = np.array([[p[0], p[1]] for p in polygon[:4]], dtype=np.float32)
+            obb_area = float(cv2.contourArea(pts))
+            if obb_area > frame_area * 0.50:
+                return False
+            return True
+
+        # Primary: best detection frame (already detected above)
         cropped_frame = crop_fish_best(best_detection_frame, best_detection)
-        # Secondary: traditional axis-aligned rectangular crop
         cropped_frame_bbox = crop_bbox_aligned(best_detection_frame, best_detection)
 
-        # Build additional crops from the remaining best frames
+        # Additional frames: detect each one individually
         cropped_frames = [cropped_frame]
         cropped_frames_bbox = [cropped_frame_bbox]
         for frame in best_frames:
-            if frame is not best_detection_frame:
-                cropped_frames.append(crop_fish_best(frame, best_detection))
-                cropped_frames_bbox.append(crop_bbox_aligned(frame, best_detection))
-                if len(cropped_frames) >= max_save:
-                    break
+            if frame is best_detection_frame:
+                continue
+            if len(cropped_frames) >= max_save:
+                break
+            dets = detector.detect(frame)
+            if dets:
+                top = max(dets, key=lambda d: _get_detection_confidence(d))
+                if _is_valid_detection(top, frame.shape):
+                    cropped_frames.append(crop_fish_best(frame, top))
+                    cropped_frames_bbox.append(crop_bbox_aligned(frame, top))
 
         logger.info(
             f"[Job {job_id}] Produced {len(cropped_frames)} OBB-rotated crops "

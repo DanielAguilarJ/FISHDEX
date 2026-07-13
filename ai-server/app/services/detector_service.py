@@ -200,7 +200,10 @@ class DetectorService:
             return self._fallback_detection(frame)
 
     def _fallback_detection(self, frame: np.ndarray) -> list[DetectionResult]:
-        """Return a center 70% crop as a single pseudo-detection."""
+        """Return a center 70% crop as a single pseudo-detection.
+        Confidence is set to 0.01 so it's recognized as a fallback and never
+        passes the dataset crop threshold (0.30). The job pipeline uses this
+        only if no real detection is available on any frame."""
         h, w = frame.shape[:2]
         margin_x = w * 0.15
         margin_y = h * 0.15
@@ -219,7 +222,7 @@ class DetectorService:
 
         return [
             DetectionResult(
-                confidence=0.5,
+                confidence=0.01,
                 class_id=0,
                 polygon=polygon,
                 bbox_xyxy=(x1, y1, x2, y2),
