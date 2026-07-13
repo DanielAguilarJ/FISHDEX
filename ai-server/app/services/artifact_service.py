@@ -184,6 +184,7 @@ def save_job_artifacts(
 
 
 from app.utils.area_utils import normalize_area_code
+from app.utils.crop_utils import crop_obb_rotated, crop_bbox_aligned
 
 
 def save_fish_capture_artifacts(
@@ -194,7 +195,7 @@ def save_fish_capture_artifacts(
     fish_id: str,
     catch_number: int,
     selected_frames: list[np.ndarray],
-    cropped_frames: list[np.ndarray],
+    cropped_frames: list[np.ndarray],          # OBB-rotated crops (primary)
     raw_video_path: str,
     document: dict,
     model_outputs: dict,
@@ -210,6 +211,7 @@ def save_fish_capture_artifacts(
     match_confidence: float = 0.0,
     model_type: str = "yolov8_obb",
     all_dataset_detections: Optional[list] = None,  # list of (frame, detection, conf)
+    cropped_frames_bbox: Optional[list[np.ndarray]] = None,  # axis-aligned crops
 ) -> dict:
     """
     Saves final artifacts for a fish capture sighting.
@@ -232,21 +234,31 @@ def save_fish_capture_artifacts(
 
     abs_base = Path(settings.server_data_dir) / "storage" / rel_base
     images_dir = abs_base / "images"
+    images_bbox_dir = abs_base / "images_bbox"
     frames_dir = abs_base / "frames"
     raw_dir = abs_base / "raw"
     dataset_dir = abs_base / "dataset"
     annotated_dir = abs_base / "annotated"
 
-    for d in (images_dir, frames_dir, raw_dir, dataset_dir, annotated_dir):
+    for d in (images_dir, images_bbox_dir, frames_dir, raw_dir, dataset_dir, annotated_dir):
         d.mkdir(parents=True, exist_ok=True)
 
-    # ── Best-N crops (for embedding / classifier) ──────────────────────────
+    # ── OBB-rotated crops (primary — used for embedding + preview) ─────────
     image_files = []
     for i, crop in enumerate(cropped_frames):
         rel = f"{rel_base}/images/crop_{i:02d}.jpg"
         abs_path = Path(settings.server_data_dir) / "storage" / rel
         _write_jpg(abs_path, crop)
         image_files.append(rel)
+
+    # ── Axis-aligned bbox crops (secondary — training diversity) ───────────
+    image_bbox_files: list[str] = []
+    if cropped_frames_bbox:
+        for i, crop in enumerate(cropped_frames_bbox):
+            rel = f"{rel_base}/images_bbox/crop_{i:02d}.jpg"
+            abs_path = Path(settings.server_data_dir) / "storage" / rel
+            _write_jpg(abs_path, crop)
+            image_bbox_files.append(rel)
 
     # ── Best-N selected frames ─────────────────────────────────────────────
     frame_files = []
@@ -297,20 +309,34 @@ def save_fish_capture_artifacts(
 
     # ── Dataset crops + annotated full frames from ALL detected frames ─────
     #   all_dataset_detections: list of (frame, detection, confidence)
+    #   For each detected frame we save:
+    #     dataset/crop_NNN.jpg        ← OBB-rotated (fish body horizontal)
+    #     dataset/crop_NNN_bbox.jpg   ← axis-aligned bbox (traditional rect crop)
+    #     annotated/frame_NNN.jpg     ← full frame with OBB polygon + AI labels
     dataset_crop_files: list[str] = []
+    dataset_bbox_files: list[str] = []
     annotated_frame_files: list[str] = []
 
     if all_dataset_detections:
         for idx, (d_frame, d_det, d_conf) in enumerate(all_dataset_detections):
             try:
-                # Tight crop
+                # --- OBB-rotated crop ---
+                obb_crop = crop_obb_rotated(d_frame, d_det)
+                if obb_crop is None or obb_crop.size == 0:
+                    obb_crop = crop_bbox_aligned(d_frame, d_det)
                 crop_rel = f"{rel_base}/dataset/crop_{idx:03d}.jpg"
                 crop_abs = Path(settings.server_data_dir) / "storage" / crop_rel
-                d_crop = _crop_frame_tight(d_frame, d_det)
-                _write_jpg(crop_abs, d_crop)
+                _write_jpg(crop_abs, obb_crop)
                 dataset_crop_files.append(crop_rel)
 
-                # Annotated full frame
+                # --- Axis-aligned bbox crop ---
+                bbox_crop = crop_bbox_aligned(d_frame, d_det)
+                bbox_rel = f"{rel_base}/dataset/crop_{idx:03d}_bbox.jpg"
+                bbox_abs = Path(settings.server_data_dir) / "storage" / bbox_rel
+                _write_jpg(bbox_abs, bbox_crop)
+                dataset_bbox_files.append(bbox_rel)
+
+                # --- Annotated full frame ---
                 ann_rel = f"{rel_base}/annotated/frame_{idx:03d}.jpg"
                 ann_abs_path = Path(settings.server_data_dir) / "storage" / ann_rel
                 ann_f = _draw_annotated_frame(
@@ -331,8 +357,9 @@ def save_fish_capture_artifacts(
                 logger.warning(f"Dataset frame {idx} failed: {ds_err}")
 
         logger.info(
-            f"Saved {len(dataset_crop_files)} dataset crops "
-            f"and {len(annotated_frame_files)} annotated frames"
+            f"Saved {len(dataset_crop_files)} OBB crops, "
+            f"{len(dataset_bbox_files)} bbox crops, "
+            f"{len(annotated_frame_files)} annotated frames"
         )
 
     # ── Raw video / photo copy ─────────────────────────────────────────────
@@ -373,8 +400,10 @@ def save_fish_capture_artifacts(
         "raw": _storage_url(raw_filename),
         "video": _storage_url(video_filename),
         "images": [_storage_url(p) for p in image_files],
+        "images_bbox": [_storage_url(p) for p in image_bbox_files],
         "frames": [_storage_url(p) for p in frame_files],
         "dataset_crops": [_storage_url(p) for p in dataset_crop_files],
+        "dataset_crops_bbox": [_storage_url(p) for p in dataset_bbox_files],
         "annotated_frames": [_storage_url(p) for p in annotated_frame_files],
     }
 
@@ -408,8 +437,10 @@ def save_fish_capture_artifacts(
             "raw": raw_filename,
             "video": video_filename,
             "images": image_files,
+            "images_bbox": image_bbox_files,
             "frames": frame_files,
             "dataset_crops": dataset_crop_files,
+            "dataset_crops_bbox": dataset_bbox_files,
             "annotated_frames": annotated_frame_files,
             "document": document_filename,
             "manifest": manifest_filename,
@@ -446,42 +477,16 @@ def save_fish_capture_artifacts(
         "model_outputs_filename": model_outputs_filename,
         "fish_index_filename": fish_index_filename,
         "image_files": image_files,
+        "image_bbox_files": image_bbox_files,
         "frame_files": frame_files,
         "dataset_crop_files": dataset_crop_files,
+        "dataset_bbox_files": dataset_bbox_files,
         "annotated_frame_files": annotated_frame_files,
         "video_filename": video_filename,
         "raw_filename": raw_filename,
         "media": media,
         "manifest": manifest,
     }
-
-
-def _crop_frame_tight(frame: np.ndarray, detection) -> np.ndarray:
-    """Return a tight crop around the detection bbox, with 10% padding."""
-    h, w = frame.shape[:2]
-    bbox = None
-    if detection is not None:
-        if isinstance(detection, dict):
-            bbox = detection.get("bbox_xyxy") or detection.get("bbox")
-        else:
-            bbox = getattr(detection, "bbox_xyxy", None)
-
-    if bbox and len(bbox) >= 4:
-        pad_frac = 0.10
-        bw = bbox[2] - bbox[0]
-        bh = bbox[3] - bbox[1]
-        x1 = max(0, int(bbox[0] - bw * pad_frac))
-        y1 = max(0, int(bbox[1] - bh * pad_frac))
-        x2 = min(w, int(bbox[2] + bw * pad_frac))
-        y2 = min(h, int(bbox[3] + bh * pad_frac))
-        if x2 > x1 and y2 > y1:
-            return frame[y1:y2, x1:x2]
-
-    # Fallback: center 70%
-    crop_r = 0.70
-    cx, cy = w // 2, h // 2
-    cw, ch = int(w * crop_r) // 2, int(h * crop_r) // 2
-    return frame[max(0, cy - ch): min(h, cy + ch), max(0, cx - cw): min(w, cx + cw)]
 
 
 def update_fish_index_file(index_path: Path, entry: dict) -> None:

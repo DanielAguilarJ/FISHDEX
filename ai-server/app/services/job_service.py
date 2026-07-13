@@ -30,6 +30,7 @@ from app.utils.video import (
     select_best_n_frames,
 )
 from app.utils.area_utils import normalize_area_code
+from app.utils.crop_utils import crop_fish_best, crop_bbox_aligned
 
 logger = logging.getLogger(__name__)
 
@@ -78,29 +79,12 @@ def _get_detection_bbox(detection):
 
 
 def _crop_fish_from_frame(frame: np.ndarray, detection) -> np.ndarray:
-    """Crop fish region from frame using detection or fallback center crop."""
-    h, w = frame.shape[:2]
-
-    bbox = _get_detection_bbox(detection)
-
-    if bbox:
-        x1 = max(0, int(bbox[0]))
-        y1 = max(0, int(bbox[1]))
-        x2 = min(w, int(bbox[2]))
-        y2 = min(h, int(bbox[3]))
-
-        if x2 > x1 and y2 > y1:
-            return frame[y1:y2, x1:x2]
-
-    # Fallback: center crop (60% of frame)
-    crop_ratio = 0.6
-    cx, cy = w // 2, h // 2
-    cw, ch = int(w * crop_ratio) // 2, int(h * crop_ratio) // 2
-    x1 = max(0, cx - cw)
-    y1 = max(0, cy - ch)
-    x2 = min(w, cx + cw)
-    y2 = min(h, cy + ch)
-    return frame[y1:y2, x1:x2]
+    """
+    Primary crop: OBB-rotated deskewed crop aligned with the fish body axis.
+    Falls back to axis-aligned bbox crop when polygon is unavailable.
+    Delegates to crop_utils.crop_fish_best.
+    """
+    return crop_fish_best(frame, detection)
 
 def _infer_media_type(filename: str | None, content_type: str | None = None) -> str:
     content_type = (content_type or "").lower()
@@ -314,18 +298,28 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             f"/{len(all_frames)} frames with confident detections"
         )
 
-        # --- Step 8: Crop fish from frame ---
-        logger.info(f"[Job {job_id}] Cropping fish from frame")
-        cropped_frame = _crop_fish_from_frame(best_detection_frame, best_detection)
+        # --- Step 8: Crop fish — OBB-rotated (primary) + axis-aligned (secondary) ---
+        logger.info(f"[Job {job_id}] Cropping fish: OBB-rotated deskew + axis-aligned bbox")
 
-        # Also crop additional frames for embedding
+        # Primary: rotate frame so fish body is horizontal, then crop
+        cropped_frame = crop_fish_best(best_detection_frame, best_detection)
+        # Secondary: traditional axis-aligned rectangular crop
+        cropped_frame_bbox = crop_bbox_aligned(best_detection_frame, best_detection)
+
+        # Build additional crops from the remaining best frames
         cropped_frames = [cropped_frame]
+        cropped_frames_bbox = [cropped_frame_bbox]
         for frame in best_frames:
             if frame is not best_detection_frame:
-                cropped = _crop_fish_from_frame(frame, best_detection)
-                cropped_frames.append(cropped)
+                cropped_frames.append(crop_fish_best(frame, best_detection))
+                cropped_frames_bbox.append(crop_bbox_aligned(frame, best_detection))
                 if len(cropped_frames) >= max_save:
                     break
+
+        logger.info(
+            f"[Job {job_id}] Produced {len(cropped_frames)} OBB-rotated crops "
+            f"+ {len(cropped_frames_bbox)} axis-aligned crops"
+        )
 
         # --- Step 9: Run classifier ---
         species_slug = job_doc.get("species_slug")
@@ -635,6 +629,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 catch_number=catch_number,
                 selected_frames=best_frames,
                 cropped_frames=cropped_frames,
+                cropped_frames_bbox=cropped_frames_bbox,
                 raw_video_path=temp_video_path,
                 document=document,
                 model_outputs=model_outputs,
