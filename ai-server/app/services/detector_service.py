@@ -124,45 +124,73 @@ class DetectorService:
     ) -> list[DetectionResult]:
         """
         Parse YOLOv8 OBB ONNX output.
-        Handles two possible shapes:
-          - [1, num_preds, 7]: each row is [cx, cy, w, h, angle, conf, class_id]
-          - [1, 7, num_preds]: transposed version
+
+        Standard YOLOv8-OBB ONNX export format:
+          Shape [1, 5+nc, N]  where nc=number of classes, N=num predictions
+          - Rows 0-4: cx, cy, w, h, angle (in 640x640 space)
+          - Rows 5..5+nc-1: per-class confidence scores
+
+        For this model (1-class "fish"):
+          Shape [1, 6, 8400]: cx, cy, w, h, angle, fish_conf
+
+        Also handles legacy [1, N, 7] format for backwards compatibility.
         """
         # Remove batch dimension
-        out = output[0]  # shape: (num_preds, 7) or (7, num_preds)
+        out = output[0]  # shape: (D, N) or (N, D)
 
-        # Detect orientation: if dim 0 is 7 (or small fixed), it's transposed
-        if out.shape[0] == 7 and out.shape[1] != 7:
-            out = out.T  # Now (num_preds, 7)
-        elif out.shape[1] != 7 and out.shape[0] != 7:
-            # Try alternative: might be (num_preds, 7) already or unexpected shape
-            if out.shape[1] == 7:
-                pass  # Already correct
-            else:
-                logger.warning("Unexpected OBB output shape: %s", out.shape)
-                return []
+        # ── Detect format and transpose to (N, D) ──────────────────────────
+        # D is the "small" dimension (5+nc or 7 for legacy), N is predictions
+        if out.ndim != 2:
+            logger.warning("OBB output is not 2D: shape=%s", out.shape)
+            return []
+
+        dim0, dim1 = out.shape
+
+        if dim0 < dim1:
+            # Shape is (D, N) — standard YOLOv8 format. Transpose to (N, D).
+            out = out.T  # now (N, D)
+        # else: already (N, D) or (N, 7) legacy format
+
+        n_preds, n_cols = out.shape
+        logger.debug("OBB output: %d predictions x %d columns", n_preds, n_cols)
+
+        if n_cols < 6:
+            logger.warning("OBB output has too few columns (%d < 6)", n_cols)
+            return []
 
         results = []
         for pred in out:
-            cx, cy, w, h, angle, conf, class_id = pred[:7]
+            cx = pred[0]
+            cy = pred[1]
+            w = pred[2]
+            h = pred[3]
+            angle = pred[4]
+
+            # ── Confidence: max of class scores in columns 5: ───────────────
+            if n_cols == 7:
+                # Legacy format: [cx, cy, w, h, angle, conf, class_id]
+                conf = float(pred[5])
+                class_id = int(pred[6])
+            else:
+                # Standard YOLOv8-OBB: columns 5..end are class confidences
+                class_scores = pred[5:]
+                class_id = int(np.argmax(class_scores))
+                conf = float(class_scores[class_id])
 
             if conf < self.confidence_threshold:
                 continue
 
-            # Convert corners in 640x640 space
+            # Convert corners from 640x640 space to original frame coords
             corners_640 = _obb_to_corners(cx, cy, w, h, angle)
-
-            # Scale corners to original image coordinates
             corners_orig = [
                 (x * scale_x, y * scale_y) for x, y in corners_640
             ]
-
             bbox_xyxy = _polygon_to_bbox_xyxy(corners_orig)
 
             results.append(
                 DetectionResult(
-                    confidence=float(conf),
-                    class_id=int(class_id),
+                    confidence=conf,
+                    class_id=class_id,
                     polygon=corners_orig,
                     bbox_xyxy=bbox_xyxy,
                     angle=float(angle),
