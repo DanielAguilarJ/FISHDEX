@@ -51,12 +51,24 @@ class ResultScreen extends ConsumerStatefulWidget {
         jobData['species_slug'] as String? ??
         'Unknown';
 
-    final previewFilename = jobData['preview_filename'] as String?;
-    final imageUrl = previewFilename != null
-        ? '${AppConstants.aiServerUrl}/storage/$previewFilename'
+    // Prefer the annotated preview (with bbox + AI labels drawn on it);
+    // fall back to the plain preview crop.
+    final annotatedFilename = jobData['annotated_preview_filename'] as String?;
+    final plainFilename = jobData['preview_filename'] as String?;
+    final imageFilename = annotatedFilename ?? plainFilename;
+    final imageUrl = imageFilename != null
+        ? '${AppConstants.aiServerUrl}/storage/$imageFilename'
         : null;
 
     final catchNumber = (jobData['catch_number'] as num?)?.toInt() ?? 1;
+
+    // AI model validation breakdown
+    final detectionConfidence =
+        (jobData['detection_confidence'] as num?)?.toDouble();
+    final classificationConfidence =
+        (jobData['classification_confidence'] as num?)?.toDouble();
+    final matchConfidence =
+        (jobData['match_confidence'] as num?)?.toDouble();
 
     FishPreviousData? previousData;
     final prevCatch = jobData['previous_catch'] as Map<String, dynamic>?;
@@ -100,6 +112,9 @@ class ResultScreen extends ConsumerStatefulWidget {
       previousData: previousData,
       frameUsed: imageUrl,
       userRole: jobData['user_role'] as String? ?? 'researcher',
+      detectionConfidence: detectionConfidence,
+      classificationConfidence: classificationConfidence,
+      matchConfidence: matchConfidence,
     );
     return ResultScreen(key: key, result: result);
   }
@@ -612,6 +627,9 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
               confidence: widget.result.confidence,
               imageBase64: widget.result.frameUsed,
               isNew: widget.result.isNew,
+              detectionConfidence: widget.result.detectionConfidence,
+              classificationConfidence: widget.result.classificationConfidence,
+              matchConfidence: widget.result.matchConfidence,
             ),
           ),
         );

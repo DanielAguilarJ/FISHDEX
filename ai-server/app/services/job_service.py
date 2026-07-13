@@ -296,6 +296,24 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             f"[Job {job_id}] Best detection confidence: {best_detection_confidence:.3f}"
         )
 
+        # --- Step 7b: Dataset pass — detect on ALL extracted frames ---
+        # Runs detection on the full set of extracted frames (not just the top-5 best)
+        # so that every valid fish detection is saved as a training crop.
+        thresh = settings.detector_confidence_threshold or 0.30
+        dataset_frame_detections: list[tuple] = []  # (frame, detection, conf)
+        logger.info(f"[Job {job_id}] Dataset pass: scanning {len(all_frames)} frames")
+        for d_frame in all_frames:
+            d_dets = detector.detect(d_frame)
+            if d_dets:
+                top_det = max(d_dets, key=lambda d: _get_detection_confidence(d))
+                conf = _get_detection_confidence(top_det)
+                if conf >= thresh:
+                    dataset_frame_detections.append((d_frame, top_det, conf))
+        logger.info(
+            f"[Job {job_id}] Dataset pass: {len(dataset_frame_detections)}"
+            f"/{len(all_frames)} frames with confident detections"
+        )
+
         # --- Step 8: Crop fish from frame ---
         logger.info(f"[Job {job_id}] Cropping fish from frame")
         cropped_frame = _crop_fish_from_frame(best_detection_frame, best_detection)
@@ -623,6 +641,15 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 media_type=media_type,
                 is_new_fish=is_new_fish,
                 linkage=linkage,
+                # Annotation + dataset params
+                best_detection_frame=best_detection_frame,
+                best_detection=best_detection,
+                species_english=species_info.get("english_name") if species_info else None,
+                detection_confidence=detection_confidence,
+                classification_confidence=classification_confidence,
+                match_confidence=match_confidence,
+                model_type=settings.detector_type or "yolov8_obb",
+                all_dataset_detections=dataset_frame_detections,
             )
 
             created_artifact_dir = capture_artifacts.get("artifact_abs_dir")
@@ -636,11 +663,11 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                     confidence, is_new_fish, xp_earned, area_code, frame_filename, raw_video_filename, 
                     captured_at, created_at, location_lat, location_lng,
                     area_name, weather, bite, size_cm, fish_state, custom_name, notes,
-                    artifact_dir, document_filename, preview_filename,
+                    artifact_dir, document_filename, preview_filename, annotated_preview_filename,
                     detection_confidence, classification_confidence, match_confidence, catch_number,
                     media_type, video_filename, rarity,
                     previous_sighting_id, total_sightings_before, total_sightings_after, linkage_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     sighting_id, user_id, fish_id, job_id, species_slug,
                     species_info.get("english_name") if species_info else None,
@@ -660,6 +687,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                     capture_artifacts.get("artifact_dir"),
                     capture_artifacts.get("document_filename"),
                     capture_artifacts.get("preview_filename"),
+                    capture_artifacts.get("annotated_preview_filename"),
                     round(detection_confidence, 4),
                     round(classification_confidence, 4),
                     round(match_confidence, 4),
@@ -757,7 +785,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 """UPDATE identification_jobs 
                    SET status = ?, completed_at = ?, result_sighting_id = ?, result_fish_id = ?, 
                        confidence = ?, species_slug = ?, is_new_fish = ?, xp_earned = ?, error_message = NULL,
-                       artifact_dir = ?, document_filename = ?, preview_filename = ?,
+                       artifact_dir = ?, document_filename = ?, preview_filename = ?, annotated_preview_filename = ?,
                        video_filename = ?, rarity = ?, detection_confidence = ?, classification_confidence = ?,
                        match_confidence = ?, catch_number = ?, linked_fish_id = ?, previous_sighting_id = ?,
                        total_sightings_before = ?, total_sightings_after = ?, linkage_json = ?
@@ -768,6 +796,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                     capture_artifacts.get("artifact_dir"),
                     capture_artifacts.get("document_filename"),
                     capture_artifacts.get("preview_filename"),
+                    capture_artifacts.get("annotated_preview_filename"),
                     capture_artifacts.get("video_filename"),
                     species_info.get("rarity") if species_info else "common",
                     round(detection_confidence, 4),

@@ -16,7 +16,7 @@ class IdentifyResult {
   final String? frameUsed;
   final String message;
   final String timestamp;
-  // New fields for Czech area system
+  // Czech area system
   final String? areaCode;
   final String? areaName;
   final String? areaUrl;
@@ -24,6 +24,10 @@ class IdentifyResult {
   final String? speciesEnglish;
   final int? catchNumber;
   final String? userRole;
+  // AI model validation breakdown
+  final double? detectionConfidence;
+  final double? classificationConfidence;
+  final double? matchConfidence;
 
   const IdentifyResult({
     required this.success,
@@ -49,6 +53,9 @@ class IdentifyResult {
     this.speciesEnglish,
     this.catchNumber,
     this.userRole,
+    this.detectionConfidence,
+    this.classificationConfidence,
+    this.matchConfidence,
   });
 
   factory IdentifyResult.fromJson(Map<String, dynamic> json) {
@@ -79,6 +86,10 @@ class IdentifyResult {
       speciesEnglish: json['species_english'] as String?,
       catchNumber: json['catch_number'] as int?,
       userRole: json['user_role'] as String?,
+      detectionConfidence: (json['detection_confidence'] as num?)?.toDouble(),
+      classificationConfidence:
+          (json['classification_confidence'] as num?)?.toDouble(),
+      matchConfidence: (json['match_confidence'] as num?)?.toDouble(),
     );
   }
 
@@ -106,6 +117,9 @@ class IdentifyResult {
         'species_english': speciesEnglish,
         'catch_number': catchNumber,
         'user_role': userRole,
+        'detection_confidence': detectionConfidence,
+        'classification_confidence': classificationConfidence,
+        'match_confidence': matchConfidence,
       };
 }
 

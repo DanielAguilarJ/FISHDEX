@@ -86,6 +86,7 @@ def init_db():
         "artifact_dir": "TEXT",
         "document_filename": "TEXT",
         "preview_filename": "TEXT",
+        "annotated_preview_filename": "TEXT",
         # NUEVO
         "media_type": "TEXT DEFAULT 'video'",
         "original_filename": "TEXT",
@@ -140,6 +141,7 @@ def init_db():
         "artifact_dir": "TEXT",
         "document_filename": "TEXT",
         "preview_filename": "TEXT",
+        "annotated_preview_filename": "TEXT",
         "detection_confidence": "REAL",
         "classification_confidence": "REAL",
         "match_confidence": "REAL",

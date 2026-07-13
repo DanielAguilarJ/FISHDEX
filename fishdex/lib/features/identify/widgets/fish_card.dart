@@ -13,6 +13,10 @@ class FishCard extends StatelessWidget {
   final double confidence;
   final String? imageBase64;
   final bool isNew;
+  // AI model validation breakdown (optional)
+  final double? detectionConfidence;
+  final double? classificationConfidence;
+  final double? matchConfidence;
 
   const FishCard({
     super.key,
@@ -23,6 +27,9 @@ class FishCard extends StatelessWidget {
     required this.confidence,
     this.imageBase64,
     this.isNew = false,
+    this.detectionConfidence,
+    this.classificationConfidence,
+    this.matchConfidence,
   });
 
   @override
@@ -50,13 +57,16 @@ class FishCard extends StatelessWidget {
         children: [
           // Header de la carta
           _buildCardHeader(),
-          
-          // Imagen del pez
+
+          // Imagen del pez (annotated or plain)
           _buildFishImage(),
-          
+
+          // AI validation panel (3 model confidences)
+          _buildAiValidation(context),
+
           // Info del pez
           _buildFishInfo(context),
-          
+
           // Stats del pez
           _buildStats(context),
         ],
@@ -139,7 +149,7 @@ class FishCard extends StatelessWidget {
   Widget _buildFishImage() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      height: 160,
+      height: 170,
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -156,8 +166,10 @@ class FishCard extends StatelessWidget {
                 ? Image.network(
                     imageBase64!,
                     fit: BoxFit.cover,
+                    alignment: Alignment.center,
                     errorBuilder: (_, __, ___) => const Center(
-                      child: Icon(Icons.broken_image, color: Colors.white30, size: 40),
+                      child: Icon(Icons.broken_image,
+                          color: Colors.white30, size: 40),
                     ),
                   )
                 : Image.memory(
@@ -175,9 +187,119 @@ class FishCard extends StatelessWidget {
     );
   }
 
+  /// AI validation panel — shows DET / CLS / MATCH (or NEW) confidence values.
+  Widget _buildAiValidation(BuildContext context) {
+    final hasDet = detectionConfidence != null;
+    final hasCls = classificationConfidence != null;
+    final hasMatch = matchConfidence != null;
+
+    if (!hasDet && !hasCls && !hasMatch) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.30),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: AppTheme.getRarityColor(rarity).withOpacity(0.18),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            if (hasDet)
+              _buildAiBadge(
+                'DET',
+                detectionConfidence!,
+                const Color(0xFF4CAF50),
+              ),
+            if (hasDet && (hasCls || hasMatch))
+              _buildDivider(),
+            if (hasCls)
+              _buildAiBadge(
+                'CLS',
+                classificationConfidence!,
+                const Color(0xFF29B6F6),
+              ),
+            if (hasCls && (isNew || hasMatch))
+              _buildDivider(),
+            if (isNew)
+              _buildNewBadge()
+            else if (hasMatch)
+              _buildAiBadge(
+                'MATCH',
+                matchConfidence!,
+                const Color(0xFFFFB74D),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider() => Container(
+        width: 1,
+        height: 28,
+        color: Colors.white.withOpacity(0.12),
+      );
+
+  Widget _buildAiBadge(String label, double value, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color.withOpacity(0.65),
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          '${(value * 100).toStringAsFixed(0)}%',
+          style: TextStyle(
+            color: color,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNewBadge() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'MATCH',
+          style: TextStyle(
+            color: const Color(0xFF4CAF50).withOpacity(0.65),
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 3),
+        const Text(
+          'NEW',
+          style: TextStyle(
+            color: Color(0xFF4CAF50),
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFishInfo(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
           // Tamaño
@@ -186,7 +308,7 @@ class FishCard extends StatelessWidget {
             '${sizeCm.toStringAsFixed(1)} cm',
           ),
           const SizedBox(width: 8),
-          // Confianza
+          // Confianza general
           _buildInfoBadge(
             Icons.psychology,
             '${(confidence * 100).toStringAsFixed(0)}${context.l10n.fishCardAiConfidence}',
@@ -195,7 +317,8 @@ class FishCard extends StatelessWidget {
           // Badge de nuevo
           if (isNew)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppTheme.successGreen.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
@@ -206,7 +329,8 @@ class FishCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.new_releases, color: AppTheme.successGreen, size: 14),
+                  const Icon(Icons.new_releases,
+                      color: AppTheme.successGreen, size: 14),
                   const SizedBox(width: 4),
                   Text(
                     context.l10n.fishCardNew,
@@ -250,7 +374,7 @@ class FishCard extends StatelessWidget {
 
   Widget _buildStats(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
       child: Row(
         children: [
           // Barra de rareza visual
