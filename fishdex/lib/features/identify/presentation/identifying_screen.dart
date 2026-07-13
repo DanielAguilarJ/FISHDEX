@@ -121,6 +121,24 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
           );
         }
         return;
+      } else if (status == JobStatus.pendingCrop || status == JobStatus.needsManualReview) {
+        // Fish was identified but crop not ready yet.
+        // Show result with temporary frame image — the collection will
+        // update automatically when the server completes the crop.
+        final mergedData = <String, dynamic>{
+          ...jobData,
+          // Ensure the phone shows what's available (frame as temp preview)
+          'is_new_fish': jobData['is_new_fish'] ?? 1,
+        };
+
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ResultScreen.fromJobData(jobData: mergedData),
+            ),
+          );
+        }
+        return;
       } else if (status == JobStatus.failed) {
         setState(() {
           _hasError = true;

@@ -22,6 +22,7 @@ from app.middleware.correlation import CorrelationFilter, CorrelationMiddleware
 from app.routers import identify, jobs, websocket, dashboard, auth, sightings
 from app.services.event_bus import EventBusLogHandler
 from app.services.system_monitor import start_system_monitor
+from app.services.retry_service import start_retry_service
 from app.database import init_db
 from fastapi.staticfiles import StaticFiles
 
@@ -91,6 +92,9 @@ async def lifespan(app: FastAPI):
 
     # Start background system monitoring
     start_system_monitor()
+
+    # Start background crop retry service
+    start_retry_service()
 
     # Initialize SQLite database
     init_db()

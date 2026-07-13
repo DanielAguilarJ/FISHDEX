@@ -53,12 +53,12 @@ class CapturesRepository {
       for (final item in list) {
         final map = item as Map<String, dynamic>;
         
-        // Build absolute image URL — prefer annotated preview (has bbox + AI labels),
-        // then plain preview, then legacy frame_filename.
-        final annotatedPreview = map['annotated_preview_filename'] as String?;
+        // Build absolute image URL — prefer clean crop (no labels),
+        // then frame, then annotated preview (dashboard image).
         final previewFilename  = map['preview_filename'] as String?;
         final frameFilename    = map['frame_filename'] as String?;
-        final bestImage        = annotatedPreview ?? previewFilename ?? frameFilename;
+        final annotatedPreview = map['annotated_preview_filename'] as String?;
+        final bestImage        = previewFilename ?? frameFilename ?? annotatedPreview;
         final imageUrl = bestImage != null
             ? '${AppConstants.aiServerUrl}/storage/$bestImage'
             : null;

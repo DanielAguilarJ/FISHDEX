@@ -10,6 +10,8 @@ class JobStatus {
   static const String processing = 'processing';
   static const String completed = 'completed';
   static const String needsReview = 'needs_review';
+  static const String pendingCrop = 'pending_crop';
+  static const String needsManualReview = 'needs_manual_review';
   static const String failed = 'failed';
 }
 
@@ -106,6 +108,8 @@ class IdentificationJobRepository {
         final status = job['status'] as String?;
         if (status == JobStatus.completed ||
             status == JobStatus.needsReview ||
+            status == JobStatus.pendingCrop ||
+            status == JobStatus.needsManualReview ||
             status == JobStatus.failed) {
           break;
         }

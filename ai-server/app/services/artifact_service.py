@@ -184,7 +184,7 @@ def save_job_artifacts(
 
 
 from app.utils.area_utils import normalize_area_code
-from app.utils.crop_utils import crop_obb_rotated, crop_bbox_aligned
+from app.utils.crop_utils import crop_obb_rotated, crop_bbox_aligned_strict
 
 
 def save_fish_capture_artifacts(
@@ -268,7 +268,8 @@ def save_fish_capture_artifacts(
         _write_jpg(abs_path, frame)
         frame_files.append(rel)
 
-    # ── Plain preview = first crop ─────────────────────────────────────────
+    # ── Plain preview = first OBB crop (clean, no labels) ────────────────
+    #   This is what the phone displays. Only created if a valid crop exists.
     preview_filename: str | None = None
     if image_files:
         preview_filename = f"{rel_base}/preview.jpg"
@@ -278,6 +279,8 @@ def save_fish_capture_artifacts(
             Path(settings.server_data_dir) / "storage" / image_files[0],
             preview_abs,
         )
+    # NOTE: If cropped_frames was empty, images/ will be empty and NO preview.jpg
+    # is created. The phone will show the frame as a temporary placeholder.
 
     # ── Annotated preview ─────────────────────────────────────────────────
     #   Best detection frame with OBB polygon + AI label block drawn on it.
@@ -330,11 +333,12 @@ def save_fish_capture_artifacts(
                 dataset_crop_files.append(crop_rel)
 
                 # --- Axis-aligned bbox crop ---
-                bbox_crop = crop_bbox_aligned(d_frame, d_det)
-                bbox_rel = f"{rel_base}/dataset/crop_{idx:03d}_bbox.jpg"
-                bbox_abs = Path(settings.server_data_dir) / "storage" / bbox_rel
-                _write_jpg(bbox_abs, bbox_crop)
-                dataset_bbox_files.append(bbox_rel)
+                bbox_crop = crop_bbox_aligned_strict(d_frame, d_det)
+                if bbox_crop is not None:
+                    bbox_rel = f"{rel_base}/dataset/crop_{idx:03d}_bbox.jpg"
+                    bbox_abs = Path(settings.server_data_dir) / "storage" / bbox_rel
+                    _write_jpg(bbox_abs, bbox_crop)
+                    dataset_bbox_files.append(bbox_rel)
 
                 # --- Annotated full frame ---
                 ann_rel = f"{rel_base}/annotated/frame_{idx:03d}.jpg"

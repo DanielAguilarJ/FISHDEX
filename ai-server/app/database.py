@@ -103,6 +103,7 @@ def init_db():
         "total_sightings_before": "INTEGER DEFAULT 0",
         "total_sightings_after": "INTEGER DEFAULT 1",
         "linkage_json": "TEXT",
+        "retry_count": "INTEGER DEFAULT 0",
     }
     _ensure_columns(cursor, "identification_jobs", _identification_job_columns)
     

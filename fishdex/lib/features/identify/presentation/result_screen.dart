@@ -51,11 +51,11 @@ class ResultScreen extends ConsumerStatefulWidget {
         jobData['species_slug'] as String? ??
         'Unknown';
 
-    // Prefer the annotated preview (with bbox + AI labels drawn on it);
-    // fall back to the plain preview crop.
-    final annotatedFilename = jobData['annotated_preview_filename'] as String?;
+    // Use the clean fish crop (no labels) for the phone display.
+    // Falls back to frame if crop isn't ready yet (pending_crop status).
     final plainFilename = jobData['preview_filename'] as String?;
-    final imageFilename = annotatedFilename ?? plainFilename;
+    final annotatedFilename = jobData['annotated_preview_filename'] as String?;
+    final imageFilename = plainFilename ?? annotatedFilename;
     final imageUrl = imageFilename != null
         ? '${AppConstants.aiServerUrl}/storage/$imageFilename'
         : null;
