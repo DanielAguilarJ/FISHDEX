@@ -1,0 +1,8 @@
+# FishDex YOLOv8 OBB Dataset
+path: .
+train: train/images
+val: val/images
+
+# Classes
+names:
+  0: Fish

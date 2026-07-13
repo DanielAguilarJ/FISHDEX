@@ -6,6 +6,9 @@ ai-server/model/*.onnx
 *.pt
 labels.cache
 
+# Dataset images (200 PNGs, 390MB — keep in Label Studio, not git)
+ai-server/model/**/images/
+
 # Flutter
 fishdex/.dart_tool/
 fishdex/build/

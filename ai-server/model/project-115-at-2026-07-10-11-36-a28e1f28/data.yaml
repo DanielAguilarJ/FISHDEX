@@ -1,0 +1,11 @@
+# FishDex YOLOv8 OBB Dataset Configuration
+# ==========================================
+# For training with: yolo obb train model=yolov8n-obb.pt data=data.yaml imgsz=640 epochs=100 batch=8
+
+path: .  # Dataset root (relative to where you run training from)
+train: train/images
+val: val/images
+
+# Class names
+names:
+  0: Fish
