@@ -152,10 +152,18 @@ class FishCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: imageBase64 != null && imageBase64!.isNotEmpty
-            ? Image.memory(
-                base64Decode(imageBase64!),
-                fit: BoxFit.cover,
-              )
+            ? (imageBase64!.startsWith('http')
+                ? Image.network(
+                    imageBase64!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Center(
+                      child: Icon(Icons.broken_image, color: Colors.white30, size: 40),
+                    ),
+                  )
+                : Image.memory(
+                    base64Decode(imageBase64!),
+                    fit: BoxFit.cover,
+                  ))
             : Center(
                 child: Icon(
                   Icons.phishing,

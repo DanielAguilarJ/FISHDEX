@@ -51,8 +51,18 @@ services:
       - APPWRITE_API_KEY=${APPWRITE_API_KEY}
       - FISHDEX_ENVIRONMENT=${FISHDEX_ENVIRONMENT:-production}
       - FISHDEX_SKIP_AUTH=false
+      - FISHDEX_SERVER_DATA_DIR=/app/data
+      - FISHDEX_PRIVATE_DATA_DIR=/app/data/private
+      - FISHDEX_FISH_DOCUMENTS_DIR=/app/data/private/fish_documents
+      - FISHDEX_FISH_MEDIA_DIR=/app/data/storage/fish_media
+      - FISHDEX_JOB_ARTIFACTS_DIR=/app/data/storage/jobs
+      - FISHDEX_EMBEDDINGS_DB_PATH=/app/data/embeddings/fishdex_embeddings.sqlite
+      - FISHDEX_SIMILARITY_THRESHOLD=0.75
+      - FISHDEX_NEARBY_AREA_RADIUS_KM=5.0
     volumes:
       - ./ai-server/model:/app/model
+      - ./ai-server/models:/app/models
+      - ./ai-server/data:/app/data
     networks:
       - fishdex-network
     depends_on:

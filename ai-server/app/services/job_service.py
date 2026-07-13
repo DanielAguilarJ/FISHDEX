@@ -1,13 +1,10 @@
-"""
-Job Service - Fully local database and file storage implementation of the identification pipeline.
-Processes jobs locally using SQLite and writes files to the local disk.
-"""
-
 import logging
 import uuid
 import os
 import io
 import cv2
+import json
+import shutil
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
@@ -24,6 +21,7 @@ from app.services.event_bus import event_bus
 from app.services.artifact_service import (
     save_job_artifacts,
     save_fish_capture_artifacts,
+    update_fish_index_file,
 )
 import asyncio
 from app.utils.video import (
@@ -31,6 +29,7 @@ from app.utils.video import (
     extract_frames_from_video,
     select_best_n_frames,
 )
+from app.utils.area_utils import normalize_area_code
 
 logger = logging.getLogger(__name__)
 
@@ -103,34 +102,56 @@ def _crop_fish_from_frame(frame: np.ndarray, detection) -> np.ndarray:
     y2 = min(h, cy + ch)
     return frame[y1:y2, x1:x2]
 
-def _generate_fish_id(area_code: str, species_slug: str) -> str:
-    """Generate fish ID in format: CZ-{area_code_clean}-{ABBREV}-{NNNN} using local SQLite."""
-    area_code_clean = area_code.replace("-", "").replace(" ", "").upper() if area_code else "XX"
+def _infer_media_type(filename: str | None, content_type: str | None = None) -> str:
+    content_type = (content_type or "").lower()
+    filename = (filename or "").lower()
+
+    if content_type.startswith("image/"):
+        return "image"
+    if content_type.startswith("video/"):
+        return "video"
+
+    if filename.endswith((".jpg", ".jpeg", ".png", ".webp")):
+        return "image"
+
+    return "video"
+
+
+def _load_frames_from_media(path: str, media_type: str) -> list[np.ndarray]:
+    if media_type == "image":
+        img = cv2.imread(path)
+        if img is None:
+            raise ValueError(f"Could not read image file: {path}")
+        return [img]
+
+    return extract_frames_from_video(
+        path,
+        max_frames=settings.max_frames_to_extract or 10,
+    )
+
+def _generate_fish_id(cursor, area_code: str, species_slug: str) -> str:
+    """Generate fish ID in format: CZ-{area_code_clean}-{ABBREV}-{NNNN} using local SQLite cursor."""
+    area_code_clean = normalize_area_code(area_code)
 
     if species_slug:
         abbrev = species_slug.replace("-", "").replace("_", "")[:4].upper()
     else:
         abbrev = "UNK"
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
     next_num = 1
-    try:
-        prefix = f"CZ-{area_code_clean}-{abbrev}-%"
-        cursor.execute(
-            "SELECT fish_id FROM fish_individuals WHERE fish_id LIKE ? ORDER BY fish_id DESC LIMIT 1",
-            (prefix,)
-        )
-        row = cursor.fetchone()
-        if row:
-            last_id = row["fish_id"]
+    prefix = f"CZ-{area_code_clean}-{abbrev}-%"
+    cursor.execute(
+        "SELECT fish_id FROM fish_individuals WHERE fish_id LIKE ? ORDER BY fish_id DESC LIMIT 1",
+        (prefix,)
+    )
+    row = cursor.fetchone()
+    if row:
+        last_id = row["fish_id"]
+        try:
             last_num = int(last_id.split("-")[-1])
             next_num = last_num + 1
-    except Exception as e:
-        logger.warning(f"Could not query existing fish for numbering: {e}")
-    finally:
-        conn.close()
+        except Exception:
+            pass
 
     return f"CZ-{area_code_clean}-{abbrev}-{next_num:04d}"
 
@@ -160,6 +181,34 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
     cursor = conn.cursor()
 
     try:
+        # --- Step 0: Phase 1 Idempotency Check ---
+        cursor.execute("SELECT * FROM fish_sightings WHERE job_id = ? LIMIT 1", (job_id,))
+        existing_sighting = cursor.fetchone()
+        if existing_sighting and not force:
+            logger.info(f"[Job {job_id}] Sighting already exists in DB (Phase 1). Skipping processing.")
+            sighting_data = dict(existing_sighting)
+            
+            # Canonicalize species slug info if possible
+            species_slug = sighting_data.get("species_slug")
+            species_info = find_species_by_name(species_slug) if species_slug else None
+            
+            result = {
+                "status": "completed" if species_slug else "needs_review",
+                "job_id": job_id,
+                "fish_id": sighting_data.get("fish_id"),
+                "sighting_id": sighting_data.get("id"),
+                "species_slug": species_slug,
+                "species_english": species_info.get("english_name") if species_info else None,
+                "confidence": sighting_data.get("confidence", 0.0),
+                "is_new_fish": bool(sighting_data.get("is_new_fish")),
+                "xp_earned": sighting_data.get("xp_earned", 10),
+                "detection_confidence": sighting_data.get("detection_confidence", 0.0),
+                "classification_confidence": sighting_data.get("classification_confidence", 0.0),
+                "match_confidence": sighting_data.get("match_confidence", 0.0),
+            }
+            _emit_progress(job_id, result["status"], 100, f"Job skipped (already done): {sighting_data.get('fish_id')}")
+            return result
+
         # --- Step 1: Get job document ---
         _emit_progress(job_id, "processing", 5, "Job started")
         logger.info(f"[Job {job_id}] Fetching job from local database")
@@ -193,28 +242,29 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         )
         conn.commit()
 
-        # --- Step 4: Locate raw video ---
-        raw_video_filename = job_doc.get("raw_video_filename")
+        # --- Step 4: Locate raw media (video/photo) ---
+        raw_video_filename = job_doc.get("raw_media_filename") or job_doc.get("raw_video_filename")
         if not raw_video_filename:
-            raise ValueError("Job has no raw_video_filename")
+            raise ValueError("Job has no raw media filename")
 
-        _emit_progress(job_id, "downloading_video", 15, "Loading video file from local storage")
+        media_type = job_doc.get("media_type") or _infer_media_type(
+            raw_video_filename,
+            job_doc.get("content_type")
+        )
+
+        _emit_progress(job_id, "downloading_video", 15, f"Loading {media_type} file from local storage")
         temp_video_path = str(Path(settings.server_data_dir) / "storage" / raw_video_filename)
-        logger.info(f"[Job {job_id}] Video resolved to local path: {temp_video_path}")
+        logger.info(f"[Job {job_id}] Media resolved to local path: {temp_video_path} (type: {media_type})")
         
         if not os.path.exists(temp_video_path):
-            raise FileNotFoundError(f"Raw video file not found on disk: {temp_video_path}")
+            raise FileNotFoundError(f"Raw media file not found on disk: {temp_video_path}")
 
         # --- Step 5: Extract frames ---
-        _emit_progress(job_id, "extracting_frames", 30, "Extracting and selecting video frames")
-        logger.info(f"[Job {job_id}] Extracting frames (max {settings.max_frames_to_extract})")
-        all_frames = extract_frames_from_video(
-            temp_video_path,
-            max_frames=settings.max_frames_to_extract or 10,
-        )
+        _emit_progress(job_id, "extracting_frames", 30, f"Extracting frames from {media_type}")
+        all_frames = _load_frames_from_media(temp_video_path, media_type)
         if not all_frames or len(all_frames) == 0:
-            raise ValueError("No frames could be extracted from video")
-        logger.info(f"[Job {job_id}] Extracted {len(all_frames)} frames")
+            raise ValueError(f"No frames could be loaded from {media_type}")
+        logger.info(f"[Job {job_id}] Loaded {len(all_frames)} frames")
 
         # --- Step 6: Select best frames ---
         max_save = settings.max_frames_to_save or 5
@@ -258,28 +308,6 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 cropped_frames.append(cropped)
                 if len(cropped_frames) >= max_save:
                     break
-
-        # Save temporary job artifacts (selected frames + crops)
-        job_artifacts = save_job_artifacts(
-            job_id=job_id,
-            selected_frames=best_frames,
-            cropped_frames=cropped_frames,
-            raw_video_path=temp_video_path,
-        )
-        
-        cursor.execute(
-            """
-            UPDATE identification_jobs
-            SET artifact_dir = ?, preview_filename = ?
-            WHERE id = ?
-            """,
-            (
-                job_artifacts.get("job_artifact_dir"),
-                job_artifacts.get("preview_filename"),
-                job_id,
-            )
-        )
-        conn.commit()
 
         # --- Step 9: Run classifier ---
         species_slug = job_doc.get("species_slug")
@@ -372,6 +400,9 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 species_slug=species_slug,
                 area_code=job_doc.get("area_code"),
                 threshold=settings.similarity_threshold,
+                latitude=job_doc.get("latitude"),
+                longitude=job_doc.get("longitude"),
+                radius_km=settings.nearby_area_radius_km,
             )
         else:
             matched_fish_id, match_confidence = None, 0.0
@@ -384,19 +415,12 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             f"(confidence: {match_confidence:.3f})"
         )
 
-        # --- Step 12: Generate fish_id if new ---
+        # --- Step 12: Enter Critical DB Transaction (BEGIN IMMEDIATE) ---
+        _emit_progress(job_id, "uploading_results", 95, "Saving artifacts and sightings")
+        
         user_id = job_doc.get("user_id")
         area_code = job_doc.get("area_code", "XX")
-
-        if is_new_fish:
-            fish_id = _generate_fish_id(area_code, species_slug)
-            logger.info(f"[Job {job_id}] Generated new fish_id: {fish_id}")
-        else:
-            fish_id = matched_fish_id
-            logger.info(f"[Job {job_id}] Using existing fish_id: {fish_id}")
-
-        # --- Step 13: Create fish_sightings record and generate final status & sighting_id ---
-        _emit_progress(job_id, "uploading_results", 95, "Saving artifacts and sightings")
+        area_code_clean = normalize_area_code(area_code)
         sighting_id = str(uuid.uuid4())
         
         if not species_slug:
@@ -405,233 +429,398 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         else:
             final_status = "completed"
 
-        if is_new_fish:
-            catch_number = 1
-        else:
-            cursor.execute(
-                "SELECT total_sightings FROM fish_individuals WHERE fish_id = ?",
-                (fish_id,),
-            )
-            existing_fish_row = cursor.fetchone()
-            if existing_fish_row:
-                catch_number = int(existing_fish_row["total_sightings"] or 0) + 1
-            else:
+        created_artifact_dir = None
+        created_private_dir = None
+        capture_artifacts = None
+        linkage = None
+        fish_id = None
+        catch_number = 1
+
+        try:
+            cursor.execute("BEGIN IMMEDIATE")
+
+            # Double Check Idempotency inside the write lock (Phase 2)
+            cursor.execute("SELECT * FROM fish_sightings WHERE job_id = ? LIMIT 1", (job_id,))
+            existing_sighting_p2 = cursor.fetchone()
+            if existing_sighting_p2:
+                logger.warning(f"[Job {job_id}] Sighting already created (Phase 2). Rolling back.")
+                conn.rollback()
+                
+                # Fetch completed data
+                sighting_data = dict(existing_sighting_p2)
+                result = {
+                    "status": "completed" if species_slug else "needs_review",
+                    "job_id": job_id,
+                    "fish_id": sighting_data.get("fish_id"),
+                    "sighting_id": sighting_data.get("id"),
+                    "species_slug": species_slug,
+                    "species_english": species_info.get("english_name") if species_info else None,
+                    "confidence": sighting_data.get("confidence", 0.0),
+                    "is_new_fish": bool(sighting_data.get("is_new_fish")),
+                    "xp_earned": sighting_data.get("xp_earned", 10),
+                    "detection_confidence": sighting_data.get("detection_confidence", 0.0),
+                    "match_confidence": sighting_data.get("match_confidence", 0.0),
+                }
+                return result
+
+            # Resolve unique fish_id and catch number
+            previous_sighting_id = None
+            total_sightings_before = 0
+
+            if is_new_fish:
+                fish_id = _generate_fish_id(cursor, area_code_clean, species_slug)
                 catch_number = 1
+                logger.info(f"[Job {job_id}] Generated new fish_id: {fish_id}")
+            else:
+                fish_id = matched_fish_id
+                cursor.execute(
+                    """
+                    SELECT latest_sighting_id, total_sightings
+                    FROM fish_individuals
+                    WHERE fish_id = ?
+                    """,
+                    (fish_id,),
+                )
+                existing_fish_row = cursor.fetchone()
+                if existing_fish_row:
+                    previous_sighting_id = existing_fish_row["latest_sighting_id"]
+                    total_sightings_before = int(existing_fish_row["total_sightings"] or 0)
+                    catch_number = total_sightings_before + 1
+                else:
+                    catch_number = 1
+                    total_sightings_before = 0
+                logger.info(f"[Job {job_id}] Using existing fish_id: {fish_id} (catch #{catch_number})")
 
-        detection_confidence = best_detection_confidence if best_detection else 0.0
-        overall_confidence = (
-            (detection_confidence + match_confidence) / 2.0
-            if not is_new_fish
-            else detection_confidence
-        )
-        if classification_confidence > 0:
-            overall_confidence = max(overall_confidence, classification_confidence)
+            total_sightings_after = catch_number
 
-        xp_earned = _calculate_xp(species_info, is_new_fish)
+            # Determine confidence values
+            detection_confidence = best_detection_confidence if best_detection else 0.0
+            overall_confidence = (
+                (detection_confidence + match_confidence) / 2.0
+                if not is_new_fish
+                else detection_confidence
+            )
+            if classification_confidence > 0:
+                overall_confidence = max(overall_confidence, classification_confidence)
 
-        # Build document schema exactly as requested
-        document = {
-            "schema_version": "1.0",
-            "job": {
-                "job_id": job_id,
-                "status": final_status,
-                "created_at": job_doc.get("created_at"),
-                "started_at": job_doc.get("started_at"),
-                "completed_at": now_str,
-            },
-            "user": {
-                "user_id": user_id,
-            },
-            "capture": {
-                "area_code": area_code,
-                "area_name": job_doc.get("area_name"),
+            xp_earned = _calculate_xp(species_info, is_new_fish)
+
+            # Build linkage structure and gray zone indicators
+            confidence_band = "new_fish" if is_new_fish else ("high" if match_confidence >= 0.85 else "gray_zone")
+            linkage_decision = "new_fish" if is_new_fish else ("auto_match" if match_confidence >= 0.85 else "auto_match_with_warning")
+            requires_human_review = bool(not is_new_fish and match_confidence < 0.85)
+
+            linkage = {
+                "is_linked": not is_new_fish,
+                "strategy": "embedding_cosine",
+                "threshold": settings.similarity_threshold,
+                "matched_fish_id": matched_fish_id,
+                "final_fish_id": fish_id,
+                "previous_sighting_id": previous_sighting_id,
+                "match_confidence": round(match_confidence, 4),
+                "confidence_band": confidence_band,
+                "decision": linkage_decision,
+                "requires_human_review": requires_human_review,
+                "total_sightings_before": total_sightings_before,
+                "total_sightings_after": total_sightings_after,
+                "same_species_required": True,
+                "area_code": area_code_clean,
                 "latitude": job_doc.get("latitude"),
                 "longitude": job_doc.get("longitude"),
-                "weather": job_doc.get("weather"),
-                "bait": job_doc.get("bite"),
-                "size_cm": job_doc.get("size_cm"),
-                "fish_state": job_doc.get("fish_state"),
-                "custom_name": job_doc.get("custom_name"),
-                "notes": job_doc.get("notes"),
-            },
-            "species": {
-                "slug": species_slug,
-                "english_name": species_info.get("english_name") if species_info else None,
-                "czech_name": species_info.get("czech_name") if species_info else None,
-                "latin_name": species_info.get("latin_name") if species_info else None,
-                "rarity": species_info.get("rarity") if species_info else None,
-            },
-            "fish": {
-                "fish_id": fish_id,
-                "is_new_fish": is_new_fish,
-                "catch_number": catch_number,
-            },
-            "model": {
-                "detector_type": settings.detector_type,
-                "detector_model_path": settings.detector_model_path,
-                "classifier_model_path": settings.classifier_model_path,
+                "nearby_area_radius_km": settings.nearby_area_radius_km,
+            }
+
+            # Build document schema exactly as requested
+            document = {
+                "schema_version": "1.0",
+                "job": {
+                    "job_id": job_id,
+                    "status": final_status,
+                    "created_at": job_doc.get("created_at"),
+                    "started_at": job_doc.get("started_at"),
+                    "completed_at": now_str,
+                },
+                "user": {
+                    "user_id": user_id,
+                },
+                "capture": {
+                    "area_code": area_code_clean,
+                    "area_name": job_doc.get("area_name"),
+                    "latitude": job_doc.get("latitude"),
+                    "longitude": job_doc.get("longitude"),
+                    "weather": job_doc.get("weather"),
+                    "bait": job_doc.get("bite"),
+                    "size_cm": job_doc.get("size_cm"),
+                    "fish_state": job_doc.get("fish_state"),
+                    "custom_name": job_doc.get("custom_name"),
+                    "notes": job_doc.get("notes"),
+                },
+                "species": {
+                    "slug": species_slug,
+                    "english_name": species_info.get("english_name") if species_info else None,
+                    "czech_name": species_info.get("czech_name") if species_info else None,
+                    "latin_name": species_info.get("latin_name") if species_info else None,
+                    "rarity": species_info.get("rarity") if species_info else "common",
+                },
+                "fish": {
+                    "fish_id": fish_id,
+                    "is_new_fish": is_new_fish,
+                    "catch_number": catch_number,
+                    "previous_sighting_id": previous_sighting_id,
+                    "total_sightings_before": total_sightings_before,
+                    "total_sightings_after": total_sightings_after,
+                },
+                "linkage": linkage,
+                "model": {
+                    "detector_type": settings.detector_type,
+                    "detector_model_path": settings.detector_model_path,
+                    "classifier_model_path": settings.classifier_model_path,
+                    "detection_confidence": round(detection_confidence, 4),
+                    "classification_confidence": round(classification_confidence, 4),
+                    "match_confidence": round(match_confidence, 4),
+                    "overall_confidence": round(overall_confidence, 4),
+                    "top_predictions": (
+                        classification_result.get("predictions", [])
+                        if classification_result else []
+                    ),
+                },
+                "media": {
+                    "media_type": media_type,
+                    "preview": None,
+                    "video": None,
+                    "images": [],
+                    "frames": [],
+                },
+                "gamification": {
+                    "xp_earned": xp_earned,
+                },
+            }
+
+            model_outputs = {
+                "classification_result": classification_result,
                 "detection_confidence": round(detection_confidence, 4),
                 "classification_confidence": round(classification_confidence, 4),
                 "match_confidence": round(match_confidence, 4),
                 "overall_confidence": round(overall_confidence, 4),
-                "top_predictions": (
-                    classification_result.get("predictions", [])
-                    if classification_result else []
-                ),
-            },
-            "media": {
-                "preview": None,
-                "video": None,
-                "images": [],
-                "frames": [],
-            },
-            "gamification": {
-                "xp_earned": xp_earned,
-            },
-        }
+                "detector_type": settings.detector_type,
+                "detector_model_path": settings.detector_model_path,
+                "classifier_model_path": settings.classifier_model_path,
+            }
 
-        model_outputs = {
-            "classification_result": classification_result,
-            "detection_confidence": round(detection_confidence, 4),
-            "classification_confidence": round(classification_confidence, 4),
-            "match_confidence": round(match_confidence, 4),
-            "overall_confidence": round(overall_confidence, 4),
-            "detector_type": settings.detector_type,
-            "detector_model_path": settings.detector_model_path,
-            "classifier_model_path": settings.classifier_model_path,
-        }
-
-        # Save persistent capture artifacts and documents
-        capture_artifacts = save_fish_capture_artifacts(
-            job_id=job_id,
-            area_code=area_code,
-            species_slug=species_slug or "unknown_species",
-            fish_id=fish_id,
-            catch_number=catch_number,
-            selected_frames=best_frames,
-            cropped_frames=cropped_frames,
-            raw_video_path=temp_video_path,
-            document=document,
-            model_outputs=model_outputs,
-        )
-
-        frame_filename = capture_artifacts.get("preview_filename")
-
-        cursor.execute(
-            """INSERT INTO fish_sightings (
-                id, user_id, fish_id, job_id, species_slug, species_english, species_czech, species_latin, 
-                confidence, is_new_fish, xp_earned, area_code, frame_filename, raw_video_filename, 
-                captured_at, created_at, location_lat, location_lng,
-                area_name, weather, bite, size_cm, fish_state, custom_name, notes,
-                artifact_dir, document_filename, preview_filename,
-                detection_confidence, classification_confidence, match_confidence, catch_number
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                sighting_id, user_id, fish_id, job_id, species_slug,
-                species_info.get("english_name") if species_info else None,
-                species_info.get("czech_name") if species_info else None,
-                species_info.get("latin_name") if species_info else None,
-                round(overall_confidence, 4), 1 if is_new_fish else 0, xp_earned, area_code,
-                frame_filename, raw_video_filename,
-                job_doc.get("created_at", now_str), now_str,
-                job_doc.get("latitude"), job_doc.get("longitude"),
-                job_doc.get("area_name"),
-                job_doc.get("weather"),
-                job_doc.get("bite"),
-                job_doc.get("size_cm"),
-                job_doc.get("fish_state"),
-                job_doc.get("custom_name"),
-                job_doc.get("notes"),
-                capture_artifacts.get("artifact_dir"),
-                capture_artifacts.get("document_filename"),
-                capture_artifacts.get("preview_filename"),
-                round(detection_confidence, 4),
-                round(classification_confidence, 4),
-                round(match_confidence, 4),
-                catch_number
+            # Save final persistent folders (catch_{catch_number}_{job_id})
+            capture_artifacts = save_fish_capture_artifacts(
+                job_id=job_id,
+                sighting_id=sighting_id,
+                area_code=area_code_clean,
+                species_slug=species_slug or "unknown_species",
+                fish_id=fish_id,
+                catch_number=catch_number,
+                selected_frames=best_frames,
+                cropped_frames=cropped_frames,
+                raw_video_path=temp_video_path,
+                document=document,
+                model_outputs=model_outputs,
+                media_type=media_type,
+                is_new_fish=is_new_fish,
+                linkage=linkage,
             )
-        )
 
-        # --- Step 15: Create or update fish_individuals ---
-        if is_new_fish:
-            logger.info(f"[Job {job_id}] Creating new fish_individuals record")
+            created_artifact_dir = capture_artifacts.get("artifact_abs_dir")
+            created_private_dir = capture_artifacts.get("private_abs_dir")
+            frame_filename = capture_artifacts.get("preview_filename")
+
+            # Insert fish_sightings
             cursor.execute(
-                """INSERT INTO fish_individuals (
-                    id, fish_id, species_slug, species_english, species_latin, 
-                    first_seen_by, first_seen_at, last_seen_at, total_sightings, area_code, best_frame_filename,
-                    area_name, latest_sighting_id, latest_document_filename
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)""",
+                """INSERT INTO fish_sightings (
+                    id, user_id, fish_id, job_id, species_slug, species_english, species_czech, species_latin, 
+                    confidence, is_new_fish, xp_earned, area_code, frame_filename, raw_video_filename, 
+                    captured_at, created_at, location_lat, location_lng,
+                    area_name, weather, bite, size_cm, fish_state, custom_name, notes,
+                    artifact_dir, document_filename, preview_filename,
+                    detection_confidence, classification_confidence, match_confidence, catch_number,
+                    media_type, video_filename, rarity,
+                    previous_sighting_id, total_sightings_before, total_sightings_after, linkage_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    str(uuid.uuid4()), fish_id, species_slug,
+                    sighting_id, user_id, fish_id, job_id, species_slug,
                     species_info.get("english_name") if species_info else None,
+                    species_info.get("czech_name") if species_info else None,
                     species_info.get("latin_name") if species_info else None,
-                    user_id, now_str, now_str, area_code, frame_filename,
-                    job_doc.get("area_name"), sighting_id, capture_artifacts.get("document_filename")
+                    round(overall_confidence, 4), 1 if is_new_fish else 0, xp_earned, area_code_clean,
+                    frame_filename, raw_video_filename,
+                    job_doc.get("created_at", now_str), now_str,
+                    job_doc.get("latitude"), job_doc.get("longitude"),
+                    job_doc.get("area_name"),
+                    job_doc.get("weather"),
+                    job_doc.get("bite"),
+                    job_doc.get("size_cm"),
+                    job_doc.get("fish_state"),
+                    job_doc.get("custom_name"),
+                    job_doc.get("notes"),
+                    capture_artifacts.get("artifact_dir"),
+                    capture_artifacts.get("document_filename"),
+                    capture_artifacts.get("preview_filename"),
+                    round(detection_confidence, 4),
+                    round(classification_confidence, 4),
+                    round(match_confidence, 4),
+                    catch_number,
+                    media_type,
+                    capture_artifacts.get("video_filename"),
+                    species_info.get("rarity") if species_info else "common",
+                    previous_sighting_id,
+                    total_sightings_before,
+                    total_sightings_after,
+                    json.dumps(linkage, ensure_ascii=False)
                 )
             )
-        else:
-            logger.info(f"[Job {job_id}] Updating existing fish_individuals record")
+
+            # Insert/Update fish_individuals
+            if is_new_fish:
+                logger.info(f"[Job {job_id}] Creating new fish_individuals record")
+                cursor.execute(
+                    """INSERT INTO fish_individuals (
+                        id, fish_id, species_slug, species_english, species_latin, 
+                        first_seen_by, first_seen_at, last_seen_at, total_sightings, area_code, best_frame_filename,
+                        area_name, latest_sighting_id, latest_document_filename,
+                        first_sighting_id, reference_frame_filename, max_size_cm,
+                        last_seen_by, first_seen_lat, first_seen_lng, last_seen_lat, last_seen_lng, linkage_updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(uuid.uuid4()), fish_id, species_slug,
+                        species_info.get("english_name") if species_info else None,
+                        species_info.get("latin_name") if species_info else None,
+                        user_id, now_str, now_str, area_code_clean, frame_filename,
+                        job_doc.get("area_name"), sighting_id, capture_artifacts.get("document_filename"),
+                        sighting_id, frame_filename, job_doc.get("size_cm"),
+                        user_id, job_doc.get("latitude"), job_doc.get("longitude"),
+                        job_doc.get("latitude"), job_doc.get("longitude"), now_str
+                    )
+                )
+            else:
+                logger.info(f"[Job {job_id}] Updating existing fish_individuals record")
+                cursor.execute(
+                    """UPDATE fish_individuals 
+                       SET last_seen_at = ?, 
+                           total_sightings = total_sightings + 1,
+                           latest_sighting_id = ?, 
+                           latest_document_filename = ?,
+                           last_seen_by = ?,
+                           last_seen_lat = ?,
+                           last_seen_lng = ?,
+                           max_size_cm = CASE
+                               WHEN max_size_cm IS NULL THEN ?
+                               WHEN ? IS NOT NULL AND ? > max_size_cm THEN ?
+                               ELSE max_size_cm
+                           END,
+                           linkage_updated_at = ?
+                       WHERE fish_id = ?""",
+                    (
+                        now_str, sighting_id, capture_artifacts.get("document_filename"),
+                        user_id, job_doc.get("latitude"), job_doc.get("longitude"),
+                        job_doc.get("size_cm"), job_doc.get("size_cm"), job_doc.get("size_cm"), job_doc.get("size_cm"),
+                        now_str, fish_id
+                    )
+                )
+
+            # Update User statistics
+            cursor.execute("SELECT * FROM user_stats WHERE user_id = ?", (user_id,))
+            stats_row = cursor.fetchone()
+            if stats_row:
+                cursor.execute(
+                    """UPDATE user_stats 
+                       SET total_xp = total_xp + ?, total_sightings = total_sightings + 1, 
+                           total_species = total_species + ?, updated_at = ?
+                       WHERE user_id = ?""",
+                    (xp_earned, 1 if is_new_fish else 0, now_str, user_id)
+                )
+            else:
+                cursor.execute(
+                    """INSERT INTO user_stats (id, user_id, total_xp, total_sightings, total_species, updated_at) 
+                       VALUES (?, ?, ?, 1, 1, ?)""",
+                    (str(uuid.uuid4()), user_id, xp_earned, now_str)
+                )
+
+            # Store embedding
+            if species_slug:
+                matching.store_embedding(
+                    fish_id=fish_id,
+                    embedding=embedding_vector,
+                    species_slug=species_slug,
+                    area_code=area_code_clean,
+                    sighting_id=sighting_id,
+                    latitude=job_doc.get("latitude"),
+                    longitude=job_doc.get("longitude")
+                )
+
+            # Update identification_jobs final status
             cursor.execute(
-                """UPDATE fish_individuals 
-                   SET last_seen_at = ?, total_sightings = total_sightings + 1,
-                       latest_sighting_id = ?, latest_document_filename = ?
-                   WHERE fish_id = ?""",
-                (now_str, sighting_id, capture_artifacts.get("document_filename"), fish_id)
+                """UPDATE identification_jobs 
+                   SET status = ?, completed_at = ?, result_sighting_id = ?, result_fish_id = ?, 
+                       confidence = ?, species_slug = ?, is_new_fish = ?, xp_earned = ?, error_message = NULL,
+                       artifact_dir = ?, document_filename = ?, preview_filename = ?,
+                       video_filename = ?, rarity = ?, detection_confidence = ?, classification_confidence = ?,
+                       match_confidence = ?, catch_number = ?, linked_fish_id = ?, previous_sighting_id = ?,
+                       total_sightings_before = ?, total_sightings_after = ?, linkage_json = ?
+                   WHERE id = ?""",
+                (
+                    final_status, now_str, sighting_id, fish_id,
+                    round(overall_confidence, 4), species_slug, 1 if is_new_fish else 0, xp_earned,
+                    capture_artifacts.get("artifact_dir"),
+                    capture_artifacts.get("document_filename"),
+                    capture_artifacts.get("preview_filename"),
+                    capture_artifacts.get("video_filename"),
+                    species_info.get("rarity") if species_info else "common",
+                    round(detection_confidence, 4),
+                    round(classification_confidence, 4),
+                    round(match_confidence, 4),
+                    catch_number,
+                    fish_id if not is_new_fish else None,
+                    previous_sighting_id,
+                    total_sightings_before,
+                    total_sightings_after,
+                    json.dumps(linkage, ensure_ascii=False),
+                    job_id
+                )
             )
 
-        # --- Step 17: Update user stats ---
-        logger.info(f"[Job {job_id}] Updating user stats locally for user: {user_id}")
-        cursor.execute("SELECT * FROM user_stats WHERE user_id = ?", (user_id,))
-        stats_row = cursor.fetchone()
-        
-        if stats_row:
-            cursor.execute(
-                """UPDATE user_stats 
-                   SET total_xp = total_xp + ?, total_sightings = total_sightings + 1, 
-                       total_species = total_species + ?, updated_at = ?
-                   WHERE user_id = ?""",
-                (xp_earned, 1 if is_new_fish else 0, now_str, user_id)
-            )
-        else:
-            cursor.execute(
-                """INSERT INTO user_stats (id, user_id, total_xp, total_sightings, total_species, updated_at) 
-                   VALUES (?, ?, ?, 1, 1, ?)""",
-                (str(uuid.uuid4()), user_id, xp_earned, now_str)
-            )
+            conn.commit()
 
-        # --- Step 18: Store embedding in matching service ---
-        logger.info(f"[Job {job_id}] Storing embedding in matching service")
-        if species_slug:
-            matching.store_embedding(
-                fish_id=fish_id,
-                embedding=embedding_vector,
-                species_slug=species_slug,
-                area_code=area_code,
-                sighting_id=sighting_id,
-            )
-        else:
-            logger.info(f"[Job {job_id}] Skipping embedding storage because species_slug is missing")
+            # --- Step 13: POST-COMMIT: Update fish_index.json summary file safely ---
+            try:
+                index_path = Path(settings.private_data_dir) / capture_artifacts.get("fish_index_filename")
+                entry_data = {
+                    "job_id": job_id,
+                    "sighting_id": sighting_id,
+                    "fish_id": fish_id,
+                    "area_code": area_code_clean,
+                    "species_slug": species_slug or "unknown_species",
+                    "catch_number": catch_number,
+                    "is_new_fish": is_new_fish,
+                    "created_at": now_str,
+                    "preview_url": capture_artifacts.get("media", {}).get("preview"),
+                    "raw_url": capture_artifacts.get("media", {}).get("raw"),
+                    "document_filename": capture_artifacts.get("document_filename"),
+                    "manifest_filename": capture_artifacts.get("manifest_filename"),
+                    "artifact_dir": capture_artifacts.get("artifact_dir"),
+                    "linkage": linkage,
+                }
+                update_fish_index_file(index_path, entry_data)
+            except Exception as index_err:
+                logger.error(f"[Job {job_id}] Failed to write index file post-commit: {index_err}")
 
-        # --- Step 19: Update job final status and relative artifact references ---
-        logger.info(f"[Job {job_id}] Updating job status to '{final_status}'")
-        cursor.execute(
-            """UPDATE identification_jobs 
-               SET status = ?, completed_at = ?, result_sighting_id = ?, result_fish_id = ?, 
-                   confidence = ?, species_slug = ?, is_new_fish = ?, xp_earned = ?, error_message = NULL,
-                   artifact_dir = ?, document_filename = ?, preview_filename = ?
-               WHERE id = ?""",
-            (
-                final_status, now_str, sighting_id, fish_id,
-                round(overall_confidence, 4), species_slug, 1 if is_new_fish else 0, xp_earned,
-                capture_artifacts.get("artifact_dir"),
-                capture_artifacts.get("document_filename"),
-                capture_artifacts.get("preview_filename"),
-                job_id
-            )
-        )
-        conn.commit()
+        except Exception as tx_err:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            # Cleanup filesystem directories to prevent orphans
+            if created_artifact_dir:
+                shutil.rmtree(created_artifact_dir, ignore_errors=True)
+            if created_private_dir:
+                shutil.rmtree(created_private_dir, ignore_errors=True)
+            raise tx_err
 
-        # --- Step 20 & 21: Return results ---
+        # --- Step 14: Return results ---
         result = {
             "status": final_status,
             "job_id": job_id,

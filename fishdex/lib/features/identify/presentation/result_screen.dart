@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../data/models/identify_result.dart';
 import '../../../data/repositories/sightings_repository.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -50,6 +51,32 @@ class ResultScreen extends ConsumerStatefulWidget {
         jobData['species_slug'] as String? ??
         'Unknown';
 
+    final previewFilename = jobData['preview_filename'] as String?;
+    final imageUrl = previewFilename != null
+        ? '${AppConstants.aiServerUrl}/storage/$previewFilename'
+        : null;
+
+    final catchNumber = (jobData['catch_number'] as num?)?.toInt() ?? 1;
+
+    FishPreviousData? previousData;
+    final prevCatch = jobData['previous_catch'] as Map<String, dynamic>?;
+    if (prevCatch != null) {
+      final prevSize = (prevCatch['size_cm'] as num?)?.toDouble() ?? 0.0;
+      final currentSize = (jobData['size_cm'] as num?)?.toDouble() ?? 0.0;
+      final growth = currentSize > prevSize ? currentSize - prevSize : 0.0;
+
+      previousData = FishPreviousData(
+        fishId: fishId,
+        species: speciesEnglish,
+        firstSeenDate: prevCatch['captured_at'] as String? ?? prevCatch['created_at'] as String? ?? '',
+        firstSeenLocation: prevCatch['area_name'] as String?,
+        totalSightings: (jobData['total_sightings_before'] as num?)?.toInt() ?? 1,
+        lastSeenDate: prevCatch['captured_at'] as String? ?? prevCatch['created_at'] as String? ?? '',
+        lastEstimatedSizeCm: prevSize,
+        growthCm: growth,
+      );
+    }
+
     final result = IdentifyResult(
       success: true,
       fishId: fishId,
@@ -69,9 +96,14 @@ class ResultScreen extends ConsumerStatefulWidget {
       areaCode: jobData['area_code'] as String?,
       areaName: jobData['area_name'] as String?,
       speciesCzech: jobData['species_czech'] as String?,
+      catchNumber: catchNumber,
+      previousData: previousData,
+      frameUsed: imageUrl,
+      userRole: jobData['user_role'] as String? ?? 'researcher',
     );
     return ResultScreen(key: key, result: result);
   }
+
 
   @override
   ConsumerState<ResultScreen> createState() => _ResultScreenState();

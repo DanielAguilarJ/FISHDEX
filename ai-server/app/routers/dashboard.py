@@ -372,3 +372,65 @@ async def get_dashboard_fish_manifest(
     finally:
         if conn is not None:
             conn.close()
+
+
+@router.get("/fish/{fish_id}/timeline")
+async def get_dashboard_fish_timeline(
+    fish_id: str,
+    x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
+    secret: Optional[str] = Query(default=None),
+):
+    """
+    Returns a chronological list of all captures (sightings) for a given fish_id.
+    Includes location coordinates, dates, user IDs, media URLs, weather, size, etc.
+    Useful for displaying a fish's trajectory and growth over time on a map.
+    """
+    _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT * FROM fish_sightings
+            WHERE fish_id = ?
+            ORDER BY catch_number ASC, captured_at ASC
+            """,
+            (fish_id,),
+        )
+        rows = cursor.fetchall()
+        
+        timeline_events = []
+        for r in rows:
+            event = dict(r)
+            preview_filename = event.get("preview_filename")
+            if preview_filename:
+                clean_preview = preview_filename.replace('\\', '/')
+                event["preview_url"] = f"/storage/{clean_preview}"
+            else:
+                event["preview_url"] = None
+
+            video_filename = event.get("video_filename")
+            if video_filename:
+                clean_video = video_filename.replace('\\', '/')
+                event["video_url"] = f"/storage/{clean_video}"
+            else:
+                event["video_url"] = None
+
+            timeline_events.append(event)
+
+        return {
+            "fish_id": fish_id,
+            "total_captures": len(timeline_events),
+            "timeline": timeline_events
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch fish timeline for fish {fish_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve fish timeline")
+    finally:
+        if conn is not None:
+            conn.close()
+

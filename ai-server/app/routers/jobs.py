@@ -35,9 +35,12 @@ def _validate_auth(
 
     raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing credentials")
 
+from app.utils.area_utils import normalize_area_code
+
 @router.post("/upload")
 async def upload_job_video(
-    video: UploadFile = File(...),
+    video: Optional[UploadFile] = File(default=None),
+    file: Optional[UploadFile] = File(default=None),
     user_id: str = Form(...),
     area_code: Optional[str] = Form(default=None),
     area_name: Optional[str] = Form(default=None),
@@ -54,58 +57,89 @@ async def upload_job_video(
     authorization: Optional[str] = Header(default=None),
 ):
     """
-    Endpoint for the Flutter app to upload raw capture videos.
-    Saves the video locally on the server disk and registers the job in SQLite.
+    Endpoint for the Flutter app to upload raw capture files (photos/videos).
+    Saves the file locally on the server disk and registers the job in SQLite.
     """
     _validate_auth(x_fishdex_client_secret, authorization)
+
+    upload_file = file or video
+    if not upload_file:
+        raise HTTPException(status_code=400, detail="No se proporcionó ningún archivo (video o file)")
+
+    # MIME / Content-type validation
+    content_type = (upload_file.content_type or "").lower()
+    original_filename = upload_file.filename or "unknown"
+    
+    # Infer media type
+    if content_type.startswith("image/") or original_filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+        media_type = "image"
+    elif content_type.startswith("video/") or original_filename.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
+        media_type = "video"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Formato de archivo no soportado. Debe ser imagen o video (recibido: {content_type})"
+        )
 
     job_id = str(uuid.uuid4())
     now_str = datetime.now(timezone.utc).isoformat()
     
-    # Define local file storage path
-    raw_video_filename = f"raw_videos/{job_id}_raw.mp4"
-    local_video_path = Path(settings.server_data_dir) / "storage" / raw_video_filename
-    local_video_path.parent.mkdir(parents=True, exist_ok=True)
+    # Preserve extension
+    suffix = Path(original_filename).suffix or (".jpg" if media_type == "image" else ".mp4")
+    raw_filename = f"raw_videos/{job_id}_raw{suffix}"
+    local_path = Path(settings.server_data_dir) / "storage" / raw_filename
+    local_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Save video bytes to disk
-        content = await video.read()
-        local_video_path.write_bytes(content)
-        logger.info(f"Saved raw video for job {job_id} to disk: {local_video_path}")
+        # Read content and validate file size
+        content = await upload_file.read()
+        max_size_bytes = int(settings.max_video_size_mb or 50) * 1024 * 1024
+        if len(content) > max_size_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"El archivo excede el límite de tamaño permitido de {settings.max_video_size_mb}MB"
+            )
+
+        local_path.write_bytes(content)
+        logger.info(f"Saved raw {media_type} for job {job_id} to disk: {local_path}")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to write uploaded video file to disk: {e}")
-        raise HTTPException(status_code=500, detail="Error al escribir el archivo de video en el disco")
+        logger.error(f"Failed to write uploaded capture file to disk: {e}")
+        raise HTTPException(status_code=500, detail="Error al escribir el archivo de captura en el disco")
 
     # Insert job row into SQLite database
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        area_clean = normalize_area_code(area_code)
         cursor.execute(
             """INSERT INTO identification_jobs (
                 id, user_id, status, raw_video_filename, area_code, area_name, 
                 latitude, longitude, species_slug, notes,
                 weather, bite, size_cm, fish_state, custom_name,
-                created_at
-            ) VALUES (?, ?, 'uploaded', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                created_at, media_type, original_filename, content_type, raw_media_filename
+            ) VALUES (?, ?, 'uploaded', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                job_id, user_id, raw_video_filename, area_code, area_name,
+                job_id, user_id, raw_filename, area_clean, area_name,
                 latitude, longitude, species_slug, notes,
                 weather, bite, size_cm, fish_state, custom_name,
-                now_str
+                now_str, media_type, original_filename, content_type, raw_filename
             )
         )
         conn.commit()
     except Exception as e:
         conn.rollback()
-        # Clean up video file if database registration fails
-        if local_video_path.exists():
-            os.remove(local_video_path)
+        # Clean up file if database registration fails
+        if local_path.exists():
+            os.remove(local_path)
         logger.error(f"Failed to register job in SQLite: {e}")
         raise HTTPException(status_code=500, detail="Error al registrar el trabajo en la base de datos")
     finally:
         conn.close()
 
     return {"job_id": job_id}
+
 
 @router.post("/{job_id}/process", status_code=status.HTTP_202_ACCEPTED)
 async def process_job(
@@ -144,6 +178,7 @@ async def process_job(
         "status": "processing_started",
     }
 
+
 @router.get("/{job_id}")
 async def get_job(
     job_id: str,
@@ -164,13 +199,14 @@ async def get_job(
 
     return dict(row)
 
+
 @router.get("/{job_id}/result")
 async def get_job_result(
     job_id: str,
     x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
     authorization: Optional[str] = Header(default=None),
 ):
-    """Retrieve the fish sighting result document for a completed job."""
+    """Retrieve the fish sighting result document for a completed job, including previous catch if linked."""
     _validate_auth(x_fishdex_client_secret, authorization)
 
     conn = get_db_connection()
@@ -189,9 +225,25 @@ async def get_job_result(
 
     cursor.execute("SELECT * FROM fish_sightings WHERE id = ?", (result_sighting_id,))
     sighting_row = cursor.fetchone()
-    conn.close()
 
     if not sighting_row:
+        conn.close()
         raise HTTPException(status_code=404, detail="Sighting result not found")
 
-    return dict(sighting_row)
+    sighting_data = dict(sighting_row)
+    previous_catch = None
+
+    # Retrieve previous sighting if linked
+    prev_id = sighting_data.get("previous_sighting_id")
+    if prev_id:
+        cursor.execute("SELECT * FROM fish_sightings WHERE id = ?", (prev_id,))
+        prev_row = cursor.fetchone()
+        if prev_row:
+            previous_catch = dict(prev_row)
+
+    conn.close()
+
+    sighting_data["previous_catch"] = previous_catch
+    return sighting_data
+
+

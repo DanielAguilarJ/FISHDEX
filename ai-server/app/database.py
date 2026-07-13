@@ -86,6 +86,22 @@ def init_db():
         "artifact_dir": "TEXT",
         "document_filename": "TEXT",
         "preview_filename": "TEXT",
+        # NUEVO
+        "media_type": "TEXT DEFAULT 'video'",
+        "original_filename": "TEXT",
+        "content_type": "TEXT",
+        "raw_media_filename": "TEXT",
+        "video_filename": "TEXT",
+        "rarity": "TEXT",
+        "detection_confidence": "REAL",
+        "classification_confidence": "REAL",
+        "match_confidence": "REAL",
+        "catch_number": "INTEGER",
+        "linked_fish_id": "TEXT",
+        "previous_sighting_id": "TEXT",
+        "total_sightings_before": "INTEGER DEFAULT 0",
+        "total_sightings_after": "INTEGER DEFAULT 1",
+        "linkage_json": "TEXT",
     }
     _ensure_columns(cursor, "identification_jobs", _identification_job_columns)
     
@@ -128,6 +144,14 @@ def init_db():
         "classification_confidence": "REAL",
         "match_confidence": "REAL",
         "catch_number": "INTEGER",
+        # NUEVO
+        "media_type": "TEXT DEFAULT 'video'",
+        "video_filename": "TEXT",
+        "rarity": "TEXT",
+        "previous_sighting_id": "TEXT",
+        "total_sightings_before": "INTEGER DEFAULT 0",
+        "total_sightings_after": "INTEGER DEFAULT 1",
+        "linkage_json": "TEXT",
     }
     _ensure_columns(cursor, "fish_sightings", _fish_sightings_columns)
     
@@ -152,6 +176,16 @@ def init_db():
         "area_name": "TEXT",
         "latest_sighting_id": "TEXT",
         "latest_document_filename": "TEXT",
+        # NUEVO
+        "first_sighting_id": "TEXT",
+        "reference_frame_filename": "TEXT",
+        "max_size_cm": "REAL",
+        "last_seen_by": "TEXT",
+        "last_seen_lat": "REAL",
+        "last_seen_lng": "REAL",
+        "first_seen_lat": "REAL",
+        "first_seen_lng": "REAL",
+        "linkage_updated_at": "TEXT",
     }
     _ensure_columns(cursor, "fish_individuals", _fish_individuals_columns)
     
@@ -165,6 +199,27 @@ def init_db():
             total_species INTEGER DEFAULT 0,
             updated_at TEXT NOT NULL
         )
+    """)
+
+    # 6. Uniqueness & Performance Indexes
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_fish_sightings_job_id_unique
+        ON fish_sightings(job_id)
+        WHERE job_id IS NOT NULL
+    """)
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_fish_sightings_fish_catch_unique
+        ON fish_sightings(fish_id, catch_number)
+        WHERE fish_id IS NOT NULL AND catch_number IS NOT NULL
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_fish_sightings_fish_id ON fish_sightings(fish_id)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_fish_sightings_user_id ON fish_sightings(user_id)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_identification_jobs_status ON identification_jobs(status)
     """)
     
     conn.commit()

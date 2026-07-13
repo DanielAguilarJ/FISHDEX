@@ -81,8 +81,11 @@ def save_job_artifacts(
     }
 
 
+from app.utils.area_utils import normalize_area_code
+
 def save_fish_capture_artifacts(
     job_id: str,
+    sighting_id: str,
     area_code: str,
     species_slug: str,
     fish_id: str,
@@ -92,12 +95,15 @@ def save_fish_capture_artifacts(
     raw_video_path: str,
     document: dict,
     model_outputs: dict,
+    media_type: str = "video",
+    is_new_fish: bool = True,
+    linkage: dict | None = None,
 ) -> dict:
     """
     Saves final artifacts associated with a fish capture sighting.
     Writes public media to storage/fish_media and private metadata JSONs to private/fish_documents.
     """
-    area_clean = (area_code or "XX").replace(" ", "").replace("-", "").upper()
+    area_clean = normalize_area_code(area_code)
     safe_species = species_slug or "unknown_species"
 
     rel_base = (
@@ -109,6 +115,10 @@ def save_fish_capture_artifacts(
     images_dir = abs_base / "images"
     frames_dir = abs_base / "frames"
     raw_dir = abs_base / "raw"
+
+    images_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
 
     image_files = []
     for i, crop in enumerate(cropped_frames):
@@ -135,44 +145,80 @@ def save_fish_capture_artifacts(
         )
 
     video_filename = None
-    if raw_video_path and Path(raw_video_path).exists():
-        video_filename = f"{rel_base}/raw/raw_video.mp4"
-        video_abs = Path(settings.server_data_dir) / "storage" / video_filename
-        video_abs.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(raw_video_path, video_abs)
+    raw_filename = None
 
-    document_dir = Path(settings.fish_documents_dir) / job_id
+    if raw_video_path and Path(raw_video_path).exists():
+        raw_ext = Path(raw_video_path).suffix.lower()
+        if not raw_ext:
+            raw_ext = ".jpg" if media_type == "image" else ".mp4"
+
+        raw_filename = f"{rel_base}/raw/raw_capture{raw_ext}"
+        raw_abs = Path(settings.server_data_dir) / "storage" / raw_filename
+        raw_abs.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(raw_video_path, raw_abs)
+
+        if media_type == "video":
+            video_filename = raw_filename
+
+    private_rel_base = (
+        f"fish_documents/{area_clean}/{safe_species}/{fish_id}/"
+        f"catch_{catch_number}_{job_id}"
+    )
+
+    document_dir = Path(settings.private_data_dir) / private_rel_base
     document_dir.mkdir(parents=True, exist_ok=True)
 
-    document_filename = f"fish_documents/{job_id}/document.json"
-    manifest_filename = f"fish_documents/{job_id}/manifest.json"
-    model_outputs_filename = f"fish_documents/{job_id}/model_outputs.json"
+    document_filename = f"{private_rel_base}/document.json"
+    manifest_filename = f"{private_rel_base}/manifest.json"
+    model_outputs_filename = f"{private_rel_base}/model_outputs.json"
+    fish_index_filename = f"fish_documents/{area_clean}/{safe_species}/{fish_id}/fish_index.json"
 
     media = {
+        "media_type": media_type,
         "preview": _storage_url(preview_filename),
+        "raw": _storage_url(raw_filename),
         "video": _storage_url(video_filename),
         "images": [_storage_url(p) for p in image_files],
         "frames": [_storage_url(p) for p in frame_files],
     }
 
-    # Populate document media URLs
+    # Populate document media and linkage URLs
     document["media"] = media
+    document["linkage"] = linkage or {}
+    document["storage"] = {
+        "public_artifact_dir": rel_base,
+        "private_document_dir": private_rel_base,
+        "document_filename": document_filename,
+        "manifest_filename": manifest_filename,
+        "model_outputs_filename": model_outputs_filename,
+        "fish_index_filename": fish_index_filename,
+    }
 
     manifest = {
         "schema_version": "1.0",
         "job_id": job_id,
+        "sighting_id": sighting_id,
         "fish_id": fish_id,
+        "area_code": area_clean,
+        "species_slug": safe_species,
+        "catch_number": catch_number,
+        "is_new_fish": is_new_fish,
         "artifact_dir": rel_base,
+        "private_document_dir": private_rel_base,
         "created_at": _now_iso(),
         "files": {
             "preview": preview_filename,
+            "raw": raw_filename,
             "video": video_filename,
             "images": image_files,
             "frames": frame_files,
             "document": document_filename,
+            "manifest": manifest_filename,
             "model_outputs": model_outputs_filename,
+            "fish_index": fish_index_filename,
         },
         "urls": media,
+        "linkage": linkage or {},
     }
 
     # Write private JSON documents
@@ -193,14 +239,59 @@ def save_fish_capture_artifacts(
 
     return {
         "artifact_dir": rel_base,
+        "artifact_abs_dir": abs_base,
+        "private_abs_dir": document_dir,
         "preview_filename": preview_filename,
         "preview_url": _storage_url(preview_filename),
         "document_filename": document_filename,
         "manifest_filename": manifest_filename,
         "model_outputs_filename": model_outputs_filename,
+        "fish_index_filename": fish_index_filename,
         "image_files": image_files,
         "frame_files": frame_files,
         "video_filename": video_filename,
+        "raw_filename": raw_filename,
         "media": media,
         "manifest": manifest,
     }
+
+
+def update_fish_index_file(index_path: Path, entry: dict) -> None:
+    """
+    Safely creates or appends an entry to the fish_index.json summary file.
+    Runs post-commit to prevent index pollution on DB transaction rollbacks.
+    """
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if index_path.exists():
+        try:
+            existing = json.loads(index_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+    else:
+        existing = {}
+
+    captures = existing.get("captures", [])
+
+    # Prevent duplicate records if job is re-run
+    captures = [c for c in captures if c.get("job_id") != entry.get("job_id")]
+    captures.append(entry)
+
+    captures.sort(key=lambda x: x.get("catch_number", 0))
+
+    index_doc = {
+        "schema_version": "1.0",
+        "fish_id": entry.get("fish_id"),
+        "area_code": entry.get("area_code"),
+        "species_slug": entry.get("species_slug"),
+        "total_captures": len(captures),
+        "updated_at": _now_iso(),
+        "captures": captures,
+    }
+
+    index_path.write_text(
+        json.dumps(index_doc, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    logger.info(f"Updated fish index file at: {index_path}")
+
