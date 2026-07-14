@@ -165,7 +165,7 @@ class FishCard extends StatelessWidget {
             ? (imageBase64!.startsWith('http')
                 ? Image.network(
                     imageBase64!,
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     alignment: Alignment.center,
                     errorBuilder: (_, __, ___) => const Center(
                       child: Icon(Icons.broken_image,
@@ -174,7 +174,7 @@ class FishCard extends StatelessWidget {
                   )
                 : Image.memory(
                     base64Decode(imageBase64!),
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                   ))
             : Center(
                 child: Icon(

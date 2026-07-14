@@ -184,7 +184,7 @@ def save_job_artifacts(
 
 
 from app.utils.area_utils import normalize_area_code
-from app.utils.crop_utils import crop_obb_rotated, crop_bbox_aligned_strict
+from app.utils.crop_utils import crop_obb_rotated, crop_bbox_aligned_strict, crop_fish_best
 
 
 def save_fish_capture_artifacts(
@@ -323,14 +323,23 @@ def save_fish_capture_artifacts(
     if all_dataset_detections:
         for idx, (d_frame, d_det, d_conf) in enumerate(all_dataset_detections):
             try:
-                # --- Axis-aligned crop (primary — preserving capture orientation) ---
-                primary_crop = crop_bbox_aligned_strict(d_frame, d_det, pad_frac=settings.crop_padding_frac)
+                # --- OBB-rotated crop (primary — fish body horizontal, tight) ---
+                primary_crop = crop_obb_rotated(
+                    d_frame,
+                    d_det,
+                    pad_frac=settings.crop_padding_frac,
+                )
+
                 if primary_crop is None or primary_crop.size == 0:
-                    primary_crop = crop_obb_rotated(d_frame, d_det, pad_frac=settings.crop_padding_frac)
+                    primary_crop = crop_bbox_aligned_strict(
+                        d_frame,
+                        d_det,
+                        pad_frac=settings.crop_padding_frac,
+                    )
 
                 if primary_crop is None or primary_crop.size == 0:
                     logger.warning(
-                        "Dataset frame %d: strict crop failed (no valid bbox/OBB), skipping", idx
+                        "Dataset frame %d: OBB and bbox crop both failed, skipping", idx
                     )
                     continue
 
@@ -339,13 +348,17 @@ def save_fish_capture_artifacts(
                 _write_jpg(crop_abs, primary_crop)
                 dataset_crop_files.append(crop_rel)
 
-                # --- OBB-rotated crop (secondary — fish body horizontal) ---
-                obb_crop = crop_obb_rotated(d_frame, d_det, pad_frac=settings.crop_padding_frac)
-                if obb_crop is not None:
-                    obb_rel = f"{rel_base}/dataset/crop_{idx:03d}_bbox.jpg"
-                    obb_abs = Path(settings.server_data_dir) / "storage" / obb_rel
-                    _write_jpg(obb_abs, obb_crop)
-                    dataset_bbox_files.append(obb_rel)
+                # --- Axis-aligned bbox crop (secondary — traditional rect for training diversity) ---
+                bbox_crop = crop_bbox_aligned_strict(
+                    d_frame,
+                    d_det,
+                    pad_frac=settings.crop_padding_frac,
+                )
+                if bbox_crop is not None:
+                    bbox_rel = f"{rel_base}/dataset/crop_{idx:03d}_aligned.jpg"
+                    bbox_abs = Path(settings.server_data_dir) / "storage" / bbox_rel
+                    _write_jpg(bbox_abs, bbox_crop)
+                    dataset_bbox_files.append(bbox_rel)
 
                 # --- Annotated full frame ---
                 ann_rel = f"{rel_base}/annotated/frame_{idx:03d}.jpg"
@@ -368,8 +381,8 @@ def save_fish_capture_artifacts(
                 logger.warning(f"Dataset frame {idx} failed: {ds_err}")
 
         logger.info(
-            f"Saved {len(dataset_crop_files)} OBB crops, "
-            f"{len(dataset_bbox_files)} bbox crops, "
+            f"Saved {len(dataset_crop_files)} OBB-rotated crops (primary), "
+            f"{len(dataset_bbox_files)} axis-aligned crops (secondary), "
             f"{len(annotated_frame_files)} annotated frames"
         )
 

@@ -80,10 +80,14 @@ def _get_detection_bbox(detection):
 
 def _crop_fish_from_frame(frame: np.ndarray, detection) -> Optional[np.ndarray]:
     """
-    Primary crop: Axis-aligned strict crop preserving original capture orientation.
-    Returns None if no valid crop possible (no fallback!).
+    Primary crop: OBB-rotated tight crop using the detected width, height and
+    rotation from the model. Falls back to axis-aligned bbox if OBB fails.
+    Returns None if no valid crop possible (no frame fallback!).
     """
-    return crop_bbox_aligned_strict(frame, detection, pad_frac=settings.crop_padding_frac)
+    result = crop_fish_best(frame, detection, pad_frac=settings.crop_padding_frac)
+    if result is None or result.size == 0:
+        result = crop_bbox_aligned_strict(frame, detection, pad_frac=settings.crop_padding_frac)
+    return result
 
 
 def _detection_area_ratio(detection, frame_shape) -> float:
@@ -428,24 +432,38 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             f"/{len(all_frames)} frames with valid tight detections"
         )
 
-        # --- Step 8: Crop fish — axis-aligned (primary) + OBB-rotated (secondary) ---
-        logger.info(f"[Job {job_id}] Cropping fish: axis-aligned (primary) + OBB-rotated (secondary)")
+        # --- Step 8: Crop fish — OBB-rotated (primary) + axis-aligned bbox (secondary) ---
+        logger.info(f"[Job {job_id}] Cropping fish: OBB-rotated (primary) + axis-aligned bbox (secondary)")
 
-        # Primary crop from the best candidate (preserving frame orientation)
-        cropped_frame = crop_bbox_aligned_strict(
-            best_detection_frame, best_detection,
-            pad_frac=settings.crop_padding_frac,
-        )
-        cropped_frame_obb = crop_fish_best(
-            best_detection_frame, best_detection,
+        # Primary crop: OBB-rotated tight crop.
+        # Uses the detected width, height and rotation from the model.
+        cropped_frame = crop_fish_best(
+            best_detection_frame,
+            best_detection,
             pad_frac=settings.crop_padding_frac,
         )
 
-        # Safety: if the best candidate fails to produce a tight crop,
-        # mark the job as pending_crop (NOT failed, NOT frame-complete fallback).
+        # Secondary crop: axis-aligned bbox, only for dataset/debug diversity.
+        cropped_frame_bbox = crop_bbox_aligned_strict(
+            best_detection_frame,
+            best_detection,
+            pad_frac=settings.crop_padding_frac,
+        )
+
+        # Safety: if the OBB crop fails, fall back to bbox as primary.
+        # If that also fails, mark the job as pending_crop.
         if cropped_frame is None or cropped_frame.size == 0:
             logger.warning(
-                "[Job %s] crop_bbox_aligned_strict returned None for best candidate. "
+                "[Job %s] crop_fish_best returned None for best candidate. "
+                "Attempting bbox fallback.",
+                job_id,
+            )
+            cropped_frame = cropped_frame_bbox
+            cropped_frame_bbox = None
+
+        if cropped_frame is None or cropped_frame.size == 0:
+            logger.warning(
+                "[Job %s] Both OBB and bbox crop returned None. "
                 "Marking pending_crop (strict mode — no frame fallback).",
                 job_id,
             )
@@ -453,7 +471,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 job_id,
                 "pending_crop",
                 100,
-                "Fish detected but no valid orientation-preserving crop could be produced",
+                "Fish detected but no valid crop could be produced",
             )
 
             job_artifacts = save_job_artifacts(
@@ -469,7 +487,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                        preview_filename = ?, artifact_dir = ?, completed_at = ?
                    WHERE id = ?""",
                 (
-                    "Fish detected but crop_bbox_aligned_strict returned no valid orientation-preserving crop.",
+                    "Fish detected but both OBB and bbox crop returned no valid output.",
                     None,  # strict: no frame-complete preview exposed
                     job_artifacts.get("job_artifact_dir"),
                     datetime.now(timezone.utc).isoformat(),
@@ -481,29 +499,32 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             return {
                 "status": "pending_crop",
                 "job_id": job_id,
-                "reason": "bbox_crop_failed_after_detection",
+                "reason": "obb_and_bbox_crop_failed_after_detection",
                 "preview_filename": None,
             }
 
         cropped_frames = [cropped_frame]
-        cropped_frames_bbox = [cropped_frame_obb] if cropped_frame_obb is not None else []
+        cropped_frames_bbox = [cropped_frame_bbox] if cropped_frame_bbox is not None else []
 
         # Additional crops from other valid candidates
         for _, frame, det, _ in valid_candidates[1:]:
             if len(cropped_frames) >= max_save:
                 break
-            crop = crop_bbox_aligned_strict(frame, det, pad_frac=settings.crop_padding_frac)
+            crop = crop_fish_best(frame, det, pad_frac=settings.crop_padding_frac)
             if crop is not None:
                 cropped_frames.append(crop)
-                obb_crop = crop_fish_best(
-                    frame, det, pad_frac=settings.crop_padding_frac
+
+                bbox_crop = crop_bbox_aligned_strict(
+                    frame,
+                    det,
+                    pad_frac=settings.crop_padding_frac,
                 )
-                if obb_crop is not None:
-                    cropped_frames_bbox.append(obb_crop)
+                if bbox_crop is not None:
+                    cropped_frames_bbox.append(bbox_crop)
 
         logger.info(
-            f"[Job {job_id}] Produced {len(cropped_frames)} axis-aligned crops "
-            f"+ {len(cropped_frames_bbox)} OBB-rotated crops"
+            f"[Job {job_id}] Produced {len(cropped_frames)} OBB-rotated crops "
+            f"+ {len(cropped_frames_bbox)} axis-aligned bbox crops"
         )
 
         # --- Step 9: Run classifier ---
