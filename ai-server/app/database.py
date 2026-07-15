@@ -222,6 +222,10 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_fish_sightings_user_id ON fish_sightings(user_id)
     """)
     cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_fish_sightings_location
+        ON fish_sightings(location_lat, location_lng)
+    """)
+    cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_identification_jobs_status ON identification_jobs(status)
     """)
     

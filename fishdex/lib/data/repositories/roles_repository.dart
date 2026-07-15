@@ -23,6 +23,12 @@ class RolesRepository {
             role: UserRole.researcher,
             approvalStatus: ApprovalStatus.approved, // Auto-approved for local simplicity
           );
+        } else if (role == 'admin') {
+          return UserRoleModel(
+            userId: userId,
+            role: UserRole.admin,
+            approvalStatus: ApprovalStatus.approved,
+          );
         }
       }
       return UserRoleModel.fisherman(userId);

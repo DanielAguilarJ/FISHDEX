@@ -286,8 +286,10 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
                   if (_showDetails) _buildDetailsSection(),
                   const SizedBox(height: 16),
 
-                  // Full history for researchers
-                  if (_showDetails && widget.result.userRole == 'researcher')
+                  // Full history for researchers and admins
+                  if (_showDetails &&
+                      (widget.result.userRole == 'researcher' ||
+                          widget.result.userRole == 'admin'))
                     _buildFullHistorySection(),
                   const SizedBox(height: 24),
 

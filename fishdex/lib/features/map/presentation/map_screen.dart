@@ -51,10 +51,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         children: [
           // Mapa
           _buildMap(userLocation, fishingSpots, mapCaptures),
-          
+
           // Header overlay con gradiente
           _buildHeaderOverlay(context, currentRole),
-          
+
           // Info de ubicación
           Positioned(
             top: MediaQuery.of(context).padding.top + 60,
@@ -62,9 +62,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             right: 16,
             child: _buildLocationInfo(userLocation),
           ),
+
+          if (mapCaptures.hasError)
+            Positioned(
+              left: 16,
+              right: 88,
+              bottom: MediaQuery.of(context).padding.bottom + 112,
+              child: _buildCaptureLoadError(),
+            ),
         ],
       ),
-      
+
       // FAB para centrar en ubicación
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 80),
@@ -142,16 +150,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           tileBuilder: (context, tileWidget, tile) {
             return ColorFiltered(
               colorFilter: const ColorFilter.matrix(<double>[
-                0.3, 0, 0, 0, 0,    // Red
-                0, 0.3, 0, 0, 0,    // Green
-                0, 0, 0.4, 0, 20,   // Blue (más azulado)
-                0, 0, 0, 1, 0,      // Alpha
+                0.3, 0, 0, 0, 0, // Red
+                0, 0.3, 0, 0, 0, // Green
+                0, 0, 0.4, 0, 20, // Blue (más azulado)
+                0, 0, 0, 1, 0, // Alpha
               ]),
               child: tileWidget,
             );
           },
         ),
-        
+
         // Marcadores de fishing spots
         fishingSpots.when(
           data: (spots) => MarkerLayer(
@@ -169,7 +177,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           loading: () => const MarkerLayer(markers: []),
           error: (_, __) => const MarkerLayer(markers: []),
         ),
-        
+
         // Marcador del usuario
         if (userLocation.valueOrNull != null)
           MarkerLayer(
@@ -249,7 +257,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => AnonymousMarkerBottomSheet(species: capture.species),
+      builder: (context) =>
+          AnonymousMarkerBottomSheet(species: capture.species),
     );
   }
 
@@ -291,7 +300,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   Widget _buildHeaderOverlay(BuildContext context, AsyncValue currentRole) {
     final roleName = currentRole.valueOrNull?.role.displayName ?? '';
-    
+
     return Positioned(
       top: 0,
       left: 0,
@@ -358,7 +367,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       const SizedBox(width: 4),
                       Text(
                         context.l10n.mapSpots,
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12),
                       ),
                     ],
                   ),
@@ -367,6 +377,35 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCaptureLoadError() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withOpacity(0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off, color: Colors.redAccent, size: 18),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'No se pudieron cargar las capturas del mapa.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Reintentar',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => ref.invalidate(mapCapturesProvider),
+            icon: const Icon(Icons.refresh, color: AppTheme.accentBlue),
+          ),
+        ],
       ),
     );
   }
@@ -606,13 +645,19 @@ class _CaptureInfoSheet extends StatelessWidget {
           _infoRow(Icons.calendar_today, context.l10n.mapFishDate,
               '${capture.capturedAt.day}/${capture.capturedAt.month}/${capture.capturedAt.year}'),
           const SizedBox(height: 8),
-          _infoRow(Icons.fingerprint, context.l10n.mapFishId,
-              capture.fishId.substring(0, 8)),
-          if (!capture.isOwn) ...[
-            const SizedBox(height: 8),
-            _infoRow(Icons.location_on, context.l10n.mapCoordinates,
-                '${capture.latitude.toStringAsFixed(4)}, ${capture.longitude.toStringAsFixed(4)}'),
-          ],
+          _infoRow(
+            Icons.fingerprint,
+            context.l10n.mapFishId,
+            capture.fishId.length > 8
+                ? capture.fishId.substring(0, 8)
+                : capture.fishId,
+          ),
+          const SizedBox(height: 8),
+          _infoRow(
+            Icons.location_on,
+            context.l10n.mapCoordinates,
+            '${capture.latitude.toStringAsFixed(6)}, ${capture.longitude.toStringAsFixed(6)}',
+          ),
           const SizedBox(height: 16),
         ],
       ),

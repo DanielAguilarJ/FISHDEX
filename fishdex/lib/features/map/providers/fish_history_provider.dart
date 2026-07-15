@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/providers/appwrite_providers.dart';
+
 import '../../../data/models/fish_capture.dart';
 import '../../../data/repositories/captures_repository.dart';
 
@@ -26,8 +26,10 @@ final fishHistoryGroupedProvider =
   if (history.isEmpty) return [];
 
   final groups = <LocationGroup>[];
+  final orderedHistory = [...history]
+    ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
 
-  for (final capture in history) {
+  for (final capture in orderedHistory) {
     bool addedToGroup = false;
 
     for (final group in groups) {
@@ -54,9 +56,14 @@ final fishHistoryGroupedProvider =
     }
   }
 
-  // Ordenar grupos por la fecha de la primera captura
-  groups.sort((a, b) =>
-      a.captures.last.capturedAt.compareTo(b.captures.last.capturedAt));
+  for (final group in groups) {
+    group.captures.sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+  }
+
+  // Ordenar grupos por la primera aparición para conservar la trayectoria.
+  groups.sort(
+    (a, b) => a.firstCapture.capturedAt.compareTo(b.firstCapture.capturedAt),
+  );
 
   return groups;
 });
@@ -82,10 +89,10 @@ class LocationGroup {
       '${centerLat.toStringAsFixed(4)}, ${centerLng.toStringAsFixed(4)}';
 
   /// Primera captura en esta ubicación
-  FishCapture get firstCapture => captures.last;
+  FishCapture get firstCapture => captures.first;
 
   /// Última captura en esta ubicación
-  FishCapture get lastCapture => captures.first;
+  FishCapture get lastCapture => captures.last;
 
   /// Número de capturas en esta ubicación
   int get count => captures.length;
@@ -96,8 +103,10 @@ class LocationGroup {
 // =============================================================================
 
 double _haversineDistance(
-  double lat1, double lon1,
-  double lat2, double lon2,
+  double lat1,
+  double lon1,
+  double lat2,
+  double lon2,
 ) {
   const double earthRadius = 6371000;
   final dLat = _degreesToRadians(lat2 - lat1);

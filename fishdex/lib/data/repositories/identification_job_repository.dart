@@ -31,8 +31,8 @@ class IdentificationJobRepository {
     required String userId,
     String? areaCode,
     String? areaName,
-    double? latitude,
-    double? longitude,
+    required double latitude,
+    required double longitude,
     String? speciesSlug,
     String? notes,
     String? weather,
@@ -46,8 +46,8 @@ class IdentificationJobRepository {
     };
     if (areaCode != null) fields['area_code'] = areaCode;
     if (areaName != null) fields['area_name'] = areaName;
-    if (latitude != null) fields['latitude'] = latitude.toString();
-    if (longitude != null) fields['longitude'] = longitude.toString();
+    fields['latitude'] = latitude.toString();
+    fields['longitude'] = longitude.toString();
     if (speciesSlug != null) fields['species_slug'] = speciesSlug;
     if (notes != null) fields['notes'] = notes;
     if (weather != null) fields['weather'] = weather;
@@ -99,7 +99,8 @@ class IdentificationJobRepository {
   }
 
   /// Poll job status.
-  Stream<Map<String, dynamic>> pollJob(String jobId, {Duration interval = const Duration(seconds: 2)}) async* {
+  Stream<Map<String, dynamic>> pollJob(String jobId,
+      {Duration interval = const Duration(seconds: 2)}) async* {
     while (true) {
       await Future.delayed(interval);
       final job = await getJob(jobId);
@@ -119,7 +120,8 @@ class IdentificationJobRepository {
 }
 
 /// Riverpod provider
-final identificationJobRepositoryProvider = Provider<IdentificationJobRepository>((ref) {
+final identificationJobRepositoryProvider =
+    Provider<IdentificationJobRepository>((ref) {
   final apiClient = ref.watch(localApiClientProvider);
   return IdentificationJobRepository(apiClient: apiClient);
 });

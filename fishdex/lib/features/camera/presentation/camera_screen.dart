@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../data/services/capture_location_service.dart';
 import '../widgets/ar_overlay.dart';
 import '../widgets/recording_controls.dart';
-import '../providers/camera_provider.dart';
+import '../providers/capture_metadata_provider.dart';
 import 'video_preview_screen.dart';
 
 /// Pantalla de Cámara con preview en vivo y AR overlay
@@ -80,7 +81,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       );
 
       await _controller!.initialize();
-      
+
       // Configurar exposición y enfoque automáticos
       await _controller!.setFlashMode(FlashMode.off);
 
@@ -101,23 +102,42 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_controller == null || _isRecording) return;
 
     try {
+      // Intentar obtener la ubicación, pero no bloquear la grabación si falla
+      try {
+        final coordinates = await CaptureLocationService.getCurrentCoordinates();
+        if (mounted) {
+          ref.read(captureMetadataProvider.notifier).setLocation(
+                coordinates.latitude,
+                coordinates.longitude,
+              );
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error obteniendo ubicación al iniciar grabación: $e');
+      }
+
+      final controller = _controller;
+      if (!mounted || controller == null || !controller.value.isInitialized) {
+        return;
+      }
+
       // Lock orientation before starting so rotation metadata is stable.
-      await _controller!.lockCaptureOrientation();
-      await _controller!.startVideoRecording();
+      await controller.lockCaptureOrientation();
+      await controller.startVideoRecording();
 
       setState(() {
         _isRecording = true;
         _recordingProgress = 0.0;
+        _errorMessage = null;
       });
 
-      // Timer de progreso (actualiza cada 100ms)
+      // Iniciar el temporizador para la barra de progreso
       _progressTimer = Timer.periodic(
         const Duration(milliseconds: 100),
         (timer) {
           setState(() {
             _recordingProgress += 0.1 / _maxDurationSeconds;
             if (_recordingProgress >= 1.0) {
-              _recordingProgress = 1.0;
+              _stopRecording();
             }
           });
         },
@@ -125,7 +145,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
       // Auto-stop después del tiempo máximo
       _recordingTimer = Timer(
-        Duration(seconds: _maxDurationSeconds),
+        const Duration(seconds: _maxDurationSeconds),
         _stopRecording,
       );
     } catch (e) {
@@ -134,7 +154,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         await _controller?.unlockCaptureOrientation();
       } catch (_) {}
 
-      setState(() => _errorMessage = context.l10n.cameraRecordError);
+      if (mounted) {
+        setState(() => _errorMessage = context.l10n.cameraRecordError);
+      }
     }
   }
 
@@ -161,7 +183,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (mounted) {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => VideoPreviewScreen(videoPath: videoFile.path),
+            builder: (_) => VideoPreviewScreen(
+              videoPath: videoFile.path,
+              hasRecordedLocation: true,
+            ),
           ),
         );
       }
