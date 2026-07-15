@@ -396,14 +396,14 @@ async def health_detailed() -> dict:
     Returns:
         Dict with status, model info, fish count, disk usage.
     """
-    from app.services.obb_roi_service import get_obb_roi_service
-    from app.services.reid_embedding_service import get_reid_embedding_service
+    from app.services.obb_roi_service import _obb_roi_service
+    from app.services.reid_embedding_service import _reid_embedding_service
     from app.services.storage_service import get_disk_usage_mb, get_total_fish_count
     from pathlib import Path as _Path
 
-    # Check model files exist without forcing a heavyweight load
-    obb_service = get_obb_roi_service()
-    reid_service = get_reid_embedding_service()
+    # Check model loaded status without forcing a heavyweight load
+    obb_loaded = _obb_roi_service is not None and _obb_roi_service.is_loaded
+    reid_loaded = _reid_embedding_service is not None and _reid_embedding_service.is_loaded
 
     return {
         "status": "healthy",
@@ -412,10 +412,10 @@ async def health_detailed() -> dict:
         "match_method": "fishencoder_prototype_topN_vote",
         # OBB ROI model
         "obb_model_configured": _Path(settings.obb_model_path).is_file(),
-        "obb_model_loaded": obb_service.is_loaded,
+        "obb_model_loaded": obb_loaded,
         # ReID model
         "reid_model_configured": _Path(settings.reid_model_path).is_file(),
-        "reid_model_loaded": reid_service.is_loaded,
+        "reid_model_loaded": reid_loaded,
         "reid_model_name": settings.reid_model_name,
         "reid_embedding_dim": settings.reid_embedding_dim,
         "reid_similarity_threshold": settings.reid_similarity_threshold,
