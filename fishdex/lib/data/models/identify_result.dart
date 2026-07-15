@@ -33,6 +33,7 @@ class IdentifyResult {
   final int? queryImagesUsed;
   final int? winningVotes;
   final int? roiImagesUsed;
+  final List<FishHistoryEntry> fullHistory;
 
   const IdentifyResult({
     required this.success,
@@ -65,6 +66,7 @@ class IdentifyResult {
     this.queryImagesUsed,
     this.winningVotes,
     this.roiImagesUsed,
+    this.fullHistory = const [],
   });
 
   factory IdentifyResult.fromJson(Map<String, dynamic> json) {
@@ -103,6 +105,13 @@ class IdentifyResult {
       queryImagesUsed: json['query_images_used'] as int?,
       winningVotes: json['winning_votes'] as int?,
       roiImagesUsed: json['roi_images_used'] as int?,
+      fullHistory: (json['full_history'] as List?)
+              ?.whereType<Map>()
+              .map((item) => FishHistoryEntry.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ))
+              .toList() ??
+          const [],
     );
   }
 
@@ -137,6 +146,7 @@ class IdentifyResult {
         'query_images_used': queryImagesUsed,
         'winning_votes': winningVotes,
         'roi_images_used': roiImagesUsed,
+        'full_history': fullHistory.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -184,5 +194,45 @@ class FishPreviousData {
         'last_seen_date': lastSeenDate,
         'last_estimated_size_cm': lastEstimatedSizeCm,
         'growth_cm': growthCm,
+      };
+}
+
+/// Registro histórico de una captura individual de un pez
+class FishHistoryEntry {
+  final DateTime date;
+  final double? sizeCm;
+  final int? catchNumber;
+  final String? areaCode;
+
+  const FishHistoryEntry({
+    required this.date,
+    this.sizeCm,
+    this.catchNumber,
+    this.areaCode,
+  });
+
+  factory FishHistoryEntry.fromJson(Map<String, dynamic> json) {
+    final rawDate = json['datetime'] ??
+        json['saved_at'] ??
+        json['captured_at'] ??
+        json['created_at'];
+
+    return FishHistoryEntry(
+      date: rawDate is String
+          ? DateTime.tryParse(rawDate) ?? DateTime.now()
+          : DateTime.now(),
+      sizeCm: (json['size'] as num?)?.toDouble() ??
+          (json['size_cm'] as num?)?.toDouble() ??
+          (json['length_cm'] as num?)?.toDouble(),
+      catchNumber: (json['catch_number'] as num?)?.toInt(),
+      areaCode: json['area_code'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'date': date.toIso8601String(),
+        'size_cm': sizeCm,
+        'catch_number': catchNumber,
+        'area_code': areaCode,
       };
 }

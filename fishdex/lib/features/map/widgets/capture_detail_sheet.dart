@@ -4,6 +4,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../providers/map_providers.dart';
 import 'fish_history_timeline.dart';
+import '../../../widgets/fish_growth_trend_chart.dart';
+import '../providers/fish_history_provider.dart';
 
 // =============================================================================
 // BOTTOM SHEET DETALLADO DE CAPTURA (RESEARCHER/ADMIN)
@@ -29,14 +31,14 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
     final rarityColor = AppTheme.getRarityColor(capture.rarity);
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
+      initialChildSize: 0.58,
+      minChildSize: 0.35,
+      maxChildSize: 0.82,
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
             color: AppTheme.darkBackground,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(color: Colors.white.withOpacity(0.08)),
             boxShadow: [
               BoxShadow(
@@ -67,7 +69,7 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
               const SizedBox(height: 20),
 
               _buildDataSection(capture),
-              const SizedBox(height: 20),
+              _FishGrowthTrendFromHistory(fishId: capture.fishId),
 
               _buildCoordinatesSection(capture),
               const SizedBox(height: 20),
@@ -368,6 +370,49 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
         fishId: capture.fishId,
         species: capture.species,
       ),
+    );
+  }
+}
+
+class _FishGrowthTrendFromHistory extends ConsumerWidget {
+  final String fishId;
+
+  const _FishGrowthTrendFromHistory({required this.fishId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final history = ref.watch(fishHistoryProvider(fishId));
+
+    return history.when(
+      data: (captures) {
+        final points = captures
+            .where((c) => c.lengthCm != null && c.lengthCm! > 0)
+            .toList()
+          ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+
+        final growthPoints = <FishGrowthPoint>[
+          for (int i = 0; i < points.length; i++)
+            FishGrowthPoint(
+              date: points[i].capturedAt,
+              sizeCm: points[i].lengthCm!,
+              index: i + 1,
+            ),
+        ];
+
+        if (growthPoints.length < 2) {
+          return const SizedBox(height: 20); // Default space between sections
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(top: 20, bottom: 20),
+          child: FishGrowthTrendCard(
+            points: growthPoints,
+            title: 'Growth over recaptures',
+          ),
+        );
+      },
+      loading: () => const SizedBox(height: 20),
+      error: (_, __) => const SizedBox(height: 20),
     );
   }
 }

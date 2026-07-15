@@ -254,9 +254,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   void _showAnonymousBottomSheet(MapCaptureData capture) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
+    _showFloatingMapSheet(
+      isScrollControlled: false,
       builder: (context) =>
           AnonymousMarkerBottomSheet(species: capture.species),
     );
@@ -267,17 +266,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     if (role == UserRole.researcher || role == UserRole.admin) {
       // Researcher/Admin: popup detallado con historial ramificado
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
+      _showFloatingMapSheet(
         isScrollControlled: true,
         builder: (context) => CaptureDetailSheet(capture: capture),
       );
     } else {
       // Fisherman: popup básico
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
+      _showFloatingMapSheet(
+        isScrollControlled: false,
         builder: (context) => _CaptureInfoSheet(capture: capture),
       );
     }
@@ -486,10 +482,36 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  void _showSpotBottomSheet(FishingSpotData spot) {
-    showModalBottomSheet(
+  Future<T?> _showFloatingMapSheet<T>({
+    required WidgetBuilder builder,
+    bool isScrollControlled = true,
+  }) {
+    return showModalBottomSheet<T>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      isScrollControlled: isScrollControlled,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.55),
+      builder: (sheetContext) {
+        final bottomSafe = MediaQuery.of(sheetContext).padding.bottom;
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            12,
+            0,
+            12,
+            bottomSafe + 92,
+          ),
+          child: builder(sheetContext),
+        );
+      },
+    );
+  }
+
+  void _showSpotBottomSheet(FishingSpotData spot) {
+    _showFloatingMapSheet(
+      isScrollControlled: false,
       builder: (context) => SpotBottomSheet(spot: spot),
     );
   }
@@ -582,7 +604,7 @@ class _CaptureInfoSheet extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppTheme.darkBackground,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: Column(

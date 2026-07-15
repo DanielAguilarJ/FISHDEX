@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/providers/appwrite_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/identify_result.dart';
-import '../../../data/repositories/sightings_repository.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../widgets/fish_card.dart';
 import '../widgets/confetti_overlay.dart';
 import '../widgets/xp_animation.dart';
 import '../widgets/reunion_info.dart';
+import '../../../widgets/fish_growth_trend_chart.dart';
 
 /// Pantalla de resultado de identificación
 /// Muestra diferentes animaciones según si el pez es nuevo o un reencuentro
@@ -89,6 +85,14 @@ class ResultScreen extends ConsumerStatefulWidget {
       );
     }
 
+    final fullHistory = (jobData['full_history'] as List?)
+            ?.whereType<Map>()
+            .map((item) => FishHistoryEntry.fromJson(
+                  Map<String, dynamic>.from(item),
+                ))
+            .toList() ??
+        const <FishHistoryEntry>[];
+
     final result = IdentifyResult(
       success: true,
       fishId: fishId,
@@ -110,6 +114,7 @@ class ResultScreen extends ConsumerStatefulWidget {
       speciesCzech: jobData['species_czech'] as String?,
       catchNumber: catchNumber,
       previousData: previousData,
+      fullHistory: fullHistory,
       frameUsed: imageUrl,
       userRole: jobData['user_role'] as String? ?? 'researcher',
       detectionConfidence: detectionConfidence,
@@ -646,9 +651,67 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
     );
   }
 
+  List<FishGrowthPoint> _growthPointsFromResult() {
+    final points = <FishGrowthPoint>[];
+
+    for (int i = 0; i < widget.result.fullHistory.length; i++) {
+      final entry = widget.result.fullHistory[i];
+      if (entry.sizeCm != null && entry.sizeCm! > 0) {
+        points.add(
+          FishGrowthPoint(
+            date: entry.date,
+            sizeCm: entry.sizeCm!,
+            index: i + 1,
+          ),
+        );
+      }
+    }
+
+    // Fallback if we only have previousData + current estimated size
+    if (points.length < 2 && widget.result.previousData != null) {
+      final previous = widget.result.previousData!;
+      final lastDate = DateTime.tryParse(previous.lastSeenDate) ?? DateTime.now();
+
+      if (previous.lastEstimatedSizeCm > 0) {
+        points.add(
+          FishGrowthPoint(
+            date: lastDate,
+            sizeCm: previous.lastEstimatedSizeCm,
+            index: 1,
+          ),
+        );
+      }
+
+      if (widget.result.estimatedSizeCm > 0) {
+        points.add(
+          FishGrowthPoint(
+            date: DateTime.tryParse(widget.result.timestamp) ?? DateTime.now(),
+            sizeCm: widget.result.estimatedSizeCm,
+            index: 2,
+          ),
+        );
+      }
+    }
+
+    return points;
+  }
+
   Widget _buildDetailsSection() {
     if (!widget.result.isNew && widget.result.previousData != null) {
-      return ReunionInfo(previousData: widget.result.previousData!);
+      final growthPoints = _growthPointsFromResult();
+
+      return Column(
+        children: [
+          ReunionInfo(previousData: widget.result.previousData!),
+          if (growthPoints.length >= 2) ...[
+            const SizedBox(height: 16),
+            FishGrowthTrendCard(
+              points: growthPoints,
+              title: 'Growth trend',
+            ),
+          ],
+        ],
+      );
     }
 
     return Container(
