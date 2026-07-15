@@ -53,6 +53,9 @@ class ReIDEmbeddingService:
             from app.services.fish_encoder_model import load_model_for_infer, build_eval_transform
 
             device_str = settings.device if hasattr(settings, "device") else "cpu"
+            if device_str == "cuda" and not torch.cuda.is_available():
+                logger.warning("CUDA requested but not available; falling back to CPU")
+                device_str = "cpu"
             self._device = torch.device(device_str)
 
             self._model = load_model_for_infer(

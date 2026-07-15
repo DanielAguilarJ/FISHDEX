@@ -151,7 +151,7 @@ async def identify_fish(
         else:
             # Use real extension so ffmpeg/OpenCV recognise the container
             video_suffix = suffix if suffix in _video_suffixes else ".mp4"
-            temp_path = save_temp_video(video_bytes)
+            temp_path = save_temp_video(video_bytes, suffix=video_suffix)
             logger.info(
                 "[Step 0] Video temp saved: %s (%.1f MB)",
                 temp_path,
