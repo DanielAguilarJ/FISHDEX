@@ -112,14 +112,35 @@ def save_catch(
     with open(data_path, "w", encoding="utf-8") as f:
         json.dump(metadata_with_extras, f, ensure_ascii=False, indent=2)
 
-    # Persist embedding for fast future comparisons (avoids re-extraction)
+    # Persist ReID embeddings for fast future matching comparisons.
+    # Saves two files per catch:
+    #   {reid_cache_name}_embeddings.npy  → (N,512) per-image matrix (used for matching)
+    #   {reid_cache_name}_prototype.npy   → (512,) mean prototype (auxiliary cache)
+    # Using reid_cache_name avoids confusing old ResNet 2048-d embeddings.npy
+    # with new FishEncoder 512-d files.
     try:
-        from app.services.embedding_service import get_embedding_service
-        emb_service = get_embedding_service()
-        embedding = emb_service.extract_embeddings(frames_to_save)
-        np.save(str(images_dir / "embeddings.npy"), embedding)
+        from app.services.reid_embedding_service import get_reid_embedding_service
+
+        reid = get_reid_embedding_service()
+        embedding_matrix = reid.extract_embedding_matrix(frames_to_save)
+        prototype = reid.extract_prototype(frames_to_save)
+
+        np.save(
+            str(images_dir / f"{settings.reid_cache_name}_embeddings.npy"),
+            embedding_matrix,
+        )
+        np.save(
+            str(images_dir / f"{settings.reid_cache_name}_prototype.npy"),
+            prototype,
+        )
+        logger.debug(
+            "Saved ReID embeddings for %s: matrix=%s prototype=%s",
+            fish_id,
+            embedding_matrix.shape,
+            prototype.shape,
+        )
     except Exception as emb_exc:
-        logger.warning("Failed to save embedding for %s: %s", fish_id, emb_exc)
+        logger.warning("Failed to save ReID embedding for %s: %s", fish_id, emb_exc)
 
     logger.info(
         "Saved catch %d for %s → %s (%d frames + embedding)",

@@ -92,6 +92,11 @@ class IdentifyResponse(BaseModel):
     catch_number: Optional[int] = Field(None, description="Which catch this is for this fish")
     full_history: Optional[list] = Field(None, description="Full catch history (researchers only)")
     user_role: Optional[str] = Field(None, description="Role of the user who submitted")
+    # ReID pipeline debug info (new in v3)
+    match_method: Optional[str] = Field(None, description="Matching algorithm used (e.g. fishencoder_prototype_topN_vote)")
+    query_images_used: Optional[int] = Field(None, description="Number of query frames used in prototype voting")
+    winning_votes: Optional[int] = Field(None, description="Votes the winning identity received")
+    roi_images_used: Optional[int] = Field(None, description="Number of frames with a qualified OBB ROI")
 
 
 class ErrorResponse(BaseModel):

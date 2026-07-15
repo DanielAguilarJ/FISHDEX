@@ -42,12 +42,23 @@ def _load_fish_profiles_from_dir(species_dir: Path) -> list[dict]:
             continue
 
         latest_images = catch_dirs[-1] / "images"
+
+        # Collect ALL image directories across catches for multi-catch prototype building.
+        # The similarity service samples up to reid_max_support_images_per_identity
+        # rows from the pooled embedding matrix, so having more dirs is better.
+        image_dirs = [
+            catch_dir / "images"
+            for catch_dir in catch_dirs
+            if (catch_dir / "images").is_dir()
+        ]
+
         profiles.append(
             {
                 "fish_id": fish_dir.name,
                 "fish_dir": fish_dir,
                 "catches_count": len(catch_dirs),
                 "latest_images_dir": latest_images if latest_images.is_dir() else catch_dirs[-1],
+                "image_dirs": image_dirs,
             }
         )
 

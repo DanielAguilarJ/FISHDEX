@@ -1,177 +1,364 @@
 """
-FishDex AI Server - Similarity Service
-=========================================
-Step 4 of the pipeline: compare cropped frames of a new fish
-against stored frames of existing fish profiles.
+FishDex AI Server - Similarity Service (ReID prototype top-N voting)
+=====================================================================
+Reemplaza el enfoque ResNet50 promedio-vs-promedio por:
 
-Implementation: ResNet50 embeddings + cosine similarity.
-Pre-computed embeddings are loaded from .npy files when available,
-avoiding redundant extraction on every comparison.
+  1. Construir un prototipo L2-normalizado por fish_id a partir de:
+       - Todas las carpetas image_dirs del perfil (todos los catches)
+       - Máximo settings.reid_max_support_images_per_identity imágenes soporte
+       - Usando *_embeddings.npy cacheados si existen (mucho más rápido)
+  2. Cada frame query vota por el prototipo más cercano (cosine similarity)
+  3. En caso de empate, gana quien tenga mayor similitud media
+  4. average_similarity = mean(similitudes al prototipo ganador)
+  5. Si average_similarity >= threshold → recaptura; si no → None
+
+Devuelve SimilarityMatchResult (dataclass) con todos los detalles del voto,
+para que inference.py pueda incluirlos en la respuesta sin acceder a estado
+interno del servicio.
 """
 
+from __future__ import annotations
+
 import logging
+import random
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import cv2
 import numpy as np
 
-from app.services.embedding_service import get_embedding_service
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Supported image extensions for loading frames from disk
+_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+# ---------------------------------------------------------------------------
+# Result dataclass (returned by find_best_match)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SimilarityMatchResult:
+    """Full details of a prototype top-N vote matching round."""
+    fish_id: Optional[str]           # winning fish_id if above threshold, else None
+    score: float                     # average cosine similarity to winning prototype
+    query_images_used: int           # number of query frames used in voting
+    winning_votes: int               # votes the winner got
+    candidate_count: int             # number of prototypes in the gallery
+    winning_identity: Optional[str]  # always set (even when below threshold)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _load_frame_paths_from_dirs(image_dirs: list[Path]) -> list[str]:
+    """Collect all supported image file paths from a list of directories."""
+    paths: list[str] = []
+    for d in image_dirs:
+        if not d.is_dir():
+            continue
+        for p in sorted(d.iterdir()):
+            if p.is_file() and p.suffix.lower() in _IMAGE_EXTENSIONS:
+                # Skip cached .npy-named files that are not images
+                paths.append(str(p))
+    return paths
+
+
+def _sample_paths(paths: list[str], maximum: int, rng: random.Random) -> list[str]:
+    """Return up to `maximum` paths, deterministically sampled."""
+    if len(paths) <= maximum:
+        return list(paths)
+    return sorted(rng.sample(paths, maximum))
+
+
+def _load_cache_embeddings(images_dir: Path) -> Optional[np.ndarray]:
+    """
+    Try to load pre-computed FishEncoder embeddings from cache.
+
+    Looks for: {reid_cache_name}_embeddings.npy
+    Returns (N,512) float32 or None if not found / unreadable.
+    """
+    cache_path = images_dir / f"{settings.reid_cache_name}_embeddings.npy"
+    if cache_path.is_file():
+        try:
+            arr = np.load(str(cache_path)).astype(np.float32)
+            if arr.ndim == 2 and arr.shape[1] == settings.reid_embedding_dim:
+                return arr
+            logger.warning(
+                "Cache shape mismatch at %s: %s (expected (*,%d))",
+                cache_path, arr.shape, settings.reid_embedding_dim,
+            )
+        except Exception as exc:
+            logger.warning("Failed to load embedding cache %s: %s", cache_path, exc)
+    return None
+
+
+def _compute_and_cache_embeddings(images_dir: Path, frames: list[np.ndarray]) -> np.ndarray:
+    """
+    Extract embeddings from frames using ReIDEmbeddingService and save cache.
+
+    Returns (N,512) float32.
+    """
+    from app.services.reid_embedding_service import get_reid_embedding_service
+    reid = get_reid_embedding_service()
+    matrix = reid.extract_embedding_matrix(frames)
+
+    # Save cache for next time
+    cache_path = images_dir / f"{settings.reid_cache_name}_embeddings.npy"
+    try:
+        np.save(str(cache_path), matrix)
+        logger.debug("Saved embedding cache: %s (%s rows)", cache_path, len(matrix))
+    except Exception as exc:
+        logger.warning("Could not save embedding cache %s: %s", cache_path, exc)
+
+    return matrix
+
+
+def _load_frames_from_dir(images_dir: Path) -> list[np.ndarray]:
+    """Load all supported images from a directory as BGR numpy arrays."""
+    frames: list[np.ndarray] = []
+    if not images_dir.is_dir():
+        return frames
+    for p in sorted(images_dir.iterdir()):
+        if p.is_file() and p.suffix.lower() in _IMAGE_EXTENSIONS:
+            img = cv2.imread(str(p))
+            if img is not None:
+                frames.append(img)
+    return frames
+
+
+def _get_embeddings_for_dir(images_dir: Path) -> Optional[np.ndarray]:
+    """
+    Get embeddings for a single images/ directory.
+
+    Priority:
+      1. Load from *_embeddings.npy cache (fast)
+      2. Extract from images and save cache (slow, first time)
+
+    Returns (N,512) float32 or None if no images found.
+    """
+    # Try cache first
+    cached = _load_cache_embeddings(images_dir)
+    if cached is not None and len(cached) > 0:
+        return cached
+
+    # Fall back to loading images
+    frames = _load_frames_from_dir(images_dir)
+    if not frames:
+        return None
+
+    matrix = _compute_and_cache_embeddings(images_dir, frames)
+    return matrix if len(matrix) > 0 else None
+
+
+def _build_prototype_for_profile(
+    profile: dict,
+    max_support_images: int,
+    rng: random.Random,
+) -> Optional[np.ndarray]:
+    """
+    Build a normalized mean prototype for a single fish profile.
+
+    Uses all available image_dirs (all catches), loads/computes embeddings,
+    samples up to max_support_images rows, then normalizes the mean.
+
+    Returns (512,) float32 or None if no embeddings available.
+    """
+    image_dirs: list[Path] = profile.get("image_dirs", [])
+
+    # Fallback: if image_dirs missing (old subset format), use latest_images_dir
+    if not image_dirs:
+        latest = profile.get("latest_images_dir")
+        if latest is not None:
+            image_dirs = [Path(latest)]
+
+    all_matrices: list[np.ndarray] = []
+    for d in image_dirs:
+        matrix = _get_embeddings_for_dir(d)
+        if matrix is not None:
+            all_matrices.append(matrix)
+
+    if not all_matrices:
+        return None
+
+    # Concatenate all embeddings across catches, then sample
+    full_matrix = np.concatenate(all_matrices, axis=0)  # (total_imgs, 512)
+
+    if len(full_matrix) > max_support_images:
+        indices = sorted(rng.sample(range(len(full_matrix)), max_support_images))
+        full_matrix = full_matrix[indices]
+
+    # Normalize per-row (should already be, but defensive re-normalise)
+    norms = np.linalg.norm(full_matrix, axis=1, keepdims=True)
+    norms = np.where(norms > 0, norms, 1.0)
+    full_matrix = full_matrix / norms
+
+    # Mean prototype → L2-normalise
+    mean_emb = full_matrix.mean(axis=0)
+    norm = np.linalg.norm(mean_emb)
+    if norm > 0:
+        mean_emb = mean_emb / norm
+    return mean_emb.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Service class
+# ---------------------------------------------------------------------------
 
 class SimilarityService:
-    """Compare fish images using ResNet50 embedding cosine similarity."""
+    """
+    Fish identity matching using FishEncoder prototypes and top-N voting.
+
+    Gallery: one L2-normalised prototype per known fish_id.
+    Query:   up to reid_max_query_images_for_vote frames, each votes for
+             its nearest prototype.
+    Winner:  most votes; ties broken by highest mean similarity.
+    """
 
     def __init__(self) -> None:
-        """Initialize. The EmbeddingService is accessed via its singleton."""
-        self._emb_service = get_embedding_service()
-        logger.info("SimilarityService initialized (resnet50_cosine mode)")
+        logger.info(
+            "SimilarityService initialized (fishencoder_prototype_topN_vote mode)  "
+            "threshold=%.2f  max_support=%d  max_query=%d",
+            settings.reid_similarity_threshold,
+            settings.reid_max_support_images_per_identity,
+            settings.reid_max_query_images_for_vote,
+        )
 
     # ------------------------------------------------------------------
-    # public API
+    # Public API
     # ------------------------------------------------------------------
-
-    def compute_similarity(
-        self, new_frames: list[np.ndarray], existing_images_dir: Path
-    ) -> float:
-        """
-        Compare new cropped frames against an existing fish's stored frames.
-
-        If a pre-computed embeddings.npy exists in existing_images_dir, it is
-        loaded directly.  Otherwise, stored frames are loaded and their
-        embedding is computed on the fly.
-
-        Args:
-            new_frames:          List of BGR numpy arrays (the new catch).
-            existing_images_dir: Path to an existing fish's images/ folder.
-
-        Returns:
-            Cosine similarity score between 0.0 and 1.0.
-        """
-        if not new_frames:
-            return 0.0
-
-        # Compute embedding for the new catch
-        new_embedding = self._emb_service.extract_embeddings(new_frames)
-
-        # Try to load pre-computed embedding for the existing fish
-        stored_embedding = self._load_embedding(existing_images_dir)
-        if stored_embedding is None:
-            # Fall back to extracting from stored frames
-            stored_frames = self._load_frames(existing_images_dir)
-            if not stored_frames:
-                return 0.0
-            stored_embedding = self._emb_service.extract_embeddings(stored_frames)
-
-        return self._emb_service.compute_cosine_similarity(new_embedding, stored_embedding)
 
     def find_best_match(
         self,
         new_frames: list[np.ndarray],
         subset: list[dict],
-        threshold: float = 0.60,
-    ) -> tuple[Optional[str], float]:
+        threshold: float = 0.75,
+    ) -> SimilarityMatchResult:
         """
-        Find the best matching fish in the comparison subset.
+        Identify the best matching fish using prototype top-N voting.
 
         Args:
-            new_frames: List of cropped BGR frames of the new fish.
-            subset:     List of fish profile dicts from SubsetService.
-            threshold:  Minimum cosine similarity to consider a match.
+            new_frames: List of BGR ROI frames (already OBB-cropped).
+            subset:     Fish profile dicts from SubsetService.
+                        Each dict must have 'fish_id' and 'image_dirs'.
+            threshold:  Minimum average cosine similarity to accept a match.
 
         Returns:
-            (fish_id, similarity_score) if a match is found above threshold,
-            (None, 0.0) otherwise.
+            SimilarityMatchResult with full voting details.
+            fish_id is None if best score is below threshold.
         """
+        empty = SimilarityMatchResult(
+            fish_id=None,
+            score=0.0,
+            query_images_used=0,
+            winning_votes=0,
+            candidate_count=0,
+            winning_identity=None,
+        )
+
         if not subset or not new_frames:
-            return None, 0.0
+            return empty
 
-        # Pre-compute embedding for the new catch once
-        new_embedding = self._emb_service.extract_embeddings(new_frames)
+        rng = random.Random(settings.reid_random_seed)
 
-        best_id: Optional[str] = None
-        best_score: float = 0.0
+        # ── Build prototype gallery ──────────────────────────────────
+        prototype_list: list[np.ndarray] = []
+        prototype_names: list[str] = []
 
         for profile in subset:
-            images_dir = profile.get("latest_images_dir")
-            if images_dir is None:
+            fish_id = profile.get("fish_id")
+            if not fish_id:
                 continue
-
-            images_dir = Path(images_dir)
-
-            # Try pre-computed embedding, fall back to frame extraction
-            stored_embedding = self._load_embedding(images_dir)
-            if stored_embedding is None:
-                stored_frames = self._load_frames(images_dir)
-                if not stored_frames:
-                    continue
-                stored_embedding = self._emb_service.extract_embeddings(stored_frames)
-
-            score = self._emb_service.compute_cosine_similarity(
-                new_embedding, stored_embedding
+            proto = _build_prototype_for_profile(
+                profile,
+                max_support_images=settings.reid_max_support_images_per_identity,
+                rng=rng,
             )
-            logger.debug(
-                "Similarity %s vs %s: %.4f", "new_fish", profile["fish_id"], score
+            if proto is not None:
+                prototype_list.append(proto)
+                prototype_names.append(fish_id)
+
+        if not prototype_list:
+            logger.info("SimilarityService: no prototypes could be built from subset")
+            return empty
+
+        prototype_matrix = np.stack(prototype_list, axis=0)  # (K, 512)
+        candidate_count = len(prototype_names)
+
+        # ── Sample query frames ──────────────────────────────────────
+        max_query = settings.reid_max_query_images_for_vote
+        if len(new_frames) > max_query:
+            query_frames = sorted(
+                rng.sample(range(len(new_frames)), max_query)
+            )
+            sampled_frames = [new_frames[i] for i in query_frames]
+        else:
+            sampled_frames = list(new_frames)
+
+        query_images_used = len(sampled_frames)
+
+        # ── Extract query embeddings ─────────────────────────────────
+        try:
+            from app.services.reid_embedding_service import get_reid_embedding_service
+            reid = get_reid_embedding_service()
+            query_matrix = reid.extract_embedding_matrix(sampled_frames)  # (Q, 512)
+        except Exception as exc:
+            logger.error("SimilarityService: ReID extraction failed: %s", exc, exc_info=True)
+            return empty
+
+        if len(query_matrix) == 0:
+            return empty
+
+        # ── Cosine similarity matrix ─────────────────────────────────
+        # Both matrices are already L2-normalised → dot product = cosine sim
+        similarities = query_matrix @ prototype_matrix.T  # (Q, K)
+
+        # ── Per-image voting ─────────────────────────────────────────
+        per_image_winners = similarities.argmax(axis=1)  # (Q,)
+        vote_counts = Counter(per_image_winners.tolist())
+        maximum_votes = max(vote_counts.values())
+        tied_indices = [idx for idx, cnt in vote_counts.items() if cnt == maximum_votes]
+
+        if len(tied_indices) == 1:
+            winning_index = tied_indices[0]
+        else:
+            # Break tie by highest mean similarity across all query images
+            winning_index = max(
+                tied_indices,
+                key=lambda idx: float(similarities[:, idx].mean()),
             )
 
-            if score > best_score:
-                best_score = score
-                best_id = profile["fish_id"]
+        average_similarity = float(similarities[:, winning_index].mean())
+        winning_identity = prototype_names[winning_index]
+        winning_votes = vote_counts[winning_index]
 
-        if best_score >= threshold and best_id is not None:
-            logger.info("Match found: %s (score=%.4f)", best_id, best_score)
-            return best_id, best_score
+        logger.info(
+            "SimilarityService: winner=%s  score=%.4f  votes=%d/%d  "
+            "candidates=%d  query_imgs=%d",
+            winning_identity,
+            average_similarity,
+            winning_votes,
+            query_images_used,
+            candidate_count,
+            query_images_used,
+        )
 
-        logger.info("No match above threshold %.2f (best=%.4f)", threshold, best_score)
-        return None, best_score
+        # ── Threshold decision ───────────────────────────────────────
+        matched_fish_id = winning_identity if average_similarity >= threshold else None
 
-    # ------------------------------------------------------------------
-    # internal helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _load_embedding(images_dir: Path) -> Optional[np.ndarray]:
-        """
-        Load a pre-computed embedding from images_dir/embeddings.npy.
-
-        Args:
-            images_dir: Path to the images/ folder.
-
-        Returns:
-            2048-d numpy vector if file exists, None otherwise.
-        """
-        emb_path = images_dir / "embeddings.npy"
-        if emb_path.is_file():
-            try:
-                embedding = np.load(str(emb_path))
-                return embedding.astype(np.float32)
-            except Exception as exc:
-                logger.warning("Failed to load %s: %s", emb_path, exc)
-        return None
-
-    @staticmethod
-    def _load_frames(images_dir: Path) -> list[np.ndarray]:
-        """
-        Load all JPEG frames from an images/ directory.
-
-        Args:
-            images_dir: Path to the images/ folder.
-
-        Returns:
-            List of BGR numpy arrays.
-        """
-        frames: list[np.ndarray] = []
-        if not images_dir.is_dir():
-            return frames
-
-        for img_path in sorted(images_dir.glob("frame_*.jpg")):
-            img = cv2.imread(str(img_path))
-            if img is not None:
-                frames.append(img)
-
-        return frames
+        return SimilarityMatchResult(
+            fish_id=matched_fish_id,
+            score=average_similarity,
+            query_images_used=query_images_used,
+            winning_votes=winning_votes,
+            candidate_count=candidate_count,
+            winning_identity=winning_identity,
+        )
 
 
 # ---------------------------------------------------------------------------

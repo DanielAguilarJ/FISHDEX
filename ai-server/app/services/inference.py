@@ -162,16 +162,21 @@ class InferenceService:
             try:
                 from app.services.similarity_service import get_similarity_service
                 sim_service = get_similarity_service()
-                matched_fish_id, similarity_score = sim_service.find_best_match(
+                match_result = sim_service.find_best_match(
                     new_frames=cropped_frames,
                     subset=subset,
-                    threshold=settings.similarity_threshold,
+                    threshold=settings.reid_similarity_threshold,
                 )
+                matched_fish_id = match_result.fish_id
+                similarity_score = match_result.score
             except Exception as exc:
                 logger.warning("[Step 4] Similarity service error: %s", exc)
 
         logger.info("[Step 4] Similarity done: best_match=%s score=%.4f in %.1fms",
                      matched_fish_id, similarity_score, (time.perf_counter() - t4) * 1000)
+
+        # Capture voting details for response (if similarity service ran)
+        _match_result = locals().get("match_result")
 
         # ─── Step 5: Decision (new fish vs recapture) ────────────────
         is_new = True
@@ -233,10 +238,14 @@ class InferenceService:
             fish_id = f"FISH-{random.randint(1000, 9999)}"
 
         # ─── Step 7: Build response ──────────────────────────────────
-        # Real confidence: use the actual similarity_score from the pipeline.
-        # For new fish (no match found), confidence = 0.0 (no prior reference).
+        # detection_confidence: real average OBB confidence from ROI extraction.
+        # For new fish, confidence = 0.0 (no prior reference to compare against).
         # For recaptures, confidence = the raw similarity score.
-        detection_confidence = 1.0 if cropped_frames else 0.0
+        roi_confidences = metadata.get("_roi_confidences") or []
+        if roi_confidences:
+            detection_confidence = float(sum(roi_confidences) / len(roi_confidences))
+        else:
+            detection_confidence = 0.0
         match_confidence = similarity_score  # raw value from similarity service
         confidence = similarity_score if not is_new else 0.0
         xp_earned = xp_base + (XP_NEW_FISH_BONUS if is_new else 0)
@@ -307,6 +316,11 @@ class InferenceService:
             "catch_number": catch_number,
             "full_history": full_history,
             "user_role": user_role,
+            # ReID match debug info
+            "match_method": "fishencoder_prototype_topN_vote",
+            "roi_images_used": len(cropped_frames),
+            "query_images_used": _match_result.query_images_used if _match_result else None,
+            "winning_votes": _match_result.winning_votes if _match_result else None,
         }
 
         return result

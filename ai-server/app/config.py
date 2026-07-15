@@ -76,6 +76,31 @@ class Settings(BaseSettings):
     # ── Legacy: ONNX model (kept for backward compat with old crop_service)
     onnx_model_path: str = "norway fish/fin_detector_best.onnx"
 
+    # ── New OBB ROI detector ─────────────────────────────────────────
+    # Override: FISHDEX_OBB_MODEL_PATH, FISHDEX_OBB_CONF_THRESHOLD, etc.
+    obb_model_path: str = "models/detector/obb_best.pt"
+    obb_conf_threshold: float = 0.20
+    roi_require_single_detection: bool = True
+    roi_allow_center_fallback: bool = False
+
+    # ── New Fish ReID model ──────────────────────────────────────────
+    # Override: FISHDEX_REID_MODEL_PATH, FISHDEX_REID_MODEL_NAME, etc.
+    reid_model_path: str = "models/reid/reid_best.pt"
+    reid_model_name: str = "convnext_small.fb_in22k_ft_in1k"
+    reid_embedding_dim: int = 512
+    reid_img_size: int = 128
+    reid_batch_size: int = 64
+    reid_num_workers: int = 0
+
+    # ── Prototype matching settings ──────────────────────────────────
+    reid_max_support_images_per_identity: int = 5
+    reid_max_query_images_for_vote: int = 5
+    reid_random_seed: int = 1234
+    # Conservative threshold: false positive (wrong recapture) is worse than
+    # false negative (missed recapture). Start at 0.75, calibrate with real data.
+    reid_similarity_threshold: float = 0.75
+    reid_cache_name: str = "fishencoder_convnext_small_512_128"
+
     # ── Auth settings ────────────────────────────────────────────────
     skip_auth: bool = False
     ai_server_secret: str = "change-me-in-production"

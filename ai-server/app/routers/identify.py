@@ -24,8 +24,9 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.middleware.auth import AuthenticatedUser, verify_appwrite_jwt
 from app.models.schemas import ErrorResponse, IdentifyResponse
-from app.services.crop_service import get_crop_service
+from app.services.obb_roi_service import get_obb_roi_service
 from app.services.inference import get_inference_service
+from pathlib import Path
 from app.utils.video import (
     cleanup_temp_file,
     extract_frames_from_video,
@@ -52,11 +53,13 @@ MAX_VIDEO_SIZE = settings.max_video_size_mb * 1024 * 1024
     "/identify",
     response_model=IdentifyResponse,
     responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
-    summary="Identify a fish from a video",
+    summary="Identify a fish from a video or image",
     description="""
-    Receives a short video (5-10 seconds) of a fish, extracts the best frames,
-    crops the fish body using the ONNX model, compares against existing fish
-    profiles in the same area, and returns identification with full history.
+    Receives a short video (5-10 seconds) or a still image of a fish.
+    For videos, extracts the best frames. For images, uses the image directly.
+    Crops the fish body using YOLO OBB, compares against existing fish
+    profiles in the same area using FishEncoder prototype matching,
+    and returns identification with full history.
     Requires a valid Appwrite JWT in the Authorization header.
     """,
 )
@@ -81,82 +84,139 @@ async def identify_fish(
     7-step fish identification pipeline.
 
     Steps:
-      0. Receive video → extract 10 frames → select best 5 → delete video
+      0. Receive video/image → extract frames → select best frames
       1. Species lookup (from user input or mark unknown)
-      2. CROP each of the 5 frames using ONNX fin_detector
+      2. OBB ROI: extract and deskew fish ROI from each frame (YOLO OBB .pt)
       3. SUBSET: find existing fish in this area/species for comparison
-      4. SIMILARITY: histogram comparison against subset
-      5. DECISION: new fish or recapture based on threshold
-      6. SAVE: cropped frames + data.json to server-data/
+      4. SIMILARITY: FishEncoder prototype top-N vote against subset
+      5. DECISION: new fish or recapture based on reid_similarity_threshold
+      6. SAVE: ROI frames + reid embeddings to server-data/
       7. RESPOND: role-filtered history in IdentifyResponse
     """
     temp_path: Optional[str] = None
 
     try:
-        # ── Validate file type ──
-        allowed_types = [
+        # ── Detect file type: check content_type AND filename extension ──
+        filename = video.filename or ""
+        suffix = Path(filename).suffix.lower()
+
+        _image_content_types = {"image/jpeg", "image/png", "image/webp"}
+        _image_suffixes = {".jpg", ".jpeg", ".png", ".webp"}
+        _video_content_types = {
             "video/mp4", "video/quicktime", "video/x-msvideo",
             "video/avi", "video/webm",
-            # The Flutter app can also send still images
-            "image/jpeg", "image/png", "image/webp",
-        ]
-        if video.content_type and video.content_type not in allowed_types:
+        }
+        _video_suffixes = {".mp4", ".mov", ".avi", ".webm"}
+        _unknown_ct = video.content_type in (None, "", "application/octet-stream")
+
+        is_image = (
+            video.content_type in _image_content_types
+            or suffix in _image_suffixes
+        )
+        is_video = (
+            video.content_type in _video_content_types
+            or suffix in _video_suffixes
+            or (_unknown_ct and suffix not in _image_suffixes)
+        )
+
+        if not is_image and not is_video:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported format: {video.content_type}. "
+                detail=f"Unsupported format: content_type={video.content_type!r} "
+                       f"filename={filename!r}. "
                        f"Allowed: MP4, MOV, AVI, WebM, JPEG, PNG, WebP",
             )
 
-        # ── Read video bytes ──
+        # ── Read bytes ──
         video_bytes = await video.read()
 
         if len(video_bytes) > MAX_VIDEO_SIZE:
             raise HTTPException(
                 status_code=400,
-                detail=f"Video too large ({len(video_bytes) / 1024 / 1024:.1f}MB). "
+                detail=f"File too large ({len(video_bytes) / 1024 / 1024:.1f}MB). "
                        f"Max: {settings.max_video_size_mb}MB",
             )
 
-        # ── Step 0: Save temp → extract → select best 5 → delete ──
-        temp_path = save_temp_video(video_bytes)
-        logger.info("[Step 0] Temp video saved: %s (%.1f MB)", temp_path, len(video_bytes) / 1024 / 1024)
-
-        video_info = get_video_info(temp_path)
-        if video_info.get("duration_seconds", 0) > settings.max_video_duration_seconds:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Video too long. Max {settings.max_video_duration_seconds} seconds.",
+        # ── Step 0: Extract frames (bifurcation image vs video) ──
+        if is_image:
+            np_bytes = np.frombuffer(video_bytes, np.uint8)
+            frame = cv2.imdecode(np_bytes, cv2.IMREAD_COLOR)
+            if frame is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Could not decode image. File may be corrupt or unsupported.",
+                )
+            best_frames = [frame]
+            logger.info("[Step 0] Image input decoded: %s", filename)
+        else:
+            # Use real extension so ffmpeg/OpenCV recognise the container
+            video_suffix = suffix if suffix in _video_suffixes else ".mp4"
+            temp_path = save_temp_video(video_bytes)
+            logger.info(
+                "[Step 0] Video temp saved: %s (%.1f MB)",
+                temp_path,
+                len(video_bytes) / 1024 / 1024,
             )
 
-        all_frames = extract_frames_from_video(temp_path, max_frames=settings.max_frames_to_extract)
-        if not all_frames:
-            raise HTTPException(
-                status_code=400,
-                detail="Could not extract frames from video. File may be corrupt.",
+            video_info = get_video_info(temp_path)
+            if video_info.get("duration_seconds", 0) > settings.max_video_duration_seconds:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Video too long. Max {settings.max_video_duration_seconds} seconds.",
+                )
+
+            all_frames = extract_frames_from_video(
+                temp_path,
+                max_frames=settings.max_frames_to_extract,
+                max_side=settings.frame_max_side,
+            )
+            if not all_frames:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Could not extract frames from video. File may be corrupt.",
+                )
+
+            best_frames = select_best_n_frames(all_frames, n=settings.max_frames_to_save)
+            logger.info(
+                "[Step 0] Video: extracted %d frames, selected best %d",
+                len(all_frames),
+                len(best_frames),
             )
 
-        best_frames = select_best_n_frames(all_frames, n=settings.max_frames_to_save)
-        logger.info("[Step 0] Extracted %d frames, selected best %d", len(all_frames), len(best_frames))
+            cleanup_temp_file(temp_path)
+            temp_path = None
 
-        # Delete temp video immediately
-        cleanup_temp_file(temp_path)
-        temp_path = None  # prevent double-cleanup in finally
-
-        # ── Step 2: CROP each frame with ONNX model ──
-        crop_service = get_crop_service()
+        # ── Step 2: OBB ROI extraction (YOLO OBB .pt) ──
+        roi_service = get_obb_roi_service()
         cropped_frames: list[np.ndarray] = []
-        for i, frame in enumerate(best_frames):
-            try:
-                cropped = crop_service.crop_fish(frame)
-                cropped_frames.append(cropped)
-            except Exception as exc:
-                logger.warning("[Step 2] Crop failed on frame %d: %s — using center crop", i, exc)
-                # Fallback: center 70% crop
-                h, w = frame.shape[:2]
-                mx, my = int(w * 0.15), int(h * 0.15)
-                cropped_frames.append(frame[my:h - my, mx:w - mx])
+        roi_confidences: list[float] = []
+        roi_failures: list[str] = []
 
-        logger.info("[Step 2] Cropped %d frames", len(cropped_frames))
+        for i, frame in enumerate(best_frames):
+            result = roi_service.extract_roi(frame)
+            if result.qualified and result.roi is not None:
+                cropped_frames.append(result.roi)
+                roi_confidences.append(result.confidence)
+            else:
+                roi_failures.append(f"frame_{i}: {result.reason}")
+                logger.debug("[Step 2] ROI not qualified for frame %d: %s", i, result.reason)
+
+        if not cropped_frames:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "No qualified fish ROI found in any frame. "
+                               "Ensure the fish is clearly visible in the image/video.",
+                    "failures": roi_failures,
+                },
+            )
+
+        logger.info(
+            "[Step 2] OBB ROI: %d/%d frames qualified  avg_conf=%.2f",
+            len(cropped_frames),
+            len(best_frames),
+            sum(roi_confidences) / len(roi_confidences),
+        )
 
         # ── Build metadata dict (use authenticated user_id, not form field) ──
         fisherman_id = current_user.user_id
@@ -172,6 +232,9 @@ async def identify_fish(
             "size": size,
             "latitude": latitude,
             "longitude": longitude,
+            # ROI pipeline metadata — consumed by inference.py
+            "_roi_confidences": roi_confidences,
+            "_roi_failures": roi_failures,
         }
 
         # ── Steps 3-7: Run inference pipeline ──
@@ -333,19 +396,32 @@ async def health_detailed() -> dict:
     Returns:
         Dict with status, model info, fish count, disk usage.
     """
-    from app.services.crop_service import get_crop_service
+    from app.services.obb_roi_service import get_obb_roi_service
+    from app.services.reid_embedding_service import get_reid_embedding_service
     from app.services.storage_service import get_disk_usage_mb, get_total_fish_count
+    from pathlib import Path as _Path
 
-    crop = get_crop_service()
+    # Check model files exist without forcing a heavyweight load
+    obb_service = get_obb_roi_service()
+    reid_service = get_reid_embedding_service()
 
     return {
         "status": "healthy",
         "service": "fishdex-ai-server",
-        "version": "2.0.0",
-        "onnx_model_loaded": crop.available,
+        "version": "3.0.0",
+        "match_method": "fishencoder_prototype_topN_vote",
+        # OBB ROI model
+        "obb_model_configured": _Path(settings.obb_model_path).is_file(),
+        "obb_model_loaded": obb_service.is_loaded,
+        # ReID model
+        "reid_model_configured": _Path(settings.reid_model_path).is_file(),
+        "reid_model_loaded": reid_service.is_loaded,
+        "reid_model_name": settings.reid_model_name,
+        "reid_embedding_dim": settings.reid_embedding_dim,
+        "reid_similarity_threshold": settings.reid_similarity_threshold,
+        # Database
         "total_fish_in_database": get_total_fish_count(),
         "disk_usage_mb": get_disk_usage_mb(),
-        "similarity_threshold": settings.similarity_threshold,
         "nearby_area_radius_km": settings.nearby_area_radius_km,
     }
 

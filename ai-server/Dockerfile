@@ -24,8 +24,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código de la aplicación
 COPY app/ ./app/
 
-# Crear directorio para el modelo (se monta como volumen)
-RUN mkdir -p /app/model
+# Crear estructura de directorios para modelos y datos (se montan como volúmenes)
+# models/detector/ → YOLO OBB .pt
+# models/reid/     → FishEncoder .pt
+# data/            → caché de embeddings + frames del servidor
+RUN mkdir -p /app/models/detector /app/models/reid /app/data
 
 # Puerto de la aplicación
 EXPOSE 8000
