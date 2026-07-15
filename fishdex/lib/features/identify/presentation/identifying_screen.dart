@@ -8,6 +8,7 @@ import '../../../data/services/identify_service.dart';
 import '../../../data/services/role_guard_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camera/providers/capture_metadata_provider.dart';
+import '../../map/providers/fish_history_provider.dart';
 import '../../map/providers/map_providers.dart';
 import 'result_screen.dart';
 
@@ -98,20 +99,36 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
     }
   }
 
+  void _refreshCaptureData(String? fishId) {
+    ref.invalidate(mapCapturesProvider);
+    if (fishId != null && fishId.isNotEmpty) {
+      ref.invalidate(fishHistoryProvider(fishId));
+      ref.invalidate(fishHistoryGroupedProvider(fishId));
+    }
+    ref.read(captureMetadataProvider.notifier).reset();
+  }
+
   Future<void> _watchJob(String jobId) async {
     final jobRepo = ref.read(identificationJobRepositoryProvider);
-    
+
     await for (final jobData in jobRepo.pollJob(jobId)) {
       if (!mounted) return;
-      
+
       final status = jobData['status'] as String?;
-      
+
       if (status == JobStatus.completed || status == JobStatus.needsReview) {
         final resultData = await jobRepo.getJobResult(jobId);
         final mergedData = <String, dynamic>{
           ...jobData,
           if (resultData != null) ...resultData,
+          'user_role':
+              ref.read(currentUserRoleProvider).valueOrNull?.role.name ??
+                  'fisherman',
         };
+        _refreshCaptureData(
+          mergedData['fish_id'] as String? ??
+              mergedData['result_fish_id'] as String?,
+        );
 
         if (mounted) {
           Navigator.of(context).pushReplacement(
@@ -121,7 +138,8 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
           );
         }
         return;
-      } else if (status == JobStatus.pendingCrop || status == JobStatus.needsManualReview) {
+      } else if (status == JobStatus.pendingCrop ||
+          status == JobStatus.needsManualReview) {
         // Fish was identified but crop not ready yet.
         // Show result with temporary frame image — the collection will
         // update automatically when the server completes the crop.
@@ -129,7 +147,11 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
           ...jobData,
           // Ensure the phone shows what's available (frame as temp preview)
           'is_new_fish': jobData['is_new_fish'] ?? 1,
+          'user_role':
+              ref.read(currentUserRoleProvider).valueOrNull?.role.name ??
+                  'fisherman',
         };
+        ref.read(captureMetadataProvider.notifier).reset();
 
         if (mounted) {
           Navigator.of(context).pushReplacement(
@@ -142,7 +164,8 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       } else if (status == JobStatus.failed) {
         setState(() {
           _hasError = true;
-          _errorMessage = jobData['error_message'] as String? ?? 'Processing failed';
+          _errorMessage =
+              jobData['error_message'] as String? ?? 'Processing failed';
         });
         return;
       }
@@ -156,7 +179,9 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       debugPrint('[IdentifyingScreen] Starting identification...');
       // Simular pasos del proceso con delays para UX
       await Future.delayed(const Duration(milliseconds: 800));
-      if (mounted) setState(() => _statusText = l10n.identifyingExtractingFrames);
+      if (mounted) {
+        setState(() => _statusText = l10n.identifyingExtractingFrames);
+      }
 
       await Future.delayed(const Duration(milliseconds: 600));
       if (mounted) setState(() => _statusText = l10n.identifyingAnalyzing);
@@ -172,7 +197,8 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
         videoPath: videoPath,
         areaCode: metadata.areaCode ?? '401 001',
         fishermanId: authUser?.$id ?? 'anonymous',
-        userRole: ref.read(currentUserRoleProvider).valueOrNull?.role.name ?? 'fisherman',
+        userRole: ref.read(currentUserRoleProvider).valueOrNull?.role.name ??
+            'fisherman',
         species: metadata.species,
         fishState: metadata.fishState,
         name: metadata.customName,
@@ -185,6 +211,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       );
 
       debugPrint('[IdentifyingScreen] Server response received!');
+      _refreshCaptureData(result.fishId);
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) setState(() => _statusText = l10n.identifyingSuccess);
 
@@ -197,7 +224,8 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
             pageBuilder: (context, animation, secondaryAnimation) {
               return ResultScreen(result: result);
             },
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
             transitionDuration: const Duration(milliseconds: 500),
@@ -268,7 +296,10 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
                       child: Text(
                         _statusText,
                         key: ValueKey(_statusText),
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
                               color: _hasError ? Colors.red : Colors.white,
                             ),
                         textAlign: TextAlign.center,
@@ -282,13 +313,15 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
                         width: 200,
                         child: LinearProgressIndicator(
                           backgroundColor: AppTheme.darkSurfaceElevated,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentBlue),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              AppTheme.accentBlue),
                         ),
                       )
                     else ...[
                       const SizedBox(height: 8),
                       Text(
-                        _errorMessage ?? context.l10n.identifyingUnexpectedError,
+                        _errorMessage ??
+                            context.l10n.identifyingUnexpectedError,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.6),
                           fontSize: 14,
@@ -313,14 +346,17 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
                               setState(() {
                                 _hasError = false;
                                 _errorMessage = null;
-                                _statusText = context.l10n.identifyingProcessing;
+                                _statusText =
+                                    context.l10n.identifyingProcessing;
                               });
                               _safetyTimer?.cancel();
-                              _safetyTimer = Timer(const Duration(seconds: 100), () {
+                              _safetyTimer =
+                                  Timer(const Duration(seconds: 100), () {
                                 if (mounted && !_hasError) {
                                   setState(() {
                                     _hasError = true;
-                                    _errorMessage = 'La identificación tardó demasiado.';
+                                    _errorMessage =
+                                        'La identificación tardó demasiado.';
                                     _statusText = context.l10n.identifyingError;
                                   });
                                 }

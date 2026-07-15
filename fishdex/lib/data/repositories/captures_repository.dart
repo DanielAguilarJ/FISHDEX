@@ -36,7 +36,7 @@ class CapturesRepository {
     }
   }
 
-  /// Fetch sightings list for user from local SQLite via HTTP
+  /// Fetch sightings owned by one user for collection/profile screens.
   Future<List<FishCapture>> getCapturesForUser({
     required String userId,
     required String userRole,
@@ -44,78 +44,106 @@ class CapturesRepository {
     int offset = 0,
   }) async {
     try {
-      final response = await _apiClient.get('/api/v1/sightings/user/$userId');
-      if (response == null) return [];
-      
-      final list = response as List;
-      final captures = <FishCapture>[];
-      
-      for (final item in list) {
-        final map = item as Map<String, dynamic>;
-        
-        // Build absolute image URL — prefer clean crop (no labels),
-        // then frame, then annotated preview (dashboard image).
-        final previewFilename  = map['preview_filename'] as String?;
-        final frameFilename    = map['frame_filename'] as String?;
-        final annotatedPreview = map['annotated_preview_filename'] as String?;
-        final bestImage        = previewFilename ?? frameFilename ?? annotatedPreview;
-        final imageUrl = bestImage != null
-            ? '${AppConstants.aiServerUrl}/storage/$bestImage'
-            : null;
-            
-        final videoFilename = map['raw_video_filename'] as String?;
-        final videoUrl = videoFilename != null 
-            ? '${AppConstants.aiServerUrl}/storage/$videoFilename' 
-            : null;
-
-        // Map species name from Czech/English columns or slug
-        final speciesName = map['species_czech'] as String? ?? 
-                            map['species_english'] as String? ?? 
-                            (map['species_slug'] as String?)?.replaceAll('_', ' ') ?? 
-                            'Desconocido';
-
-        captures.add(FishCapture(
-          captureId: map['id'] as String? ?? '',
-          fishId: map['fish_id'] as String? ?? 'Desconocido',
-          userId: map['user_id'] as String? ?? '',
-          latitude: (map['location_lat'] as num?)?.toDouble() ?? 0.0,
-          longitude: (map['location_lng'] as num?)?.toDouble() ?? 0.0,
-          capturedAt: map['captured_at'] != null 
-              ? DateTime.parse(map['captured_at'] as String) 
-              : DateTime.now(),
-          species: speciesName,
-          scientificName: map['species_latin'] as String?,
-          family: null,
-          lengthCm: (map['size_cm'] as num?)?.toDouble(),
-          weightKg: null,
-          condition: 'released',
-          videoUrl: videoUrl,
-          imageUrl: imageUrl,
-          confidence: (map['confidence'] as num?)?.toDouble() ?? 0.0,
-          predominantColor: null,
-          physicalFeatures: null,
-          notes: map['notes'] as String?,
-          rarity: map['rarity'] as String? ?? 'common',
-          isManualEntry: false,
-          xpEarned: (map['xp_earned'] as num?)?.toInt() ?? 10,
-          isNewFish: (map['is_new_fish'] as num?)?.toInt() == 1,
-        ));
-      }
-      return captures;
+      final encodedUserId = Uri.encodeComponent(userId);
+      final response = await _apiClient.get(
+        '/api/v1/sightings/user/$encodedUserId?limit=$limit&offset=$offset',
+      );
+      return _parseCaptureList(response);
     } catch (e) {
       debugPrint('❌ Error getCapturesForUser: $e');
       return [];
     }
   }
 
-  /// Get list of unique fish IDs seen by other users (stubbed)
-  Future<List<String>> getOtherUsersFishIds(String userId) async {
-    return [];
+  /// Fetch the exact geolocated captures visible to the authenticated role.
+  /// The server is authoritative: fishermen receive only their own captures,
+  /// while researchers/admins receive every geolocated capture.
+  Future<List<FishCapture>> getCapturesForMap({int limit = 500}) async {
+    final response = await _apiClient.get('/api/v1/sightings/map?limit=$limit');
+    return _parseCaptureList(response);
   }
 
-  /// Get history of a specific fish ID (stubbed or query local server)
+  /// Get the chronological history of one fish individual.
+  /// The server restricts this endpoint to researchers/admins.
   Future<List<FishCapture>> getFishHistory(String fishId) async {
-    return [];
+    final encodedFishId = Uri.encodeComponent(fishId);
+    final response = await _apiClient.get(
+      '/api/v1/sightings/fish/$encodedFishId/history',
+    );
+    return _parseCaptureList(response);
+  }
+
+  List<FishCapture> _parseCaptureList(dynamic response) {
+    if (response == null) return [];
+    if (response is! List) {
+      throw const FormatException('La respuesta de capturas no es una lista');
+    }
+
+    return response
+        .map((item) => _captureFromServer(
+              Map<String, dynamic>.from(item as Map),
+            ))
+        .toList();
+  }
+
+  FishCapture _captureFromServer(Map<String, dynamic> map) {
+    final previewFilename = map['preview_filename'] as String?;
+    final frameFilename = map['frame_filename'] as String?;
+    final annotatedPreview = map['annotated_preview_filename'] as String?;
+    final bestImage = previewFilename ?? frameFilename ?? annotatedPreview;
+    final imageUrl = _storageUrl(bestImage);
+
+    final videoFilename = map['video_filename'] as String? ??
+        map['raw_video_filename'] as String?;
+    final videoUrl = _storageUrl(videoFilename);
+
+    final speciesName = map['species_czech'] as String? ??
+        map['species_english'] as String? ??
+        (map['species_slug'] as String?)?.replaceAll('_', ' ') ??
+        'Desconocido';
+
+    final capturedAtValue =
+        map['captured_at'] as String? ?? map['created_at'] as String?;
+    final capturedAt = capturedAtValue == null
+        ? DateTime.now()
+        : DateTime.tryParse(capturedAtValue) ?? DateTime.now();
+
+    return FishCapture(
+      captureId: map['id'] as String? ?? map[r'$id'] as String? ?? '',
+      fishId: map['fish_id'] as String? ?? 'Desconocido',
+      userId: map['user_id'] as String? ?? '',
+      latitude: (map['location_lat'] as num?)?.toDouble() ?? 0.0,
+      longitude: (map['location_lng'] as num?)?.toDouble() ?? 0.0,
+      capturedAt: capturedAt,
+      species: speciesName,
+      scientificName: map['species_latin'] as String?,
+      lengthCm: (map['size_cm'] as num?)?.toDouble(),
+      condition: map['fish_state'] as String? ?? 'released',
+      videoUrl: videoUrl,
+      imageUrl: imageUrl,
+      confidence: (map['confidence'] as num?)?.toDouble() ?? 0.0,
+      notes: map['notes'] as String?,
+      rarity: map['rarity'] as String? ?? 'common',
+      isManualEntry: false,
+      xpEarned: (map['xp_earned'] as num?)?.toInt() ?? 10,
+      isNewFish: _parseBool(map['is_new_fish'], defaultValue: true),
+    );
+  }
+
+  String? _storageUrl(String? filename) {
+    if (filename == null || filename.isEmpty) return null;
+    final normalized = filename.replaceAll('\\', '/');
+    return '${AppConstants.aiServerUrl}/storage/$normalized';
+  }
+
+  bool _parseBool(dynamic value, {required bool defaultValue}) {
+    if (value is bool) return value;
+    if (value is num) return value.toInt() == 1;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == '1' || normalized == 'true';
+    }
+    return defaultValue;
   }
 
   /// Update capture manual entry (stubbed)

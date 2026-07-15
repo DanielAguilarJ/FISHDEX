@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/czech_fish_catalog.dart';
 import '../../../data/repositories/identification_job_repository.dart';
+import '../../../data/services/capture_location_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../camera/providers/capture_metadata_provider.dart';
 import '../../identify/presentation/identifying_screen.dart';
@@ -12,21 +13,27 @@ import '../widgets/species_search_field.dart';
 /// antes de iniciar el procesamiento con el servidor de IA.
 class CaptureDetailScreen extends ConsumerStatefulWidget {
   final String videoPath;
+  final bool hasRecordedLocation;
 
-  const CaptureDetailScreen({super.key, required this.videoPath});
+  const CaptureDetailScreen({
+    super.key,
+    required this.videoPath,
+    this.hasRecordedLocation = false,
+  });
 
   @override
-  ConsumerState<CaptureDetailScreen> createState() => _CaptureDetailScreenState();
+  ConsumerState<CaptureDetailScreen> createState() =>
+      _CaptureDetailScreenState();
 }
 
 class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   final _formKey = GlobalKey<FormState>();
-  
+
   CzechSpecies? _selectedSpecies;
   final _sizeController = TextEditingController();
   final _notesController = TextEditingController();
   final _customNameController = TextEditingController();
-  
+
   String? _selectedWeather;
   String? _selectedBite;
   bool _isSubmitting = false;
@@ -37,6 +44,29 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     _notesController.dispose();
     _customNameController.dispose();
     super.dispose();
+  }
+
+  Future<CaptureCoordinates> _resolveCaptureCoordinates() async {
+    final metadata = ref.read(captureMetadataProvider);
+    final latitude = metadata.lat;
+    final longitude = metadata.lon;
+
+    if (widget.hasRecordedLocation && latitude != null && longitude != null) {
+      final recordedCoordinates = CaptureCoordinates(
+        latitude: latitude,
+        longitude: longitude,
+        accuracyMeters: 0,
+      );
+      if (recordedCoordinates.isValid) return recordedCoordinates;
+    }
+
+    final currentCoordinates =
+        await CaptureLocationService.getCurrentCoordinates();
+    ref.read(captureMetadataProvider.notifier).setLocation(
+          currentCoordinates.latitude,
+          currentCoordinates.longitude,
+        );
+    return currentCoordinates;
   }
 
   Future<void> _handleStartIdentification() async {
@@ -51,8 +81,9 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       }
 
       final jobRepo = ref.read(identificationJobRepositoryProvider);
-      final captureMetadataNotifier = ref.read(captureMetadataProvider.notifier);
-      final captureMetadata = ref.read(captureMetadataProvider);
+      final captureMetadataNotifier =
+          ref.read(captureMetadataProvider.notifier);
+      final coordinates = await _resolveCaptureCoordinates();
 
       // Guardar en metadata local
       if (_selectedSpecies != null) {
@@ -72,8 +103,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         captureMetadataNotifier.setFishState(_notesController.text.trim());
       }
       if (_customNameController.text.trim().isNotEmpty) {
-        captureMetadataNotifier.setCustomName(_customNameController.text.trim());
+        captureMetadataNotifier
+            .setCustomName(_customNameController.text.trim());
       }
+
+      final captureMetadata = ref.read(captureMetadataProvider);
 
       // 1. Upload video and register job directly to local SQLite
       final createdJobId = await jobRepo.uploadAndStartJob(
@@ -81,15 +115,21 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         userId: authUser.id, // authUser is a LocalUser, using id instead of $id
         areaCode: captureMetadata.areaCode,
         areaName: captureMetadata.areaName,
-        latitude: captureMetadata.lat,
-        longitude: captureMetadata.lon,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
         speciesSlug: _selectedSpecies?.slug,
-        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
         weather: _selectedWeather,
         bite: _selectedBite,
         sizeCm: parsedSize,
-        fishState: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
-        customName: _customNameController.text.trim().isEmpty ? null : _customNameController.text.trim(),
+        fishState: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+        customName: _customNameController.text.trim().isEmpty
+            ? null
+            : _customNameController.text.trim(),
       );
 
       // 2. Trigger processing pipeline on local AI Server
@@ -104,8 +144,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         );
       }
     } catch (e) {
-      setState(() => _isSubmitting = false);
       if (mounted) {
+        setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al procesar: ${e.toString()}'),
@@ -156,11 +196,13 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     // Tamaño en cm
                     TextFormField(
                       controller: _sizeController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
                         labelText: 'Tamaño estimado (cm)',
-                        prefixIcon: Icon(Icons.straighten, color: AppTheme.accentBlue),
+                        prefixIcon:
+                            Icon(Icons.straighten, color: AppTheme.accentBlue),
                       ),
                       validator: (value) {
                         if (value != null && value.trim().isNotEmpty) {
@@ -180,18 +222,24 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     // Clima dropdown
                     DropdownButtonFormField<String>(
                       value: _selectedWeather,
-                      onChanged: (value) => setState(() => _selectedWeather = value),
+                      onChanged: (value) =>
+                          setState(() => _selectedWeather = value),
                       style: const TextStyle(color: Colors.white),
                       dropdownColor: AppTheme.darkSurfaceElevated,
                       decoration: const InputDecoration(
                         labelText: 'Condiciones climáticas',
-                        prefixIcon: Icon(Icons.wb_sunny, color: AppTheme.accentBlue),
+                        prefixIcon:
+                            Icon(Icons.wb_sunny, color: AppTheme.accentBlue),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'sunny', child: Text('Soleado')),
-                        DropdownMenuItem(value: 'cloudy', child: Text('Nublado')),
-                        DropdownMenuItem(value: 'rainy', child: Text('Lluvioso')),
-                        DropdownMenuItem(value: 'overcast', child: Text('Cubierto')),
+                        DropdownMenuItem(
+                            value: 'sunny', child: Text('Soleado')),
+                        DropdownMenuItem(
+                            value: 'cloudy', child: Text('Nublado')),
+                        DropdownMenuItem(
+                            value: 'rainy', child: Text('Lluvioso')),
+                        DropdownMenuItem(
+                            value: 'overcast', child: Text('Cubierto')),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -199,16 +247,19 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     // Cebo dropdown
                     DropdownButtonFormField<String>(
                       value: _selectedBite,
-                      onChanged: (value) => setState(() => _selectedBite = value),
+                      onChanged: (value) =>
+                          setState(() => _selectedBite = value),
                       style: const TextStyle(color: Colors.white),
                       dropdownColor: AppTheme.darkSurfaceElevated,
                       decoration: const InputDecoration(
                         labelText: 'Cebo utilizado',
-                        prefixIcon: Icon(Icons.catching_pokemon, color: AppTheme.accentBlue),
+                        prefixIcon: Icon(Icons.catching_pokemon,
+                            color: AppTheme.accentBlue),
                       ),
                       items: const [
                         DropdownMenuItem(value: 'worm', child: Text('Lombriz')),
-                        DropdownMenuItem(value: 'spinner', child: Text('Señuelo')),
+                        DropdownMenuItem(
+                            value: 'spinner', child: Text('Señuelo')),
                         DropdownMenuItem(value: 'fly', child: Text('Mosca')),
                         DropdownMenuItem(value: 'dough', child: Text('Masa')),
                         DropdownMenuItem(value: 'corn', child: Text('Maíz')),
@@ -223,7 +274,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                       style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
                         labelText: 'Nombre personalizado (opcional)',
-                        prefixIcon: Icon(Icons.badge, color: AppTheme.accentBlue),
+                        prefixIcon:
+                            Icon(Icons.badge, color: AppTheme.accentBlue),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -235,7 +287,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                       style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
                         labelText: 'Notas o estado del pez',
-                        prefixIcon: Icon(Icons.note, color: AppTheme.accentBlue),
+                        prefixIcon:
+                            Icon(Icons.note, color: AppTheme.accentBlue),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -249,7 +302,10 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                         icon: const Icon(Icons.search, color: Colors.white),
                         label: const Text(
                           'Iniciar Identificación',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.white),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.accentBlue,
@@ -278,13 +334,17 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             const SizedBox(height: 24),
             const Text(
               'Subiendo y procesando video...',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Esto puede tomar unos segundos. Por favor no cierres la aplicación.',
-              style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+              style:
+                  TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
               textAlign: TextAlign.center,
             ),
           ],

@@ -1,24 +1,25 @@
 import 'dart:io';
-import 'package:appwrite/appwrite.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/l10n/l10n_extension.dart';
-import '../../../core/providers/appwrite_providers.dart';
+
 import '../../../core/theme/app_theme.dart';
-import '../../../data/services/media_upload_service.dart';
-import '../../../data/repositories/identification_job_repository.dart';
-import '../../auth/providers/auth_provider.dart';
-import '../../camera/providers/capture_metadata_provider.dart';
-import '../../identify/presentation/identifying_screen.dart';
+
 import '../../capture/presentation/capture_detail_screen.dart';
 
 /// Pantalla de preview del video grabado
 /// Permite al usuario revisar el video y decidir si enviarlo o regrabarlo
 class VideoPreviewScreen extends ConsumerStatefulWidget {
   final String videoPath;
+  final bool hasRecordedLocation;
 
-  const VideoPreviewScreen({super.key, required this.videoPath});
+  const VideoPreviewScreen({
+    super.key,
+    required this.videoPath,
+    this.hasRecordedLocation = false,
+  });
 
   @override
   ConsumerState<VideoPreviewScreen> createState() => _VideoPreviewScreenState();
@@ -221,7 +222,10 @@ class _VideoPreviewScreenState extends ConsumerState<VideoPreviewScreen> {
   void _submitVideo(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CaptureDetailScreen(videoPath: widget.videoPath),
+        builder: (_) => CaptureDetailScreen(
+          videoPath: widget.videoPath,
+          hasRecordedLocation: widget.hasRecordedLocation,
+        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import logging
 import uuid
 import os
+import math
 from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,8 +45,8 @@ async def upload_job_video(
     user_id: str = Form(...),
     area_code: Optional[str] = Form(default=None),
     area_name: Optional[str] = Form(default=None),
-    latitude: Optional[float] = Form(default=None),
-    longitude: Optional[float] = Form(default=None),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
     species_slug: Optional[str] = Form(default=None),
     notes: Optional[str] = Form(default=None),
     weather: Optional[str] = Form(default=None),
@@ -61,6 +62,17 @@ async def upload_job_video(
     Saves the file locally on the server disk and registers the job in SQLite.
     """
     _validate_auth(x_fishdex_client_secret, authorization)
+
+    if (
+        not math.isfinite(latitude)
+        or not math.isfinite(longitude)
+        or not -90 <= latitude <= 90
+        or not -180 <= longitude <= 180
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Las coordenadas GPS de la captura no son válidas",
+        )
 
     upload_file = file or video
     if not upload_file:

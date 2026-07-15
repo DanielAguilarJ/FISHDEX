@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../core/enums/user_role.dart';
+
 import '../../../core/providers/appwrite_providers.dart';
 import '../../../data/repositories/captures_repository.dart';
 import '../../../data/services/role_guard_service.dart';
@@ -148,10 +148,10 @@ List<String> _parseSpecies(dynamic data) {
 List<FishingSpotData> _generateMockSpots(Ref ref) {
   // Obtener la ubicación actual del usuario para generar spots cercanos
   final userLocation = ref.read(userLocationProvider).valueOrNull;
-  
+
   // Si no hay ubicación del usuario, no mostrar spots de ejemplo
   if (userLocation == null) return [];
-  
+
   final baseLat = userLocation.latitude;
   final baseLng = userLocation.longitude;
 
@@ -188,7 +188,8 @@ List<FishingSpotData> _generateMockSpots(Ref ref) {
       totalCatches: 89,
       commonSpecies: const ['Lucio', 'Carpa Común', 'Perca'],
       hasRareFish: true,
-      description: 'Excelente para lucios. Zona de cola especialmente productiva.',
+      description:
+          'Excelente para lucios. Zona de cola especialmente productiva.',
     ),
     FishingSpotData(
       id: 'spot_004',
@@ -221,7 +222,8 @@ List<FishingSpotData> _generateMockSpots(Ref ref) {
       totalCatches: 67,
       commonSpecies: const ['Trucha Marrón', 'Trucha Arcoíris'],
       hasRareFish: false,
-      description: 'Tramo de trucha con regulación sin muerte. Aguas cristalinas.',
+      description:
+          'Tramo de trucha con regulación sin muerte. Aguas cristalinas.',
     ),
   ];
 
@@ -275,8 +277,8 @@ class MapCaptureData {
   final double longitude;
   final DateTime capturedAt;
   final String? userId;
-  final bool isOwn;          // Si la captura es del usuario actual
-  final bool isAnonymous;    // Si debe mostrarse como marker anónimo
+  final bool isOwn; // Si la captura es del usuario actual
+  final bool isAnonymous; // Si debe mostrarse como marker anónimo
 
   const MapCaptureData({
     required this.captureId,
@@ -292,104 +294,50 @@ class MapCaptureData {
   });
 }
 
-/// Provider que carga las capturas filtradas según el rol del usuario actual.
-/// - Fisherman: solo sus capturas + markers anónimos donde hay coincidencias
-/// - Researcher/Admin: todas las capturas con datos completos
+/// Provider que carga las capturas filtradas por el servidor según el rol.
+/// - Fisherman: solo sus capturas geolocalizadas
+/// - Researcher/Admin: todas las capturas geolocalizadas con datos completos
 final mapCapturesProvider = FutureProvider<List<MapCaptureData>>((ref) async {
-  try {
-    final roleAsync = ref.watch(currentUserRoleProvider);
-    final roleModel = roleAsync.valueOrNull;
+  final roleModel = await ref.watch(currentUserRoleProvider.future);
+  final capturesRepo = ref.read(capturesRepositoryProvider);
+  final captures = await capturesRepo.getCapturesForMap();
 
-    if (roleModel == null) return [];
-
-    final capturesRepo = ref.read(capturesRepositoryProvider);
-
-    final role = roleModel.role;
-    final userId = roleModel.userId;
-
-    if (role == UserRole.fisherman) {
-      // Fisherman: obtener solo sus capturas
-      final myCaptures = await capturesRepo.getCapturesForUser(
-        userId: userId,
-        userRole: 'fisherman',
-        limit: 100,
-      );
-
-      final mapData = <MapCaptureData>[];
-
-      for (final capture in myCaptures) {
-        mapData.add(MapCaptureData(
-          captureId: capture.captureId,
-          fishId: capture.fishId,
-          species: capture.species,
-          rarity: capture.rarity,
-          latitude: capture.latitude,
-          longitude: capture.longitude,
-          capturedAt: capture.capturedAt,
-          userId: capture.userId,
-          isOwn: true,
-          isAnonymous: false,
-        ));
-      }
-
-      // Buscar fish_ids que también fueron capturados por otros
-      // para mostrar markers anónimos
-      final othersFishIds =
-          await capturesRepo.getOtherUsersFishIds(userId);
-
-      for (final fishId in othersFishIds) {
-        // Solo agregar un marker anónimo si no tenemos ya un marker
-        // propio en la misma ubicación
-        final existing = mapData.where((m) => m.fishId == fishId);
-        if (existing.isNotEmpty) {
-          // Agregar un marker anónimo cerca del propio (offset aleatorio)
-          final own = existing.first;
-          mapData.add(MapCaptureData(
-            captureId: 'anon_$fishId',
-            fishId: fishId,
-            species: own.species,
-            rarity: own.rarity,
-            // Use raw coordinates — no random noise applied
-            latitude: own.latitude,
-            longitude: own.longitude,
-            capturedAt: own.capturedAt,
-            isOwn: false,
-            isAnonymous: true,
-          ));
-        }
-      }
-
-      return mapData;
-    } else {
-      // Researcher/Admin: todas las capturas
-      final allCaptures = await capturesRepo.getCapturesForUser(
-        userId: userId,
-        userRole: role.name,
-        limit: 200,
-      );
-
-      return allCaptures.map((capture) => MapCaptureData(
-        captureId: capture.captureId,
-        fishId: capture.fishId,
-        species: capture.species,
-        rarity: capture.rarity,
-        latitude: capture.latitude,
-        longitude: capture.longitude,
-        capturedAt: capture.capturedAt,
-        userId: capture.userId,
-        isOwn: capture.userId == userId,
-        isAnonymous: false,
-      )).toList();
-    }
-  } catch (e) {
-    return [];
-  }
+  return captures
+      .where((capture) => _hasValidCoordinates(
+            capture.latitude,
+            capture.longitude,
+          ))
+      .map((capture) => MapCaptureData(
+            captureId: capture.captureId,
+            fishId: capture.fishId,
+            species: capture.species,
+            rarity: capture.rarity,
+            latitude: capture.latitude,
+            longitude: capture.longitude,
+            capturedAt: capture.capturedAt,
+            userId: capture.userId,
+            isOwn: capture.userId == roleModel.userId,
+            isAnonymous: false,
+          ))
+      .toList();
 });
+
+bool _hasValidCoordinates(double latitude, double longitude) {
+  return latitude.isFinite &&
+      longitude.isFinite &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180 &&
+      (latitude != 0.0 || longitude != 0.0);
+}
 
 /// Calcula la distancia en metros entre dos coordenadas (fórmula de Haversine)
 double _calculateDistance(
-  double lat1, double lon1,
-  double lat2, double lon2,
+  double lat1,
+  double lon1,
+  double lat2,
+  double lon2,
 ) {
   const double earthRadius = 6371000; // Radio de la Tierra en metros
   final dLat = _degreesToRadians(lat2 - lat1);
