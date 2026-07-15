@@ -31,11 +31,15 @@ class FishDexApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      localeResolutionCallback: (deviceLocale, supportedLocales) {
-        return supportedLocales.firstWhere(
-          (locale) => locale.languageCode == 'en',
-          orElse: () => const Locale('en'),
-        );
+      localeResolutionCallback: (locale, supportedLocales) {
+        if (locale != null) {
+          for (final supported in supportedLocales) {
+            if (supported.languageCode == locale.languageCode) {
+              return supported;
+            }
+          }
+        }
+        return const Locale('en');
       },
 
       routerConfig: router,
