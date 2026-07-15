@@ -251,7 +251,8 @@ def save_fish_capture_artifacts(
         _write_jpg(abs_path, crop)
         image_files.append(rel)
 
-    # ── Axis-aligned bbox crops (secondary — training diversity) ───────────
+    # ── Legacy field name images_bbox keeps compatibility. ──────────────────
+    #    It now stores secondary OBB-rotated crops, not the primary vertical crop.
     image_bbox_files: list[str] = []
     if cropped_frames_bbox:
         for i, crop in enumerate(cropped_frames_bbox):
@@ -313,8 +314,8 @@ def save_fish_capture_artifacts(
     # ── Dataset crops + annotated full frames from ALL detected frames ─────
     #   all_dataset_detections: list of (frame, detection, confidence)
     #   For each detected frame we save:
-    #     dataset/crop_NNN.jpg        ← OBB-rotated (fish body horizontal)
-    #     dataset/crop_NNN_bbox.jpg   ← axis-aligned bbox (traditional rect crop)
+    #     dataset/crop_NNN.jpg        ← primary aspect-preserving crop
+    #     dataset/crop_NNN_bbox.jpg   ← legacy name; stores OBB-rotated crop
     #     annotated/frame_NNN.jpg     ← full frame with OBB polygon + AI labels
     dataset_crop_files: list[str] = []
     dataset_bbox_files: list[str] = []
@@ -329,7 +330,6 @@ def save_fish_capture_artifacts(
                     d_det,
                     pad_frac=settings.crop_padding_frac,
                 )
-
                 if primary_crop is None or primary_crop.size == 0:
                     primary_crop = crop_bbox_aligned_strict(
                         d_frame,

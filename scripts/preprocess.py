@@ -56,8 +56,37 @@ def load_image(path: Path) -> np.ndarray:
 
 
 def resize_image(img: np.ndarray, size: Tuple[int, int] = TARGET_SIZE) -> np.ndarray:
-    """Redimensiona la imagen al tamano objetivo manteniendo calidad."""
-    return cv2.resize(img, size, interpolation=cv2.INTER_LANCZOS4)
+    """
+    Letterbox resize to preserve aspect ratio.
+    """
+    target_w, target_h = size
+    h, w = img.shape[:2]
+
+    scale = min(target_w / w, target_h / h)
+    new_w = int(round(w * scale))
+    new_h = int(round(h * scale))
+
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+    pad_w = target_w - new_w
+    pad_h = target_h - new_h
+
+    pad_left = pad_w // 2
+    pad_right = pad_w - pad_left
+    pad_top = pad_h // 2
+    pad_bottom = pad_h - pad_top
+
+    padded = cv2.copyMakeBorder(
+        resized,
+        pad_top,
+        pad_bottom,
+        pad_left,
+        pad_right,
+        cv2.BORDER_CONSTANT,
+        value=(114, 114, 114),
+    )
+
+    return padded
 
 
 def normalize_image(img: np.ndarray) -> np.ndarray:

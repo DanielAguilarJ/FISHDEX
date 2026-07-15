@@ -288,7 +288,11 @@ elif [ "$EVAL_PASSED" = false ]; then
     print_error "Despliegue cancelado: la evaluacion no fue aprobada"
     print_error "El modelo no sera desplegado hasta que pase el umbral de ${MIN_ACCURACY}%"
 else
-    bash "${SCRIPT_DIR}/deploy_model.sh"
+    LATEST_MODEL=$(ls -t "${MODELS_DIR}"/fish_model_v*.pt 2>/dev/null | head -1)
+    LATEST_REPORT=$(ls -t "${MODELS_DIR}"/eval_report_v*.json 2>/dev/null | head -1)
+    bash "${SCRIPT_DIR}/deploy_model.sh" \
+      --model-path "$LATEST_MODEL" \
+      --eval-report "$LATEST_REPORT"
     print_success "Despliegue completado en $(get_elapsed $STEP_START)"
 fi
 

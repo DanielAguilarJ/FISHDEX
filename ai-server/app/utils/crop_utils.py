@@ -154,3 +154,70 @@ def crop_fish_best(
     if obb is not None and obb.size > 0:
         return obb
     return crop_bbox_aligned_strict(frame, detection, pad_frac=pad_frac)
+
+
+def pad_image_to_aspect(
+    image: np.ndarray,
+    target_aspect: float,
+    fill_color: tuple[int, int, int] = (114, 114, 114),
+) -> Optional[np.ndarray]:
+    """
+    Pads an image to match target_aspect = width / height.
+    Does not distort image.
+    """
+    if image is None or image.size == 0:
+        return None
+
+    h, w = image.shape[:2]
+    if h <= 0 or w <= 0 or target_aspect <= 0:
+        return image
+
+    current_aspect = w / h
+
+    if abs(current_aspect - target_aspect) < 0.01:
+        return image
+
+    if current_aspect > target_aspect:
+        # Image is too wide; add height.
+        new_w = w
+        new_h = int(round(w / target_aspect))
+    else:
+        # Image is too tall; add width.
+        new_h = h
+        new_w = int(round(h * target_aspect))
+
+    canvas = np.full((new_h, new_w, 3), fill_color, dtype=image.dtype)
+
+    x = (new_w - w) // 2
+    y = (new_h - h) // 2
+
+    canvas[y:y + h, x:x + w] = image
+
+    return canvas
+
+
+def crop_bbox_preserve_frame_aspect(
+    frame: np.ndarray,
+    detection,
+    pad_frac: float = 0.01,
+    fill_color: tuple[int, int, int] = (114, 114, 114),
+) -> Optional[np.ndarray]:
+    """
+    Crops fish with axis-aligned bbox, then pads the crop to preserve
+    the original frame aspect ratio.
+    If frame is vertical, output remains vertical.
+    If frame is horizontal, output remains horizontal.
+    """
+    crop = crop_bbox_aligned_strict(frame, detection, pad_frac=pad_frac)
+    if crop is None or crop.size == 0:
+        return None
+
+    frame_h, frame_w = frame.shape[:2]
+    target_aspect = frame_w / frame_h
+
+    return pad_image_to_aspect(
+        crop,
+        target_aspect=target_aspect,
+        fill_color=fill_color,
+    )
+

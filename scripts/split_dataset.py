@@ -25,7 +25,7 @@ TRAIN_RATIO = 0.8
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-SOURCE_DIR = PROJECT_ROOT / "ai-server" / "models"
+SOURCE_DIR = Path("C:/Users/Student/Documents/MODEL")
 OUTPUT_DIR = PROJECT_ROOT / "ai-server" / "models" / "fish_obb_dataset"
 
 def main():

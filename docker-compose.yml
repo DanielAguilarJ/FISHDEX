@@ -60,6 +60,7 @@ services:
       - FISHDEX_SIMILARITY_THRESHOLD=0.75
       - FISHDEX_NEARBY_AREA_RADIUS_KM=5.0
     volumes:
+      - ./ai-server/app:/app/app
       - ./ai-server/model:/app/model
       - ./ai-server/models:/app/models
       - ./ai-server/data:/app/data

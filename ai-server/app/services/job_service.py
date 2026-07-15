@@ -30,7 +30,7 @@ from app.utils.video import (
     select_best_n_frames,
 )
 from app.utils.area_utils import normalize_area_code
-from app.utils.crop_utils import crop_fish_best, crop_bbox_aligned_strict
+from app.utils.crop_utils import crop_fish_best, crop_bbox_aligned_strict, crop_bbox_preserve_frame_aspect
 
 logger = logging.getLogger(__name__)
 
@@ -527,60 +527,14 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             f"+ {len(cropped_frames_bbox)} axis-aligned bbox crops"
         )
 
-        # --- Step 9: Run classifier ---
+        # --- Step 9: Skip classifier (Binary Fish Detection Only) ---
         species_slug = job_doc.get("species_slug")
         species_info = None
         classification_result = None
-        classifier_available = True
+        classifier_available = False
         classification_confidence = 0.0
-
-        try:
-            classifier = get_classifier_service()
-            _emit_progress(
-                job_id,
-                "classifying_species",
-                70,
-                f"Classifying species (given: {species_slug})",
-            )
-            logger.info(f"[Job {job_id}] Running classifier")
-            classification_result = classifier.classify(cropped_frame)
-
-            if not classification_result or not classification_result.get("available", False):
-                classifier_available = False
-                logger.warning(f"[Job {job_id}] Classifier unavailable or returned no predictions")
-            else:
-                predictions = classification_result.get("predictions") or []
-                if predictions:
-                    top_prediction = predictions[0]
-                    classified_species = (
-                        top_prediction.get("species_slug")
-                        or top_prediction.get("species")
-                    )
-                    classification_confidence = float(
-                        top_prediction.get("confidence", 0.0) or 0.0
-                    )
-
-                    logger.info(
-                        f"[Job {job_id}] Classified as: {classified_species} "
-                        f"(confidence: {classification_confidence:.3f})"
-                    )
-
-                    if not species_slug and classified_species:
-                        if classification_confidence >= settings.confidence_threshold:
-                            species_slug = classified_species
-                            logger.info(
-                                f"[Job {job_id}] Auto-classification accepted: "
-                                f"{species_slug} confidence={classification_confidence:.3f}"
-                            )
-                        else:
-                            logger.warning(
-                                f"[Job {job_id}] Auto-classification rejected: "
-                                f"{classified_species} confidence={classification_confidence:.3f} "
-                                f"< threshold={settings.confidence_threshold:.3f}"
-                            )
-        except Exception as e:
-            logger.warning(f"[Job {job_id}] Classifier failed: {e}")
-            classifier_available = False
+        
+        logger.info(f"[Job {job_id}] Bypassing species classification per binary detection configuration.")
 
         # Look up species in catalog
         if species_slug:

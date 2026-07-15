@@ -193,6 +193,27 @@ else
 
     # Copiar tambien el reporte de evaluacion
     cp "$EVAL_REPORT" "${AI_SERVER_DIR}/eval_report_current.json"
+
+    # Exportar modelo a ONNX para el ClassifierService
+    log_info "Exportando modelo a ONNX..."
+    if command -v python3 &> /dev/null; then
+        python3 "${SCRIPT_DIR}/export_classifier_onnx.py" \
+          --checkpoint "$MODEL_PATH" \
+          --output-dir "${PROJECT_DIR}/ai-server/models/classifier"
+    else
+        python "${SCRIPT_DIR}/export_classifier_onnx.py" \
+          --checkpoint "$MODEL_PATH" \
+          --output-dir "${PROJECT_DIR}/ai-server/models/classifier"
+    fi
+
+    # Verificar que los archivos ONNX y labels existen en host
+    if [ -f "${PROJECT_DIR}/ai-server/models/classifier/fish_species_v1.onnx" ] && \
+       [ -f "${PROJECT_DIR}/ai-server/models/classifier/labels.json" ]; then
+        log_success "Modelo ONNX y etiquetas exportados exitosamente en host."
+    else
+        log_error "Fallo al exportar el modelo a ONNX."
+        exit 1
+    fi
 fi
 
 # --- Paso 4: Reiniciar el contenedor del ai-server ---
@@ -213,8 +234,25 @@ else
             log_warning "No se pudo reiniciar el contenedor. Verificar manualmente."
             log_warning "Comando: docker compose restart ${DOCKER_SERVICE}"
         fi
+
+        # Verificar que el contenedor ve realmente los modelos exportados
+        log_info "Verificando visibilidad del modelo dentro del contenedor..."
+        if docker compose -f "${PROJECT_DIR}/docker-compose.yml" exec -T "$DOCKER_SERVICE" python -c "
+from pathlib import Path
+from app.config import settings
+model = Path(settings.classifier_model_path)
+labels = Path(settings.classifier_labels_path)
+print('Visible:', model, model.exists(), labels, labels.exists())
+if not model.exists() or not labels.exists():
+    import sys
+    sys.exit(1)
+" 2>/dev/null; then
+            log_success "El contenedor detecta correctamente el nuevo modelo y etiquetas."
+        else
+            log_warning "El contenedor no pudo validar el nuevo modelo/etiquetas. Verificar rutas."
+        fi
     else
-        log_warning "Docker no encontrado. Omitiendo reinicio del contenedor."
+        log_warning "Docker no encontrado. Omitiendo reinicio del contenedor y verificacion interna."
     fi
 fi
 

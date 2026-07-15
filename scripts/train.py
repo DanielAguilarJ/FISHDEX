@@ -329,16 +329,15 @@ def get_transforms(is_training: bool = True) -> transforms.Compose:
 
     if is_training:
         return transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
+            transforms.Resize((224, 224)),
             transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
             transforms.ToTensor(),
             normalize,
         ])
     else:
         return transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
             normalize,
         ])
@@ -370,7 +369,7 @@ def train_model(args: argparse.Namespace) -> None:
 
     if device.type == "cuda":
         logger.info("  GPU: %s", torch.cuda.get_device_name(0))
-        logger.info("  Memoria: %.1f GB", torch.cuda.get_device_properties(0).total_mem / 1e9)
+        logger.info("  Memoria: %.1f GB", torch.cuda.get_device_properties(0).total_memory / 1e9)
 
     # --- Cargar metadata ---
     data_dir = Path(args.data_dir)

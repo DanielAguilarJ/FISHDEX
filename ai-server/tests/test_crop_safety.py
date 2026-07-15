@@ -113,6 +113,24 @@ class TestCropAreaRatio(unittest.TestCase):
         is_same = (crop.shape[0] == frame.shape[0] and crop.shape[1] == frame.shape[1])
         self.assertFalse(is_same, "Crop must be smaller than the full frame")
 
+    def test_pad_horizontal_crop_to_vertical_aspect(self):
+        from app.utils.crop_utils import pad_image_to_aspect
+        crop = np.zeros((100, 400, 3), dtype=np.uint8)    # horizontal fish crop
+        padded = pad_image_to_aspect(crop, target_aspect=500 / 1000)
+        self.assertIsNotNone(padded)
+        h, w = padded.shape[:2]
+        self.assertLess(abs((w / h) - 0.5), 0.02)
+        self.assertGreater(h, w)
+
+    def test_preserve_landscape_frame_aspect(self):
+        from app.utils.crop_utils import pad_image_to_aspect
+        crop = np.zeros((100, 400, 3), dtype=np.uint8)
+        padded = pad_image_to_aspect(crop, target_aspect=1000 / 500)
+        self.assertIsNotNone(padded)
+        h, w = padded.shape[:2]
+        self.assertLess(abs((w / h) - 2.0), 0.02)
+        self.assertGreater(w, h)
+
 
 if __name__ == "__main__":
     unittest.main()
