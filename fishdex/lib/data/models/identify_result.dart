@@ -28,6 +28,11 @@ class IdentifyResult {
   final double? detectionConfidence;
   final double? classificationConfidence;
   final double? matchConfidence;
+  // ReID pipeline debug info (new in v3)
+  final String? matchMethod;
+  final int? queryImagesUsed;
+  final int? winningVotes;
+  final int? roiImagesUsed;
 
   const IdentifyResult({
     required this.success,
@@ -56,6 +61,10 @@ class IdentifyResult {
     this.detectionConfidence,
     this.classificationConfidence,
     this.matchConfidence,
+    this.matchMethod,
+    this.queryImagesUsed,
+    this.winningVotes,
+    this.roiImagesUsed,
   });
 
   factory IdentifyResult.fromJson(Map<String, dynamic> json) {
@@ -90,6 +99,10 @@ class IdentifyResult {
       classificationConfidence:
           (json['classification_confidence'] as num?)?.toDouble(),
       matchConfidence: (json['match_confidence'] as num?)?.toDouble(),
+      matchMethod: json['match_method'] as String?,
+      queryImagesUsed: json['query_images_used'] as int?,
+      winningVotes: json['winning_votes'] as int?,
+      roiImagesUsed: json['roi_images_used'] as int?,
     );
   }
 
@@ -120,6 +133,10 @@ class IdentifyResult {
         'detection_confidence': detectionConfidence,
         'classification_confidence': classificationConfidence,
         'match_confidence': matchConfidence,
+        'match_method': matchMethod,
+        'query_images_used': queryImagesUsed,
+        'winning_votes': winningVotes,
+        'roi_images_used': roiImagesUsed,
       };
 }
 
