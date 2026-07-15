@@ -416,7 +416,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      fish.species,
+                      getLocalizedSpeciesName(fish.species, Localizations.localeOf(context).languageCode),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 13,
@@ -533,6 +533,21 @@ class _FishDetailSheet extends StatelessWidget {
 
   const _FishDetailSheet({required this.fish});
 
+  String _localizedRarity(BuildContext context, String rarity) {
+    final l10n = context.l10n;
+    switch (rarity) {
+      case 'uncommon':
+        return l10n.rarityUncommon;
+      case 'rare':
+        return l10n.rarityRare;
+      case 'legendary':
+        return l10n.rarityLegendary;
+      case 'common':
+      default:
+        return l10n.rarityCommon;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -613,7 +628,7 @@ class _FishDetailSheet extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              fish.species,
+                              getLocalizedSpeciesName(fish.species, Localizations.localeOf(context).languageCode),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
@@ -660,7 +675,7 @@ class _FishDetailSheet extends StatelessWidget {
                       ),
                       _buildStat(
                         context.l10n.collectionRarityLabel,
-                        fish.rarity.toUpperCase(),
+                        _localizedRarity(context, fish.rarity).toUpperCase(),
                       ),
                     ],
                   ),

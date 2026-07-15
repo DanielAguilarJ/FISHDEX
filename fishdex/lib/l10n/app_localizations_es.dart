@@ -1242,4 +1242,87 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get quickSpotNoAreasMatching => 'Sin cotos que coincidan. Intenta otra búsqueda.';
+
+  @override
+  String get splashTagline => 'Identifica. Colecciona. Compite.';
+
+  @override
+  String get captureDetailsTitle => 'Detalles de la Captura';
+
+  @override
+  String get captureDetailsIntro => 'Completa los datos de tu captura para iniciar la identificación asistida por IA.';
+
+  @override
+  String get captureDetailsSizeLabel => 'Tamaño estimado (cm)';
+
+  @override
+  String get captureDetailsInvalidNumber => 'Ingresa un número válido';
+
+  @override
+  String get captureDetailsSizeGreaterThanZero => 'El tamaño debe ser mayor a 0';
+
+  @override
+  String get captureDetailsWeatherLabel => 'Condiciones climáticas';
+
+  @override
+  String get captureDetailsBaitLabel => 'Cebo utilizado';
+
+  @override
+  String get captureDetailsCustomNameLabel => 'Nombre personalizado (opcional)';
+
+  @override
+  String get captureDetailsNotesLabel => 'Notas o estado del pez';
+
+  @override
+  String get captureDetailsStartButton => 'Iniciar Identificación';
+
+  @override
+  String get captureDetailsSubmittingTitle => 'Subiendo y procesando video...';
+
+  @override
+  String get captureDetailsSubmittingSubtitle => 'Esto puede tomar unos segundos. Por favor no cierres la aplicación.';
+
+  @override
+  String captureDetailsProcessingError(String error) {
+    return 'Error al procesar: $error';
+  }
+
+  @override
+  String get weatherSunny => 'Soleado';
+
+  @override
+  String get weatherCloudy => 'Nublado';
+
+  @override
+  String get weatherRainy => 'Lluvioso';
+
+  @override
+  String get weatherOvercast => 'Cubierto';
+
+  @override
+  String get baitWorm => 'Lombriz';
+
+  @override
+  String get baitSpinner => 'Señuelo';
+
+  @override
+  String get baitFly => 'Mosca';
+
+  @override
+  String get baitDough => 'Masa';
+
+  @override
+  String get baitCorn => 'Maíz';
+
+  @override
+  String get baitOther => 'Otro';
+
+  @override
+  String get speciesSearchLabel => 'Selecciona una especie (opcional)';
+
+  @override
+  String get speciesSearchHint => 'Déjalo vacío para que la IA la identifique';
+
+  @override
+  String get speciesSearchInvalid => 'Selecciona una especie válida de la lista o deja el campo vacío';
 }

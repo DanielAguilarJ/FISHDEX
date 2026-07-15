@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../data/czech_fish_catalog.dart';
 import '../../../core/enums/user_role.dart';
 import '../../../data/services/role_guard_service.dart';
 import '../providers/map_providers.dart';
@@ -598,6 +599,21 @@ class _CaptureInfoSheet extends StatelessWidget {
 
   const _CaptureInfoSheet({required this.capture});
 
+  String _localizedRarity(BuildContext context, String rarity) {
+    final l10n = context.l10n;
+    switch (rarity) {
+      case 'uncommon':
+        return l10n.rarityUncommon;
+      case 'rare':
+        return l10n.rarityRare;
+      case 'legendary':
+        return l10n.rarityLegendary;
+      case 'common':
+      default:
+        return l10n.rarityCommon;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -635,7 +651,7 @@ class _CaptureInfoSheet extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  capture.species,
+                  getLocalizedSpeciesName(capture.species, Localizations.localeOf(context).languageCode),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -651,7 +667,7 @@ class _CaptureInfoSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  capture.rarity.toUpperCase(),
+                  _localizedRarity(context, capture.rarity).toUpperCase(),
                   style: TextStyle(
                     color: _rarityColor(capture.rarity),
                     fontSize: 11,

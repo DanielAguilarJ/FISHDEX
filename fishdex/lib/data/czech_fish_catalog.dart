@@ -417,3 +417,15 @@ CzechSpecies? findCzechSpeciesByAnyName(String name) {
   }
   return null;
 }
+
+/// Devuelve el nombre de la especie localizado.
+/// Si es checo ('cs'), usa czechName. En cualquier otro caso, englishName.
+String getLocalizedSpeciesName(String species, String languageCode) {
+  final matched = findCzechSpeciesByAnyName(species);
+  if (matched == null) return species;
+  if (languageCode == 'cs') {
+    return matched.czechName;
+  } else {
+    return matched.englishName;
+  }
+}

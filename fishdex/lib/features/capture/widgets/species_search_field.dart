@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 import '../../../data/czech_fish_catalog.dart';
 
 /// Un campo de selección de especie de pez con autocompletado y búsqueda.
@@ -14,11 +15,36 @@ class SpeciesSearchField extends StatelessWidget {
     required this.onSelected,
   });
 
+  String _speciesDisplayName(CzechSpecies species, String languageCode) {
+    if (languageCode == 'cs') {
+      return '${species.czechName} (${species.englishName})';
+    } else {
+      return '${species.englishName} (${species.czechName})';
+    }
+  }
+
+  String _localizedRarity(BuildContext context, String rarity) {
+    final l10n = context.l10n;
+    switch (rarity) {
+      case 'uncommon':
+        return l10n.rarityUncommon;
+      case 'rare':
+        return l10n.rarityRare;
+      case 'legendary':
+        return l10n.rarityLegendary;
+      case 'common':
+      default:
+        return l10n.rarityCommon;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final languageCode = Localizations.localeOf(context).languageCode;
+
     return Autocomplete<CzechSpecies>(
       initialValue: TextEditingValue(
-        text: initialSpecies != null ? '${initialSpecies!.czechName} (${initialSpecies!.englishName})' : '',
+        text: initialSpecies != null ? _speciesDisplayName(initialSpecies!, languageCode) : '',
       ),
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
@@ -32,7 +58,7 @@ class SpeciesSearchField extends StatelessWidget {
         });
       },
       displayStringForOption: (CzechSpecies option) =>
-          '${option.czechName} (${option.englishName})',
+          _speciesDisplayName(option, languageCode),
       fieldViewBuilder: (
         BuildContext context,
         TextEditingController textEditingController,
@@ -44,8 +70,8 @@ class SpeciesSearchField extends StatelessWidget {
           focusNode: focusNode,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
-            labelText: 'Selecciona una especie (opcional)',
-            hintText: 'Déjalo vacío para que la IA la identifique',
+            labelText: context.l10n.speciesSearchLabel,
+            hintText: context.l10n.speciesSearchHint,
             prefixIcon: const Icon(Icons.search, color: AppTheme.accentBlue),
             suffixIcon: IconButton(
               icon: const Icon(Icons.clear, color: Colors.white54),
@@ -61,7 +87,7 @@ class SpeciesSearchField extends StatelessWidget {
               return;
             }
             final exactMatch = czechFishCatalog.any((s) =>
-                '${s.czechName} (${s.englishName})'.toLowerCase() ==
+                _speciesDisplayName(s, languageCode).toLowerCase() ==
                 value.trim().toLowerCase());
             if (!exactMatch) {
               onSelected(null);
@@ -73,10 +99,10 @@ class SpeciesSearchField extends StatelessWidget {
             }
             // Validar que la especie escrita coincida con alguna del catálogo
             final exists = czechFishCatalog.any((s) =>
-                '${s.czechName} (${s.englishName})'.toLowerCase() ==
+                _speciesDisplayName(s, languageCode).toLowerCase() ==
                 value.trim().toLowerCase());
             if (!exists) {
-              return 'Selecciona una especie válida de la lista o deja el campo vacío';
+              return context.l10n.speciesSearchInvalid;
             }
             return null;
           },
@@ -107,6 +133,7 @@ class SpeciesSearchField extends StatelessWidget {
                 itemBuilder: (BuildContext context, int index) {
                   final option = options.elementAt(index);
                   final rarityColor = AppTheme.getRarityColor(option.rarity);
+                  final isCzech = languageCode == 'cs';
                   return InkWell(
                     onTap: () => onSelectedOption(option),
                     child: Padding(
@@ -123,7 +150,7 @@ class SpeciesSearchField extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  option.czechName,
+                                  isCzech ? option.czechName : option.englishName,
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -131,7 +158,9 @@ class SpeciesSearchField extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  '${option.englishName} • ${option.latinName}',
+                                  isCzech
+                                      ? '${option.englishName} • ${option.latinName}'
+                                      : '${option.czechName} • ${option.latinName}',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.6),
                                     fontSize: 13,
@@ -151,7 +180,7 @@ class SpeciesSearchField extends StatelessWidget {
                               border: Border.all(color: rarityColor),
                             ),
                             child: Text(
-                              option.rarity.toUpperCase(),
+                              _localizedRarity(context, option.rarity).toUpperCase(),
                               style: TextStyle(
                                 color: rarityColor,
                                 fontSize: 10,

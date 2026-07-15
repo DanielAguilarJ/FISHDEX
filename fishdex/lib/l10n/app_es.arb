@@ -543,5 +543,39 @@
   "quickSpotLoadingAreas": "Cargando cotos cercanos...",
   "quickSpotSearchAreaHint": "Buscar coto por nombre o código...",
   "quickSpotNoAreasNearby": "No se encontraron cotos cercanos. Intenta aumentar el radio.",
-  "quickSpotNoAreasMatching": "Sin cotos que coincidan. Intenta otra búsqueda."
+  "quickSpotNoAreasMatching": "Sin cotos que coincidan. Intenta otra búsqueda.",
+  "splashTagline": "Identifica. Colecciona. Compite.",
+  "captureDetailsTitle": "Detalles de la Captura",
+  "captureDetailsIntro": "Completa los datos de tu captura para iniciar la identificación asistida por IA.",
+  "captureDetailsSizeLabel": "Tamaño estimado (cm)",
+  "captureDetailsInvalidNumber": "Ingresa un número válido",
+  "captureDetailsSizeGreaterThanZero": "El tamaño debe ser mayor a 0",
+  "captureDetailsWeatherLabel": "Condiciones climáticas",
+  "captureDetailsBaitLabel": "Cebo utilizado",
+  "captureDetailsCustomNameLabel": "Nombre personalizado (opcional)",
+  "captureDetailsNotesLabel": "Notas o estado del pez",
+  "captureDetailsStartButton": "Iniciar Identificación",
+  "captureDetailsSubmittingTitle": "Subiendo y procesando video...",
+  "captureDetailsSubmittingSubtitle": "Esto puede tomar unos segundos. Por favor no cierres la aplicación.",
+  "captureDetailsProcessingError": "Error al procesar: {error}",
+  "@captureDetailsProcessingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "weatherSunny": "Soleado",
+  "weatherCloudy": "Nublado",
+  "weatherRainy": "Lluvioso",
+  "weatherOvercast": "Cubierto",
+  "baitWorm": "Lombriz",
+  "baitSpinner": "Señuelo",
+  "baitFly": "Mosca",
+  "baitDough": "Masa",
+  "baitCorn": "Maíz",
+  "baitOther": "Otro",
+  "speciesSearchLabel": "Selecciona una especie (opcional)",
+  "speciesSearchHint": "Déjalo vacío para que la IA la identifique",
+  "speciesSearchInvalid": "Selecciona una especie válida de la lista o deja el campo vacío"
 }

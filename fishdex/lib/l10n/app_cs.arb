@@ -539,5 +539,39 @@
   "quickSpotLoadingAreas": "Načítání okolních revírů...",
   "quickSpotSearchAreaHint": "Hledat revír podle názvu nebo kódu...",
   "quickSpotNoAreasNearby": "V okolí nebyly nalezeny žádné revíry. Zkuste zvětšit okruh hledání.",
-  "quickSpotNoAreasMatching": "Žádné odpovídající revíry. Zkuste jiné hledání."
+  "quickSpotNoAreasMatching": "Žádné odpovídající revíry. Zkuste jiné hledání.",
+  "splashTagline": "Identifikuj. Sbírej. Soutěž.",
+  "captureDetailsTitle": "Detaily úlovku",
+  "captureDetailsIntro": "Vyplňte údaje o úlovku pro zahájení identifikace pomocí AI.",
+  "captureDetailsSizeLabel": "Odhadovaná velikost (cm)",
+  "captureDetailsInvalidNumber": "Zadejte platné číslo",
+  "captureDetailsSizeGreaterThanZero": "Velikost musí být větší než 0",
+  "captureDetailsWeatherLabel": "Povětrnostní podmínky",
+  "captureDetailsBaitLabel": "Použitá nástraha",
+  "captureDetailsCustomNameLabel": "Vlastní název (volitelně)",
+  "captureDetailsNotesLabel": "Poznámky nebo stav ryby",
+  "captureDetailsStartButton": "Zahájit identifikaci",
+  "captureDetailsSubmittingTitle": "Nahrávání a zpracování videa...",
+  "captureDetailsSubmittingSubtitle": "To může trvat několik sekund. Prosím, nezavírejte aplikaci.",
+  "captureDetailsProcessingError": "Chyba při zpracování: {error}",
+  "@captureDetailsProcessingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "weatherSunny": "Slunečno",
+  "weatherCloudy": "Polojasno",
+  "weatherRainy": "Deštivo",
+  "weatherOvercast": "Zataženo",
+  "baitWorm": "Žížala",
+  "baitSpinner": "Třpytka",
+  "baitFly": "Muška",
+  "baitDough": "Těsto",
+  "baitCorn": "Kukuřice",
+  "baitOther": "Jiné",
+  "speciesSearchLabel": "Vyberte druh (volitelně)",
+  "speciesSearchHint": "Ponechte prázdné pro identifikaci pomocí AI",
+  "speciesSearchInvalid": "Vyberte platný druh ze seznamu nebo nechte pole prázdné"
 }

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/l10n/l10n_extension.dart';
 
 /// Splash Screen con animación de carga y logo de FishDex
 class SplashScreen extends ConsumerStatefulWidget {
@@ -205,7 +206,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Identifica. Colecciona. Compite.',
+                        context.l10n.splashTagline,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               color: Colors.white.withOpacity(0.7),
                               letterSpacing: 1.5,

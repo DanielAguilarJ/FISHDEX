@@ -539,5 +539,39 @@
   "quickSpotLoadingAreas": "Loading nearby areas...",
   "quickSpotSearchAreaHint": "Search area by name or code...",
   "quickSpotNoAreasNearby": "No areas found nearby. Try increasing search radius.",
-  "quickSpotNoAreasMatching": "No matching areas. Try a different search."
+  "quickSpotNoAreasMatching": "No matching areas. Try a different search.",
+  "splashTagline": "Identify. Collect. Compete.",
+  "captureDetailsTitle": "Catch Details",
+  "captureDetailsIntro": "Complete your catch details to start AI-assisted identification.",
+  "captureDetailsSizeLabel": "Estimated size (cm)",
+  "captureDetailsInvalidNumber": "Enter a valid number",
+  "captureDetailsSizeGreaterThanZero": "Size must be greater than 0",
+  "captureDetailsWeatherLabel": "Weather conditions",
+  "captureDetailsBaitLabel": "Bait used",
+  "captureDetailsCustomNameLabel": "Custom name (optional)",
+  "captureDetailsNotesLabel": "Notes or fish condition",
+  "captureDetailsStartButton": "Start Identification",
+  "captureDetailsSubmittingTitle": "Uploading and processing video...",
+  "captureDetailsSubmittingSubtitle": "This may take a few seconds. Please do not close the app.",
+  "captureDetailsProcessingError": "Processing error: {error}",
+  "@captureDetailsProcessingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "weatherSunny": "Sunny",
+  "weatherCloudy": "Cloudy",
+  "weatherRainy": "Rainy",
+  "weatherOvercast": "Overcast",
+  "baitWorm": "Worm",
+  "baitSpinner": "Lure",
+  "baitFly": "Fly",
+  "baitDough": "Dough",
+  "baitCorn": "Corn",
+  "baitOther": "Other",
+  "speciesSearchLabel": "Select a species (optional)",
+  "speciesSearchHint": "Leave empty and the AI will identify it",
+  "speciesSearchInvalid": "Select a valid species from the list or leave it empty"
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../data/czech_fish_catalog.dart';
 
 /// Marker anónimo que indica que un pez fue registrado anteriormente
 /// por otro usuario, sin revelar datos sensibles.
@@ -109,7 +110,9 @@ class AnonymousMarkerBottomSheet extends StatelessWidget {
 
           // Descripción
           Text(
-            context.l10n.mapAnonymousDesc(species),
+            context.l10n.mapAnonymousDesc(
+              getLocalizedSpeciesName(species, Localizations.localeOf(context).languageCode),
+            ),
             style: TextStyle(
               color: Colors.white.withOpacity(0.6),
               fontSize: 14,

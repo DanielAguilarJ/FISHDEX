@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/l10n/l10n_extension.dart';
+import '../../../data/czech_fish_catalog.dart';
 import '../providers/map_providers.dart';
 import 'fish_history_timeline.dart';
 import '../../../widgets/fish_growth_trend_chart.dart';
@@ -78,7 +79,7 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
               const SizedBox(height: 12),
 
               if (_showHistory)
-                _buildHistorySection(capture),
+                _buildHistorySection(context, capture),
             ],
           ),
         );
@@ -112,7 +113,7 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                capture.species,
+                getLocalizedSpeciesName(capture.species, Localizations.localeOf(context).languageCode),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -135,7 +136,7 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
                       ),
                     ),
                     child: Text(
-                      capture.rarity.toUpperCase(),
+                      _localizedRarity(context, capture.rarity).toUpperCase(),
                       style: TextStyle(
                         color: rarityColor,
                         fontSize: 10,
@@ -358,7 +359,9 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
     );
   }
 
-  Widget _buildHistorySection(MapCaptureData capture) {
+  Widget _buildHistorySection(BuildContext context, MapCaptureData capture) {
+    final langCode = Localizations.localeOf(context).languageCode;
+    final localizedSpecies = getLocalizedSpeciesName(capture.species, langCode);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -368,9 +371,24 @@ class _CaptureDetailSheetState extends ConsumerState<CaptureDetailSheet> {
       ),
       child: FishHistoryTimeline(
         fishId: capture.fishId,
-        species: capture.species,
+        species: localizedSpecies,
       ),
     );
+  }
+
+  String _localizedRarity(BuildContext context, String rarity) {
+    final l10n = context.l10n;
+    switch (rarity) {
+      case 'uncommon':
+        return l10n.rarityUncommon;
+      case 'rare':
+        return l10n.rarityRare;
+      case 'legendary':
+        return l10n.rarityLegendary;
+      case 'common':
+      default:
+        return l10n.rarityCommon;
+    }
   }
 }
 

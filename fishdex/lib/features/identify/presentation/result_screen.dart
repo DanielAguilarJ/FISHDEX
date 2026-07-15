@@ -5,6 +5,7 @@ import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/identify_result.dart';
+import '../../../data/czech_fish_catalog.dart';
 import '../widgets/fish_card.dart';
 import '../widgets/confetti_overlay.dart';
 import '../widgets/xp_animation.dart';
@@ -578,7 +579,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
                     ),
                   ),
                   child: Text(
-                    widget.result.rarity.toUpperCase(),
+                    _localizedRarity(context, widget.result.rarity).toUpperCase(),
                     style: TextStyle(
                       color: AppTheme.getRarityColor(widget.result.rarity),
                       fontSize: 12,
@@ -619,6 +620,8 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
   }
 
   Widget _buildFishCard() {
+    final langCode = Localizations.localeOf(context).languageCode;
+    final localizedSpecies = getLocalizedSpeciesName(widget.result.species, langCode);
     return AnimatedBuilder(
       animation: _cardController,
       builder: (context, child) {
@@ -628,7 +631,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
             angle: _cardRotation.value,
             child: FishCard(
               fishId: widget.result.fishId,
-              species: widget.result.species,
+              species: localizedSpecies,
               sizeCm: widget.result.estimatedSizeCm,
               rarity: widget.result.rarity,
               confidence: widget.result.confidence,
@@ -697,6 +700,8 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
   }
 
   Widget _buildDetailsSection() {
+    final langCode = Localizations.localeOf(context).languageCode;
+    final localizedSpecies = getLocalizedSpeciesName(widget.result.species, langCode);
     if (!widget.result.isNew && widget.result.previousData != null) {
       final growthPoints = _growthPointsFromResult();
 
@@ -739,7 +744,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
           ),
           const SizedBox(height: 12),
           _buildDetailRow(context.l10n.resultFishId, widget.result.fishId),
-          _buildDetailRow(context.l10n.resultSpecies, widget.result.species),
+          _buildDetailRow(context.l10n.resultSpecies, localizedSpecies),
           if (widget.result.scientificName != null)
             _buildDetailRow('Scientific', widget.result.scientificName!),
           _buildDetailRow(
@@ -828,5 +833,20 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
         ),
       ],
     );
+  }
+
+  String _localizedRarity(BuildContext context, String rarity) {
+    final l10n = context.l10n;
+    switch (rarity) {
+      case 'uncommon':
+        return l10n.rarityUncommon;
+      case 'rare':
+        return l10n.rarityRare;
+      case 'legendary':
+        return l10n.rarityLegendary;
+      case 'common':
+      default:
+        return l10n.rarityCommon;
+    }
   }
 }

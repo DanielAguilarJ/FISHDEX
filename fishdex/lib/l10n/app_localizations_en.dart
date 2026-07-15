@@ -1242,4 +1242,87 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get quickSpotNoAreasMatching => 'No matching areas. Try a different search.';
+
+  @override
+  String get splashTagline => 'Identify. Collect. Compete.';
+
+  @override
+  String get captureDetailsTitle => 'Catch Details';
+
+  @override
+  String get captureDetailsIntro => 'Complete your catch details to start AI-assisted identification.';
+
+  @override
+  String get captureDetailsSizeLabel => 'Estimated size (cm)';
+
+  @override
+  String get captureDetailsInvalidNumber => 'Enter a valid number';
+
+  @override
+  String get captureDetailsSizeGreaterThanZero => 'Size must be greater than 0';
+
+  @override
+  String get captureDetailsWeatherLabel => 'Weather conditions';
+
+  @override
+  String get captureDetailsBaitLabel => 'Bait used';
+
+  @override
+  String get captureDetailsCustomNameLabel => 'Custom name (optional)';
+
+  @override
+  String get captureDetailsNotesLabel => 'Notes or fish condition';
+
+  @override
+  String get captureDetailsStartButton => 'Start Identification';
+
+  @override
+  String get captureDetailsSubmittingTitle => 'Uploading and processing video...';
+
+  @override
+  String get captureDetailsSubmittingSubtitle => 'This may take a few seconds. Please do not close the app.';
+
+  @override
+  String captureDetailsProcessingError(String error) {
+    return 'Processing error: $error';
+  }
+
+  @override
+  String get weatherSunny => 'Sunny';
+
+  @override
+  String get weatherCloudy => 'Cloudy';
+
+  @override
+  String get weatherRainy => 'Rainy';
+
+  @override
+  String get weatherOvercast => 'Overcast';
+
+  @override
+  String get baitWorm => 'Worm';
+
+  @override
+  String get baitSpinner => 'Lure';
+
+  @override
+  String get baitFly => 'Fly';
+
+  @override
+  String get baitDough => 'Dough';
+
+  @override
+  String get baitCorn => 'Corn';
+
+  @override
+  String get baitOther => 'Other';
+
+  @override
+  String get speciesSearchLabel => 'Select a species (optional)';
+
+  @override
+  String get speciesSearchHint => 'Leave empty and the AI will identify it';
+
+  @override
+  String get speciesSearchInvalid => 'Select a valid species from the list or leave it empty';
 }

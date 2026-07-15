@@ -2454,6 +2454,168 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Sin cotos que coincidan. Intenta otra búsqueda.'**
   String get quickSpotNoAreasMatching;
+
+  /// No description provided for @splashTagline.
+  ///
+  /// In es, this message translates to:
+  /// **'Identifica. Colecciona. Compite.'**
+  String get splashTagline;
+
+  /// No description provided for @captureDetailsTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Detalles de la Captura'**
+  String get captureDetailsTitle;
+
+  /// No description provided for @captureDetailsIntro.
+  ///
+  /// In es, this message translates to:
+  /// **'Completa los datos de tu captura para iniciar la identificación asistida por IA.'**
+  String get captureDetailsIntro;
+
+  /// No description provided for @captureDetailsSizeLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Tamaño estimado (cm)'**
+  String get captureDetailsSizeLabel;
+
+  /// No description provided for @captureDetailsInvalidNumber.
+  ///
+  /// In es, this message translates to:
+  /// **'Ingresa un número válido'**
+  String get captureDetailsInvalidNumber;
+
+  /// No description provided for @captureDetailsSizeGreaterThanZero.
+  ///
+  /// In es, this message translates to:
+  /// **'El tamaño debe ser mayor a 0'**
+  String get captureDetailsSizeGreaterThanZero;
+
+  /// No description provided for @captureDetailsWeatherLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Condiciones climáticas'**
+  String get captureDetailsWeatherLabel;
+
+  /// No description provided for @captureDetailsBaitLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Cebo utilizado'**
+  String get captureDetailsBaitLabel;
+
+  /// No description provided for @captureDetailsCustomNameLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Nombre personalizado (opcional)'**
+  String get captureDetailsCustomNameLabel;
+
+  /// No description provided for @captureDetailsNotesLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Notas o estado del pez'**
+  String get captureDetailsNotesLabel;
+
+  /// No description provided for @captureDetailsStartButton.
+  ///
+  /// In es, this message translates to:
+  /// **'Iniciar Identificación'**
+  String get captureDetailsStartButton;
+
+  /// No description provided for @captureDetailsSubmittingTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Subiendo y procesando video...'**
+  String get captureDetailsSubmittingTitle;
+
+  /// No description provided for @captureDetailsSubmittingSubtitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Esto puede tomar unos segundos. Por favor no cierres la aplicación.'**
+  String get captureDetailsSubmittingSubtitle;
+
+  /// No description provided for @captureDetailsProcessingError.
+  ///
+  /// In es, this message translates to:
+  /// **'Error al procesar: {error}'**
+  String captureDetailsProcessingError(String error);
+
+  /// No description provided for @weatherSunny.
+  ///
+  /// In es, this message translates to:
+  /// **'Soleado'**
+  String get weatherSunny;
+
+  /// No description provided for @weatherCloudy.
+  ///
+  /// In es, this message translates to:
+  /// **'Nublado'**
+  String get weatherCloudy;
+
+  /// No description provided for @weatherRainy.
+  ///
+  /// In es, this message translates to:
+  /// **'Lluvioso'**
+  String get weatherRainy;
+
+  /// No description provided for @weatherOvercast.
+  ///
+  /// In es, this message translates to:
+  /// **'Cubierto'**
+  String get weatherOvercast;
+
+  /// No description provided for @baitWorm.
+  ///
+  /// In es, this message translates to:
+  /// **'Lombriz'**
+  String get baitWorm;
+
+  /// No description provided for @baitSpinner.
+  ///
+  /// In es, this message translates to:
+  /// **'Señuelo'**
+  String get baitSpinner;
+
+  /// No description provided for @baitFly.
+  ///
+  /// In es, this message translates to:
+  /// **'Mosca'**
+  String get baitFly;
+
+  /// No description provided for @baitDough.
+  ///
+  /// In es, this message translates to:
+  /// **'Masa'**
+  String get baitDough;
+
+  /// No description provided for @baitCorn.
+  ///
+  /// In es, this message translates to:
+  /// **'Maíz'**
+  String get baitCorn;
+
+  /// No description provided for @baitOther.
+  ///
+  /// In es, this message translates to:
+  /// **'Otro'**
+  String get baitOther;
+
+  /// No description provided for @speciesSearchLabel.
+  ///
+  /// In es, this message translates to:
+  /// **'Selecciona una especie (opcional)'**
+  String get speciesSearchLabel;
+
+  /// No description provided for @speciesSearchHint.
+  ///
+  /// In es, this message translates to:
+  /// **'Déjalo vacío para que la IA la identifique'**
+  String get speciesSearchHint;
+
+  /// No description provided for @speciesSearchInvalid.
+  ///
+  /// In es, this message translates to:
+  /// **'Selecciona una especie válida de la lista o deja el campo vacío'**
+  String get speciesSearchInvalid;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

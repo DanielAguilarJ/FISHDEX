@@ -1242,4 +1242,87 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get quickSpotNoAreasMatching => 'Žádné odpovídající revíry. Zkuste jiné hledání.';
+
+  @override
+  String get splashTagline => 'Identifikuj. Sbírej. Soutěž.';
+
+  @override
+  String get captureDetailsTitle => 'Detaily úlovku';
+
+  @override
+  String get captureDetailsIntro => 'Vyplňte údaje o úlovku pro zahájení identifikace pomocí AI.';
+
+  @override
+  String get captureDetailsSizeLabel => 'Odhadovaná velikost (cm)';
+
+  @override
+  String get captureDetailsInvalidNumber => 'Zadejte platné číslo';
+
+  @override
+  String get captureDetailsSizeGreaterThanZero => 'Velikost musí být větší než 0';
+
+  @override
+  String get captureDetailsWeatherLabel => 'Povětrnostní podmínky';
+
+  @override
+  String get captureDetailsBaitLabel => 'Použitá nástraha';
+
+  @override
+  String get captureDetailsCustomNameLabel => 'Vlastní název (volitelně)';
+
+  @override
+  String get captureDetailsNotesLabel => 'Poznámky nebo stav ryby';
+
+  @override
+  String get captureDetailsStartButton => 'Zahájit identifikaci';
+
+  @override
+  String get captureDetailsSubmittingTitle => 'Nahrávání a zpracování videa...';
+
+  @override
+  String get captureDetailsSubmittingSubtitle => 'To může trvat několik sekund. Prosím, nezavírejte aplikaci.';
+
+  @override
+  String captureDetailsProcessingError(String error) {
+    return 'Chyba při zpracování: $error';
+  }
+
+  @override
+  String get weatherSunny => 'Slunečno';
+
+  @override
+  String get weatherCloudy => 'Polojasno';
+
+  @override
+  String get weatherRainy => 'Deštivo';
+
+  @override
+  String get weatherOvercast => 'Zataženo';
+
+  @override
+  String get baitWorm => 'Žížala';
+
+  @override
+  String get baitSpinner => 'Třpytka';
+
+  @override
+  String get baitFly => 'Muška';
+
+  @override
+  String get baitDough => 'Těsto';
+
+  @override
+  String get baitCorn => 'Kukuřice';
+
+  @override
+  String get baitOther => 'Jiné';
+
+  @override
+  String get speciesSearchLabel => 'Vyberte druh (volitelně)';
+
+  @override
+  String get speciesSearchHint => 'Ponechte prázdné pro identifikaci pomocí AI';
+
+  @override
+  String get speciesSearchInvalid => 'Vyberte platný druh ze seznamu nebo nechte pole prázdné';
 }
