@@ -1339,4 +1339,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String collectionRecaptureIndex(int index) {
     return 'Znovulapení #$index';
   }
+
+  @override
+  String get identifyingPendingCrop => 'Nebyla nalezena dostatečně jasná detekce. Automaticky opakujeme pokus s dalšími snímky...';
+
+  @override
+  String get identifyingNeedsManualReview => 'Rybu se nepodařilo rozpoznat ani po několika pokusech. Nahrajte ji znovu tak, aby bylo vidět celé tělo, při dobrém osvětlení a bez zakrytí rukama.';
+
+  @override
+  String get identifyingPollingTimeout => 'Identifikace trvá déle, než se očekávalo. Ověřte, že server stále běží, a klepnutím na Zkusit znovu znovu načtěte výsledek.';
+
+  @override
+  String get identifyingResultUnavailable => 'Server označil identifikaci jako dokončenou, ale výsledek zatím není dostupný. Klepnutím na Zkusit znovu jej znovu načtěte.';
 }

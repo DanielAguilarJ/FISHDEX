@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/l10n/l10n_extension.dart';
@@ -36,7 +35,7 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
   bool _statusInitialized = false;
   bool _hasError = false;
   String? _errorMessage;
-  Timer? _safetyTimer;
+  bool _canRetryPolling = false;
 
   @override
   void initState() {
@@ -65,19 +64,6 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
     // Iniciar la identificación después de que el contexto esté listo
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startIdentification();
-    });
-
-    // Timer de seguridad: si después de 100s no hay respuesta,
-    // mostrar error para que el usuario no se quede atrapado
-    _safetyTimer = Timer(const Duration(seconds: 100), () {
-      if (mounted && !_hasError) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'La identificación tardó demasiado. '
-              'Verifica que el servidor esté activo e inténtalo de nuevo.';
-          _statusText = context.l10n.identifyingError;
-        });
-      }
     });
   }
 
@@ -118,56 +104,98 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
 
       if (status == JobStatus.completed || status == JobStatus.needsReview) {
         final resultData = await jobRepo.getJobResult(jobId);
+
+        if (!mounted) return;
+
+        if (resultData == null) {
+          setState(() {
+            _hasError = true;
+            _canRetryPolling = true;
+            _errorMessage = context.l10n.identifyingResultUnavailable;
+            _statusText = context.l10n.identifyingError;
+          });
+          return;
+        }
+
         final mergedData = <String, dynamic>{
           ...jobData,
-          if (resultData != null) ...resultData,
+          ...resultData,
           'user_role':
               ref.read(currentUserRoleProvider).valueOrNull?.role.name ??
                   'fisherman',
         };
+
         _refreshCaptureData(
           mergedData['fish_id'] as String? ??
               mergedData['result_fish_id'] as String?,
         );
 
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => ResultScreen.fromJobData(jobData: mergedData),
-            ),
-          );
-        }
-        return;
-      } else if (status == JobStatus.pendingCrop ||
-          status == JobStatus.needsManualReview) {
-        // Fish was identified but crop not ready yet.
-        // Show result with temporary frame image — the collection will
-        // update automatically when the server completes the crop.
-        final mergedData = <String, dynamic>{
-          ...jobData,
-          // Ensure the phone shows what's available (frame as temp preview)
-          'is_new_fish': jobData['is_new_fish'] ?? 1,
-          'user_role':
-              ref.read(currentUserRoleProvider).valueOrNull?.role.name ??
-                  'fisherman',
-        };
-        ref.read(captureMetadataProvider.notifier).reset();
+        if (!mounted) return;
 
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => ResultScreen.fromJobData(jobData: mergedData),
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => ResultScreen.fromJobData(
+              jobData: mergedData,
             ),
-          );
-        }
+          ),
+        );
         return;
-      } else if (status == JobStatus.failed) {
+      }
+
+      if (status == JobStatus.pendingCrop) {
+        final pendingMessage = context.l10n.identifyingPendingCrop;
+
+        if (_statusText != pendingMessage || _hasError) {
+          setState(() {
+            _hasError = false;
+            _canRetryPolling = false;
+            _errorMessage = null;
+            _statusText = pendingMessage;
+          });
+        }
+
+        // pending_crop is not a final result.
+        // Keep listening until the retry service completes the full pipeline,
+        // marks the job as needs_manual_review, or reports a failure.
+        continue;
+      }
+
+      if (status == JobStatus.needsManualReview) {
         setState(() {
           _hasError = true;
-          _errorMessage =
-              jobData['error_message'] as String? ?? 'Processing failed';
+          _canRetryPolling = false;
+          _errorMessage = context.l10n.identifyingNeedsManualReview;
+          _statusText = context.l10n.identifyingError;
         });
         return;
+      }
+
+      if (status == JobStatus.failed) {
+        final errorCode = jobData['error_code'] as String?;
+
+        setState(() {
+          _hasError = true;
+          _canRetryPolling = errorCode == 'poll_timeout';
+          _errorMessage = errorCode == 'poll_timeout'
+              ? context.l10n.identifyingPollingTimeout
+              : jobData['error_message'] as String? ??
+                  context.l10n.identifyingUnexpectedError;
+          _statusText = context.l10n.identifyingError;
+        });
+        return;
+      }
+
+      if (status == JobStatus.uploaded || status == JobStatus.processing) {
+        final processingMessage = context.l10n.identifyingProcessing;
+
+        if (_statusText != processingMessage || _hasError) {
+          setState(() {
+            _hasError = false;
+            _canRetryPolling = false;
+            _errorMessage = null;
+            _statusText = processingMessage;
+          });
+        }
       }
     }
   }
@@ -234,7 +262,6 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
       }
     } catch (e) {
       debugPrint('[IdentifyingScreen] Error: $e');
-      _safetyTimer?.cancel();
       if (mounted) {
         setState(() {
           _hasError = true;
@@ -249,7 +276,6 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
 
   @override
   void dispose() {
-    _safetyTimer?.cancel();
     _scanController.dispose();
     _pulseController.dispose();
     super.dispose();
@@ -340,36 +366,27 @@ class _IdentifyingScreenState extends ConsumerState<IdentifyingScreen>
                             ),
                             child: Text(context.l10n.videoPreviewRetake),
                           ),
-                          const SizedBox(width: 12),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                _hasError = false;
-                                _errorMessage = null;
-                                _statusText =
-                                    context.l10n.identifyingProcessing;
-                              });
-                              _safetyTimer?.cancel();
-                              _safetyTimer =
-                                  Timer(const Duration(seconds: 100), () {
-                                if (mounted && !_hasError) {
-                                  setState(() {
-                                    _hasError = true;
-                                    _errorMessage =
-                                        'La identificación tardó demasiado.';
-                                    _statusText = context.l10n.identifyingError;
-                                  });
-                                }
-                              });
-                              _startIdentification();
-                            },
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: Text(context.l10n.identifyingRetry),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.accentBlue,
-                              foregroundColor: Colors.white,
+                          if (_canRetryPolling) ...[
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _hasError = false;
+                                  _canRetryPolling = false;
+                                  _errorMessage = null;
+                                  _statusText =
+                                      context.l10n.identifyingProcessing;
+                                });
+                                _startIdentification();
+                              },
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: Text(context.l10n.identifyingRetry),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accentBlue,
+                                foregroundColor: Colors.white,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ],

@@ -105,24 +105,47 @@ class IdentificationJobRepository {
     return pollJob(jobId);
   }
 
-  /// Poll job status.
-  Stream<Map<String, dynamic>> pollJob(String jobId,
-      {Duration interval = const Duration(seconds: 2)}) async* {
-    while (true) {
+  /// Poll job status until the backend reaches a real terminal state.
+  ///
+  /// pending_crop is intentionally NOT terminal. It means the backend retry
+  /// service is still trying to recover a valid fish detection.
+  ///
+  /// With the default values, polling is allowed for approximately 6 minutes:
+  /// 180 attempts * 2 seconds. This covers the background retry schedule,
+  /// which may need up to three scans separated by 60-second intervals.
+  Stream<Map<String, dynamic>> pollJob(
+    String jobId, {
+    Duration interval = const Duration(seconds: 2),
+    int maxAttempts = 180,
+  }) async* {
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
       await Future.delayed(interval);
+
       final job = await getJob(jobId);
-      if (job != null) {
-        yield job;
-        final status = job['status'] as String?;
-        if (status == JobStatus.completed ||
-            status == JobStatus.needsReview ||
-            status == JobStatus.pendingCrop ||
-            status == JobStatus.needsManualReview ||
-            status == JobStatus.failed) {
-          break;
-        }
+      if (job == null) {
+        continue;
+      }
+
+      yield job;
+
+      final status = job['status'] as String?;
+
+      if (status == JobStatus.completed ||
+          status == JobStatus.needsReview ||
+          status == JobStatus.needsManualReview ||
+          status == JobStatus.failed) {
+        return;
       }
     }
+
+    yield <String, dynamic>{
+      'id': jobId,
+      'job_id': jobId,
+      'status': JobStatus.failed,
+      'error_code': 'poll_timeout',
+      'error_message':
+          'Job polling timed out before a terminal result was available.',
+    };
   }
 }
 

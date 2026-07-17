@@ -2640,6 +2640,30 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Recaptura #{index}'**
   String collectionRecaptureIndex(int index);
+
+  /// No description provided for @identifyingPendingCrop.
+  ///
+  /// In es, this message translates to:
+  /// **'No se encontró una detección suficientemente clara. Estamos reintentando automáticamente con más fotogramas...'**
+  String get identifyingPendingCrop;
+
+  /// No description provided for @identifyingNeedsManualReview.
+  ///
+  /// In es, this message translates to:
+  /// **'No fue posible detectar el pez después de varios intentos. Vuelve a grabarlo procurando mostrar el cuerpo completo, con buena iluminación y sin cubrirlo con las manos.'**
+  String get identifyingNeedsManualReview;
+
+  /// No description provided for @identifyingPollingTimeout.
+  ///
+  /// In es, this message translates to:
+  /// **'La identificación está tardando más de lo esperado. Verifica que el servidor siga activo y pulsa Volver a intentar para consultar nuevamente el resultado.'**
+  String get identifyingPollingTimeout;
+
+  /// No description provided for @identifyingResultUnavailable.
+  ///
+  /// In es, this message translates to:
+  /// **'El servidor marcó la identificación como completada, pero el resultado todavía no está disponible. Pulsa Volver a intentar para consultarlo nuevamente.'**
+  String get identifyingResultUnavailable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

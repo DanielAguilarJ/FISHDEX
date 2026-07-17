@@ -1339,4 +1339,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String collectionRecaptureIndex(int index) {
     return 'Recaptura #$index';
   }
+
+  @override
+  String get identifyingPendingCrop => 'No se encontró una detección suficientemente clara. Estamos reintentando automáticamente con más fotogramas...';
+
+  @override
+  String get identifyingNeedsManualReview => 'No fue posible detectar el pez después de varios intentos. Vuelve a grabarlo procurando mostrar el cuerpo completo, con buena iluminación y sin cubrirlo con las manos.';
+
+  @override
+  String get identifyingPollingTimeout => 'La identificación está tardando más de lo esperado. Verifica que el servidor siga activo y pulsa Volver a intentar para consultar nuevamente el resultado.';
+
+  @override
+  String get identifyingResultUnavailable => 'El servidor marcó la identificación como completada, pero el resultado todavía no está disponible. Pulsa Volver a intentar para consultarlo nuevamente.';
 }
