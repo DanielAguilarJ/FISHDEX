@@ -33,7 +33,7 @@ class IdentificationJobRepository {
     String? areaName,
     required double latitude,
     required double longitude,
-    String? speciesSlug,
+    required String speciesSlug,
     String? notes,
     String? weather,
     String? bite,
@@ -48,7 +48,14 @@ class IdentificationJobRepository {
     if (areaName != null) fields['area_name'] = areaName;
     fields['latitude'] = latitude.toString();
     fields['longitude'] = longitude.toString();
-    if (speciesSlug != null) fields['species_slug'] = speciesSlug;
+    if (speciesSlug.trim().isEmpty) {
+      throw ArgumentError.value(
+        speciesSlug,
+        'speciesSlug',
+        'speciesSlug must not be empty',
+      );
+    }
+    fields['species_slug'] = speciesSlug;
     if (notes != null) fields['notes'] = notes;
     if (weather != null) fields['weather'] = weather;
     if (bite != null) fields['bite'] = bite;

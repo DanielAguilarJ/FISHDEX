@@ -73,6 +73,17 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   Future<void> _handleStartIdentification() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final selectedSpecies = _selectedSpecies;
+    if (selectedSpecies == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.captureFieldSpeciesRequired),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
@@ -87,9 +98,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       final coordinates = await _resolveCaptureCoordinates();
 
       // Guardar en metadata local
-      if (_selectedSpecies != null) {
-        captureMetadataNotifier.setSpecies(_selectedSpecies!.czechName);
-      }
+      captureMetadataNotifier.setSpecies(selectedSpecies.czechName);
       final parsedSize = double.tryParse(_sizeController.text);
       if (parsedSize != null) {
         captureMetadataNotifier.setSize(parsedSize);
@@ -118,7 +127,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         areaName: captureMetadata.areaName,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
-        speciesSlug: _selectedSpecies?.slug,
+        speciesSlug: selectedSpecies.slug,
         notes: _notesController.text.trim().isEmpty
             ? null
             : _notesController.text.trim(),
@@ -149,7 +158,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(context.l10n.captureDetailsProcessingError(e.toString())),
+            content:
+                Text(context.l10n.captureDetailsProcessingError(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -181,7 +191,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                   children: [
                     Text(
                       context.l10n.captureDetailsIntro,
-                      style: const TextStyle(color: Colors.white70, fontSize: 16),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 16),
                     ),
                     const SizedBox(height: 24),
 
@@ -202,8 +213,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: context.l10n.captureDetailsSizeLabel,
-                        prefixIcon:
-                            const Icon(Icons.straighten, color: AppTheme.accentBlue),
+                        prefixIcon: const Icon(Icons.straighten,
+                            color: AppTheme.accentBlue),
                       ),
                       validator: (value) {
                         if (value != null && value.trim().isNotEmpty) {
@@ -212,7 +223,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                             return context.l10n.captureDetailsInvalidNumber;
                           }
                           if (parsed <= 0) {
-                            return context.l10n.captureDetailsSizeGreaterThanZero;
+                            return context
+                                .l10n.captureDetailsSizeGreaterThanZero;
                           }
                         }
                         return null;
@@ -229,18 +241,22 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                       dropdownColor: AppTheme.darkSurfaceElevated,
                       decoration: InputDecoration(
                         labelText: context.l10n.captureDetailsWeatherLabel,
-                        prefixIcon:
-                            const Icon(Icons.wb_sunny, color: AppTheme.accentBlue),
+                        prefixIcon: const Icon(Icons.wb_sunny,
+                            color: AppTheme.accentBlue),
                       ),
                       items: [
                         DropdownMenuItem(
-                            value: 'sunny', child: Text(context.l10n.weatherSunny)),
+                            value: 'sunny',
+                            child: Text(context.l10n.weatherSunny)),
                         DropdownMenuItem(
-                            value: 'cloudy', child: Text(context.l10n.weatherCloudy)),
+                            value: 'cloudy',
+                            child: Text(context.l10n.weatherCloudy)),
                         DropdownMenuItem(
-                            value: 'rainy', child: Text(context.l10n.weatherRainy)),
+                            value: 'rainy',
+                            child: Text(context.l10n.weatherRainy)),
                         DropdownMenuItem(
-                            value: 'overcast', child: Text(context.l10n.weatherOvercast)),
+                            value: 'overcast',
+                            child: Text(context.l10n.weatherOvercast)),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -258,13 +274,21 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                             color: AppTheme.accentBlue),
                       ),
                       items: [
-                        DropdownMenuItem(value: 'worm', child: Text(context.l10n.baitWorm)),
                         DropdownMenuItem(
-                            value: 'spinner', child: Text(context.l10n.baitSpinner)),
-                        DropdownMenuItem(value: 'fly', child: Text(context.l10n.baitFly)),
-                        DropdownMenuItem(value: 'dough', child: Text(context.l10n.baitDough)),
-                        DropdownMenuItem(value: 'corn', child: Text(context.l10n.baitCorn)),
-                        DropdownMenuItem(value: 'other', child: Text(context.l10n.baitOther)),
+                            value: 'worm', child: Text(context.l10n.baitWorm)),
+                        DropdownMenuItem(
+                            value: 'spinner',
+                            child: Text(context.l10n.baitSpinner)),
+                        DropdownMenuItem(
+                            value: 'fly', child: Text(context.l10n.baitFly)),
+                        DropdownMenuItem(
+                            value: 'dough',
+                            child: Text(context.l10n.baitDough)),
+                        DropdownMenuItem(
+                            value: 'corn', child: Text(context.l10n.baitCorn)),
+                        DropdownMenuItem(
+                            value: 'other',
+                            child: Text(context.l10n.baitOther)),
                       ],
                     ),
                     const SizedBox(height: 16),

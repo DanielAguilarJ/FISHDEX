@@ -1318,13 +1318,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get baitOther => 'Jiné';
 
   @override
-  String get speciesSearchLabel => 'Vyberte druh (volitelně)';
+  String get speciesSearchLabel => 'Vyberte druh ryby *';
 
   @override
-  String get speciesSearchHint => 'Ponechte prázdné pro identifikaci pomocí AI';
+  String get speciesSearchHint => 'Napište a vyberte druh ze seznamu';
 
   @override
-  String get speciesSearchInvalid => 'Vyberte platný druh ze seznamu nebo nechte pole prázdné';
+  String get speciesSearchInvalid => 'Vyberte platný druh ryby ze seznamu';
 
   @override
   String get chartExactDates => 'Přesná data';

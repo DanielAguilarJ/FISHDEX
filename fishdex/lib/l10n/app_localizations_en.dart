@@ -1318,13 +1318,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get baitOther => 'Other';
 
   @override
-  String get speciesSearchLabel => 'Select a species (optional)';
+  String get speciesSearchLabel => 'Select a species *';
 
   @override
-  String get speciesSearchHint => 'Leave empty and the AI will identify it';
+  String get speciesSearchHint => 'Type and select a species from the list';
 
   @override
-  String get speciesSearchInvalid => 'Select a valid species from the list or leave it empty';
+  String get speciesSearchInvalid => 'Select a valid species from the list';
 
   @override
   String get chartExactDates => 'Exact dates';

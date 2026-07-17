@@ -2602,19 +2602,19 @@ abstract class AppLocalizations {
   /// No description provided for @speciesSearchLabel.
   ///
   /// In es, this message translates to:
-  /// **'Selecciona una especie (opcional)'**
+  /// **'Selecciona una especie *'**
   String get speciesSearchLabel;
 
   /// No description provided for @speciesSearchHint.
   ///
   /// In es, this message translates to:
-  /// **'Déjalo vacío para que la IA la identifique'**
+  /// **'Escribe y selecciona una especie de la lista'**
   String get speciesSearchHint;
 
   /// No description provided for @speciesSearchInvalid.
   ///
   /// In es, this message translates to:
-  /// **'Selecciona una especie válida de la lista o deja el campo vacío'**
+  /// **'Selecciona una especie válida de la lista'**
   String get speciesSearchInvalid;
 
   /// No description provided for @chartExactDates.

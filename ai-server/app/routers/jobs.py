@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Header, Query, Request, UploadFile
 
 from app.config import settings
 from app.database import get_db_connection
+from app.data.czech_species import CZECH_SPECIES
 from app.services.job_service import process_identification_job
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ async def upload_job_video(
     area_name: Optional[str] = Form(default=None),
     latitude: float = Form(...),
     longitude: float = Form(...),
-    species_slug: Optional[str] = Form(default=None),
+    species_slug: str = Form(...),
     notes: Optional[str] = Form(default=None),
     weather: Optional[str] = Form(default=None),
     bite: Optional[str] = Form(default=None),
@@ -62,6 +63,31 @@ async def upload_job_video(
     Saves the file locally on the server disk and registers the job in SQLite.
     """
     _validate_auth(x_fishdex_client_secret, authorization)
+
+    requested_species_slug = (
+        species_slug.strip().lower().replace("-", "_")
+    )
+
+    species_info = next(
+        (
+            item
+            for item in CZECH_SPECIES
+            if item["slug"].lower() == requested_species_slug
+        ),
+        None,
+    )
+
+    if species_info is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "species_slug es obligatorio y debe coincidir exactamente "
+                "con un slug del catálogo de especies"
+            ),
+        )
+
+    species_slug = species_info["slug"]
+
 
     if (
         not math.isfinite(latitude)

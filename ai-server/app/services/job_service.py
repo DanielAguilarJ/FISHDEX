@@ -233,8 +233,24 @@ def _calculate_xp(species_info: Optional[dict], is_new_fish: bool) -> int:
 
     return total_xp
 
-def process_identification_job(job_id: str, force: bool = False) -> dict:
-    """Process a fish identification job locally using SQLite database."""
+def process_identification_job(
+    job_id: str,
+    force: bool = False,
+    recovered_candidate: Optional[dict] = None,
+) -> dict:
+    """
+    Process a fish identification job locally using SQLite database.
+
+    recovered_candidate is used only by the background crop retry service.
+    When provided, it must contain:
+      - frame: numpy.ndarray
+      - detection: detector result object
+      - confidence: float
+
+    The recovered detection is injected into the normal pipeline so the job
+    still generates embeddings, performs matching, creates the sighting and
+    stores all final artifacts.
+    """
     detector = get_detector_service()
     embedding_service = get_reid_embedding_service()   # FishEncoder 512-d (trained for re-ID)
     matching = get_matching_service()
@@ -340,33 +356,101 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         _emit_progress(job_id, "detecting_fish", 50, "Running YOLOv8 OBB fish detector")
         logger.info(f"[Job {job_id}] Running fish detection with candidate scoring")
 
-        # Collect valid tight detections from best frames
+        # Collect valid tight detections from best frames.
+        # A detection recovered by retry_service is injected directly into
+        # this list so the complete identification pipeline can continue.
         valid_candidates: list[tuple] = []  # (score, frame, det, conf)
         base_threshold = settings.detector_confidence_threshold or 0.30
 
-        for frame in best_frames:
-            detections = detector.detect(frame, conf_threshold=base_threshold)
-            for det in detections:
-                if _is_valid_tight_detection(det, frame.shape, min_conf=base_threshold):
-                    score = _candidate_score(frame, det)
-                    conf = _get_detection_confidence(det)
-                    valid_candidates.append((score, frame, det, conf))
+        if recovered_candidate is not None:
+            recovered_frame = recovered_candidate.get("frame")
+            recovered_detection = recovered_candidate.get("detection")
+            recovered_confidence = float(
+                recovered_candidate.get("confidence", 0.0) or 0.0
+            )
 
-        # Retry with lowered thresholds if no valid candidates found
-        if not valid_candidates:
-            retry_thresholds = [0.25, 0.20]
-            for retry_idx, retry_thresh in enumerate(retry_thresholds, start=1):
-                logger.info(f"[Job {job_id}] Detection retry {retry_idx}: threshold={retry_thresh}")
-                for frame in all_frames:
-                    detections = detector.detect(frame, conf_threshold=retry_thresh)
-                    for det in detections:
-                        if _is_valid_tight_detection(det, frame.shape, min_conf=retry_thresh):
-                            score = _candidate_score(frame, det)
-                            conf = _get_detection_confidence(det)
-                            valid_candidates.append((score, frame, det, conf))
-                if valid_candidates:
-                    logger.info(f"[Job {job_id}] Retry {retry_idx} found {len(valid_candidates)} candidates")
-                    break
+            if (
+                not isinstance(recovered_frame, np.ndarray)
+                or recovered_frame.size == 0
+            ):
+                raise ValueError(
+                    "Recovered retry candidate does not contain a valid frame"
+                )
+
+            if recovered_detection is None:
+                raise ValueError(
+                    "Recovered retry candidate does not contain a detection"
+                )
+
+            recovered_score = _candidate_score(
+                recovered_frame,
+                recovered_detection,
+            )
+            valid_candidates.append(
+                (
+                    recovered_score,
+                    recovered_frame,
+                    recovered_detection,
+                    recovered_confidence,
+                )
+            )
+
+            logger.info(
+                f"[Job {job_id}] Using detection recovered by retry service: "
+                f"score={recovered_score:.3f}, "
+                f"confidence={recovered_confidence:.3f}"
+            )
+        else:
+            for frame in best_frames:
+                detections = detector.detect(
+                    frame,
+                    conf_threshold=base_threshold,
+                )
+                for det in detections:
+                    if _is_valid_tight_detection(
+                        det,
+                        frame.shape,
+                        min_conf=base_threshold,
+                    ):
+                        score = _candidate_score(frame, det)
+                        conf = _get_detection_confidence(det)
+                        valid_candidates.append(
+                            (score, frame, det, conf)
+                        )
+
+            # Retry with lowered thresholds if no valid candidates were found.
+            if not valid_candidates:
+                retry_thresholds = [0.25, 0.20]
+                for retry_idx, retry_thresh in enumerate(
+                    retry_thresholds,
+                    start=1,
+                ):
+                    logger.info(
+                        f"[Job {job_id}] Detection retry {retry_idx}: "
+                        f"threshold={retry_thresh}"
+                    )
+                    for frame in all_frames:
+                        detections = detector.detect(
+                            frame,
+                            conf_threshold=retry_thresh,
+                        )
+                        for det in detections:
+                            if _is_valid_tight_detection(
+                                det,
+                                frame.shape,
+                                min_conf=retry_thresh,
+                            ):
+                                score = _candidate_score(frame, det)
+                                conf = _get_detection_confidence(det)
+                                valid_candidates.append(
+                                    (score, frame, det, conf)
+                                )
+                    if valid_candidates:
+                        logger.info(
+                            f"[Job {job_id}] Retry {retry_idx} found "
+                            f"{len(valid_candidates)} candidates"
+                        )
+                        break
 
         # If STILL no valid candidates → mark as pending_crop
         if not valid_candidates:
@@ -419,6 +503,16 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
 
         # --- Step 7b: Dataset pass — collect ALL valid detections from all frames ---
         dataset_frame_detections: list[tuple] = []  # (frame, detection, conf)
+
+        if recovered_candidate is not None:
+            dataset_frame_detections.append(
+                (
+                    best_detection_frame,
+                    best_detection,
+                    best_detection_confidence,
+                )
+            )
+
         logger.info(f"[Job {job_id}] Dataset pass: scanning {len(all_frames)} frames")
         for d_frame in all_frames:
             d_dets = detector.detect(d_frame, conf_threshold=base_threshold)
@@ -527,32 +621,42 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
             f"+ {len(cropped_frames_bbox)} axis-aligned bbox crops"
         )
 
-        # --- Step 9: Skip classifier (Binary Fish Detection Only) ---
-        species_slug = job_doc.get("species_slug")
+        # --- Step 9: Resolve and validate the user-selected species ---
+        species_slug_raw = job_doc.get("species_slug")
         species_info = None
         classification_result = None
         classifier_available = False
         classification_confidence = 0.0
-        
-        logger.info(f"[Job {job_id}] Bypassing species classification per binary detection configuration.")
 
-        # Look up species in catalog
-        if species_slug:
-            species_info = find_species_by_name(species_slug)
-            if species_info:
-                # Canonicalize species_slug so DB, matching and UI always use catalog slug
-                species_slug = species_info["slug"]
-                logger.info(
-                    f"[Job {job_id}] Species info: "
-                    f"{species_info.get('english_name')} / "
-                    f"{species_info.get('latin_name')} "
-                    f"slug={species_slug} "
-                    f"rarity={species_info.get('rarity')}"
-                )
-            else:
-                logger.warning(
-                    f"[Job {job_id}] Species '{species_slug}' was not found in Czech catalog"
-                )
+        logger.info(
+            f"[Job {job_id}] Bypassing species classification per "
+            "binary detection configuration."
+        )
+
+        if (
+            not isinstance(species_slug_raw, str)
+            or not species_slug_raw.strip()
+        ):
+            raise ValueError(
+                "Job cannot be identified without a selected species_slug"
+            )
+
+        species_info = find_species_by_name(species_slug_raw.strip())
+        if species_info is None:
+            raise ValueError(
+                f"Job contains an invalid species_slug: {species_slug_raw}"
+            )
+
+        # Always use the canonical catalog slug for matching, storage and UI.
+        species_slug = species_info["slug"]
+
+        logger.info(
+            f"[Job {job_id}] Species info: "
+            f"{species_info.get('english_name')} / "
+            f"{species_info.get('latin_name')} "
+            f"slug={species_slug} "
+            f"rarity={species_info.get('rarity')}"
+        )
 
         # --- Step 10: Generate embedding (FishEncoder 512-d) ---
         _emit_progress(job_id, "matching_individual", 85, "Generating FishEncoder embeddings")
@@ -564,18 +668,15 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
 
         # --- Step 11: Run matching ---
         logger.info(f"[Job {job_id}] Running matching against known fish")
-        if species_slug:
-            matched_fish_id, match_confidence = matching.find_match(
-                embedding=embedding_vector,
-                species_slug=species_slug,
-                area_code=job_doc.get("area_code"),
-                threshold=settings.reid_similarity_threshold,
-                latitude=job_doc.get("latitude"),
-                longitude=job_doc.get("longitude"),
-                radius_km=settings.nearby_area_radius_km,
-            )
-        else:
-            matched_fish_id, match_confidence = None, 0.0
+        matched_fish_id, match_confidence = matching.find_match(
+            embedding=embedding_vector,
+            species_slug=species_slug,
+            area_code=job_doc.get("area_code"),
+            threshold=settings.reid_similarity_threshold,
+            latitude=job_doc.get("latitude"),
+            longitude=job_doc.get("longitude"),
+            radius_km=settings.nearby_area_radius_km,
+        )
 
         is_new_fish = matched_fish_id is None
 
@@ -593,11 +694,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
         area_code_clean = normalize_area_code(area_code)
         sighting_id = str(uuid.uuid4())
         
-        if not species_slug:
-            final_status = "needs_review"
-            logger.info(f"[Job {job_id}] No species identified -> needs_review")
-        else:
-            final_status = "completed"
+        final_status = "completed"
 
         created_artifact_dir = None
         created_private_dir = None
@@ -922,16 +1019,15 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 )
 
             # Store embedding
-            if species_slug:
-                matching.store_embedding(
-                    fish_id=fish_id,
-                    embedding=embedding_vector,
-                    species_slug=species_slug,
-                    area_code=area_code_clean,
-                    sighting_id=sighting_id,
-                    latitude=job_doc.get("latitude"),
-                    longitude=job_doc.get("longitude")
-                )
+            matching.store_embedding(
+                fish_id=fish_id,
+                embedding=embedding_vector,
+                species_slug=species_slug,
+                area_code=area_code_clean,
+                sighting_id=sighting_id,
+                latitude=job_doc.get("latitude"),
+                longitude=job_doc.get("longitude"),
+            )
 
             # Update identification_jobs final status
             cursor.execute(

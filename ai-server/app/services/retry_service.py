@@ -10,12 +10,13 @@ Strategy:
   - Retry 2: threshold 0.15, 20 frames
   - Retry 3: threshold 0.15, 20 frames, relaxed area guard (0.75)
   - If all 3 background retries fail: mark as 'needs_manual_review'
-  - If any retry succeeds: generate crop, update DB, mark as 'completed'
+  - If any retry succeeds: inject the recovered detection into the complete
+    identification pipeline so embeddings, matching, sightings and artifacts
+    are generated normally
 """
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -24,7 +25,7 @@ import numpy as np
 
 from app.config import settings
 from app.database import get_db_connection
-from app.utils.crop_utils import crop_fish_best, crop_bbox_aligned_strict
+from app.utils.crop_utils import crop_fish_best
 from app.utils.video import extract_frames_from_video
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,8 @@ async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, ret
 
         # Try detection on every frame
         best_crop = None
-        best_crop_bbox = None
+        best_detection_frame = None
+        best_detection = None
         best_conf = 0.0
 
         for frame in frames:
@@ -160,13 +162,52 @@ async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, ret
                         crop = crop_fish_best(frame, det)
                         if crop is not None:
                             best_crop = crop
-                            best_crop_bbox = crop_bbox_aligned_strict(frame, det)
+                            best_detection_frame = frame
+                            best_detection = det
                             best_conf = conf
 
         if best_crop is not None:
-            # Success! Save crop and update job
-            logger.info(f"[Retry {job_id}] SUCCESS! Got crop with conf={best_conf:.3f}")
-            _save_retry_crop(job_id, best_crop, best_crop_bbox)
+            logger.info(
+                f"[Retry {job_id}] SUCCESS! Detection recovered with "
+                f"conf={best_conf:.3f}. Re-running the complete pipeline."
+            )
+
+            if not _reset_job_for_full_pipeline(job_id, retry_count):
+                logger.warning(
+                    f"[Retry {job_id}] Job was not in pending_crop status. "
+                    "Full pipeline reprocessing was cancelled."
+                )
+                return
+
+            from app.services.job_service import process_identification_job
+
+            recovered_candidate = {
+                "frame": best_detection_frame,
+                "detection": best_detection,
+                "confidence": best_conf,
+            }
+
+            try:
+                result = await asyncio.to_thread(
+                    process_identification_job,
+                    job_id,
+                    force=True,
+                    recovered_candidate=recovered_candidate,
+                )
+                logger.info(
+                    f"[Retry {job_id}] Full pipeline completed successfully: "
+                    f"status={result.get('status')}, "
+                    f"fish_id={result.get('fish_id')}, "
+                    f"sighting_id={result.get('sighting_id')}"
+                )
+            except Exception:
+                # process_identification_job already records the job as failed.
+                # Do not overwrite that state by incrementing retry_count here.
+                logger.exception(
+                    f"[Retry {job_id}] Full pipeline failed after "
+                    "recovering the detection"
+                )
+            return
         else:
             # Failed this attempt
             new_count = retry_count + 1
@@ -181,53 +222,41 @@ async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, ret
         _increment_retry(job_id, retry_count)
 
 
-def _save_retry_crop(job_id: str, crop: np.ndarray, crop_bbox: Optional[np.ndarray]):
-    """Save the successful retry crop and update DB to completed."""
-    from app.services.artifact_service import _write_jpg
+def _reset_job_for_full_pipeline(job_id: str, current_count: int) -> bool:
+    """
+    Atomically move a pending_crop job back to uploaded so the complete
+    identification pipeline can process it.
 
-    # Save the crop
-    crop_rel = f"jobs/{job_id}/crops/crop_00.jpg"
-    crop_abs = Path(settings.server_data_dir) / "storage" / crop_rel
-    crop_abs.parent.mkdir(parents=True, exist_ok=True)
-    _write_jpg(crop_abs, crop)
-
-    # Save preview (= the crop)
-    preview_rel = f"jobs/{job_id}/preview.jpg"
-    preview_abs = Path(settings.server_data_dir) / "storage" / preview_rel
-    _write_jpg(preview_abs, crop)
-
-    # Save bbox crop if available
-    if crop_bbox is not None:
-        bbox_rel = f"jobs/{job_id}/crops/crop_00_bbox.jpg"
-        bbox_abs = Path(settings.server_data_dir) / "storage" / bbox_rel
-        _write_jpg(bbox_abs, crop_bbox)
-
-    # Update database
-    now_str = datetime.now(timezone.utc).isoformat()
+    Returns True only when exactly one pending_crop job was updated.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            """UPDATE identification_jobs
-               SET status = 'completed', preview_filename = ?,
-                   error_message = NULL, completed_at = ?
-               WHERE id = ?""",
-            (preview_rel, now_str, job_id),
+            """
+            UPDATE identification_jobs
+            SET status = 'uploaded',
+                retry_count = ?,
+                error_message = NULL,
+                completed_at = NULL,
+                preview_filename = NULL
+            WHERE id = ?
+              AND status = 'pending_crop'
+            """,
+            (current_count + 1, job_id),
         )
-        # Also update fish_sightings if exists
-        cursor.execute(
-            """UPDATE fish_sightings
-               SET preview_filename = ?
-               WHERE job_id = ?""",
-            (preview_rel, job_id),
-        )
+        updated = cursor.rowcount == 1
         conn.commit()
-        logger.info(f"[Retry {job_id}] DB updated: status=completed, preview={preview_rel}")
-    except Exception as e:
+        return updated
+    except Exception:
         conn.rollback()
-        logger.error(f"[Retry {job_id}] DB update failed: {e}")
+        logger.exception(
+            f"[Retry {job_id}] Failed to reset job for full pipeline"
+        )
+        return False
     finally:
         conn.close()
+
 
 
 def _increment_retry(job_id: str, current_count: int):

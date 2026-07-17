@@ -44,7 +44,9 @@ class SpeciesSearchField extends StatelessWidget {
 
     return Autocomplete<CzechSpecies>(
       initialValue: TextEditingValue(
-        text: initialSpecies != null ? _speciesDisplayName(initialSpecies!, languageCode) : '',
+        text: initialSpecies != null
+            ? _speciesDisplayName(initialSpecies!, languageCode)
+            : '',
       ),
       optionsBuilder: (TextEditingValue textEditingValue) {
         if (textEditingValue.text.isEmpty) {
@@ -95,15 +97,17 @@ class SpeciesSearchField extends StatelessWidget {
           },
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return null;
+              return context.l10n.captureFieldSpeciesRequired;
             }
-            // Validar que la especie escrita coincida con alguna del catálogo
+
             final exists = czechFishCatalog.any((s) =>
                 _speciesDisplayName(s, languageCode).toLowerCase() ==
                 value.trim().toLowerCase());
+
             if (!exists) {
               return context.l10n.speciesSearchInvalid;
             }
+
             return null;
           },
         );
@@ -143,14 +147,17 @@ class SpeciesSearchField extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.phishing, color: AppTheme.accentBlue),
+                          const Icon(Icons.phishing,
+                              color: AppTheme.accentBlue),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  isCzech ? option.czechName : option.englishName,
+                                  isCzech
+                                      ? option.czechName
+                                      : option.englishName,
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -180,7 +187,8 @@ class SpeciesSearchField extends StatelessWidget {
                               border: Border.all(color: rarityColor),
                             ),
                             child: Text(
-                              _localizedRarity(context, option.rarity).toUpperCase(),
+                              _localizedRarity(context, option.rarity)
+                                  .toUpperCase(),
                               style: TextStyle(
                                 color: rarityColor,
                                 fontSize: 10,
