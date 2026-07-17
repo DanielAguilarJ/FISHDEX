@@ -15,7 +15,7 @@ from app.database import get_db_connection
 from app.data.czech_species import find_species_by_name
 from app.services.classifier_service import get_classifier_service
 from app.services.detector_service import get_detector_service
-from app.services.embedding_service import get_embedding_service
+from app.services.reid_embedding_service import get_reid_embedding_service
 from app.services.matching_service import get_matching_service
 from app.services.event_bus import event_bus
 from app.services.artifact_service import (
@@ -236,7 +236,7 @@ def _calculate_xp(species_info: Optional[dict], is_new_fish: bool) -> int:
 def process_identification_job(job_id: str, force: bool = False) -> dict:
     """Process a fish identification job locally using SQLite database."""
     detector = get_detector_service()
-    embedding_service = get_embedding_service()
+    embedding_service = get_reid_embedding_service()   # FishEncoder 512-d (trained for re-ID)
     matching = get_matching_service()
 
     temp_video_path: Optional[str] = None
@@ -554,15 +554,13 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                     f"[Job {job_id}] Species '{species_slug}' was not found in Czech catalog"
                 )
 
-        # --- Step 10: Generate embedding ---
-        _emit_progress(job_id, "matching_individual", 85, "Generating embeddings and matching features")
-        logger.info(f"[Job {job_id}] Generating embeddings from {len(cropped_frames)} crops")
-        embedding = embedding_service.extract_embeddings(cropped_frames)
-        if embedding.ndim > 1:
-            embedding_vector = np.mean(embedding, axis=0)
-        else:
-            embedding_vector = embedding
-        logger.info(f"[Job {job_id}] Embedding shape: {embedding_vector.shape}")
+        # --- Step 10: Generate embedding (FishEncoder 512-d) ---
+        _emit_progress(job_id, "matching_individual", 85, "Generating FishEncoder embeddings")
+        logger.info(f"[Job {job_id}] Generating FishEncoder embeddings from {len(cropped_frames)} crops")
+        # extract_prototype returns a single (512,) L2-normalised vector
+        # (internally averages per-frame embeddings with optional flip TTA)
+        embedding_vector = embedding_service.extract_prototype(cropped_frames)
+        logger.info(f"[Job {job_id}] Embedding shape: {embedding_vector.shape} (FishEncoder 512-d)")
 
         # --- Step 11: Run matching ---
         logger.info(f"[Job {job_id}] Running matching against known fish")
@@ -571,7 +569,7 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
                 embedding=embedding_vector,
                 species_slug=species_slug,
                 area_code=job_doc.get("area_code"),
-                threshold=settings.similarity_threshold,
+                threshold=settings.reid_similarity_threshold,
                 latitude=job_doc.get("latitude"),
                 longitude=job_doc.get("longitude"),
                 radius_km=settings.nearby_area_radius_km,
@@ -684,8 +682,8 @@ def process_identification_job(job_id: str, force: bool = False) -> dict:
 
             linkage = {
                 "is_linked": not is_new_fish,
-                "strategy": "embedding_cosine",
-                "threshold": settings.similarity_threshold,
+                "strategy": "fishencoder_512d_cosine",
+                "threshold": settings.reid_similarity_threshold,
                 "matched_fish_id": matched_fish_id,
                 "final_fish_id": fish_id,
                 "previous_sighting_id": previous_sighting_id,

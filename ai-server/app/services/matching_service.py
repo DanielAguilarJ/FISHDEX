@@ -123,14 +123,13 @@ class MatchingService:
         radius = radius_km or settings.nearby_area_radius_km or 5.0
 
         with self._connect() as conn:
-            # Query candidates of the same species
             rows = conn.execute(
                 """
                 SELECT fish_id, embedding, area_code, latitude, longitude
                 FROM fish_embeddings
-                WHERE species_slug = ?
+                WHERE species_slug = ? AND model_version = ?
                 """,
-                (species_slug,),
+                (species_slug, "fishencoder_512_v1"),
             ).fetchall()
 
         if not rows:
@@ -215,9 +214,9 @@ class MatchingService:
                 """
                 INSERT INTO fish_embeddings (
                     id, fish_id, sighting_id, species_slug, area_code,
-                    latitude, longitude, embedding, created_at
+                    latitude, longitude, embedding, model_version, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -228,6 +227,7 @@ class MatchingService:
                     latitude,
                     longitude,
                     emb_bytes,
+                    "fishencoder_512_v1",
                     now,
                 ),
             )
