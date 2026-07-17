@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
+import '../core/l10n/l10n_extension.dart';
 
 class FishGrowthPoint {
   final DateTime date;
@@ -22,6 +23,14 @@ class FishGrowthTrendCard extends StatelessWidget {
     required this.points,
     this.title = 'Growth trend',
   });
+
+  String _two(int value) => value.toString().padLeft(2, '0');
+
+  String _formatExactDate(DateTime date) {
+    final local = date.toLocal();
+    return '${_two(local.day)}/${_two(local.month)}/${local.year} '
+        '${_two(local.hour)}:${_two(local.minute)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +97,10 @@ class FishGrowthTrendCard extends StatelessWidget {
               _metric('Sightings', '${validPoints.length}'),
             ],
           ),
+          const SizedBox(height: 12),
+          _buildExactDateLegend(context, validPoints),
+          const SizedBox(height: 10),
+          _buildGrowthIntervals(context, validPoints),
         ],
       ),
     );
@@ -112,6 +125,124 @@ class FishGrowthTrendCard extends StatelessWidget {
             fontSize: 11,
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildExactDateLegend(BuildContext context, List<FishGrowthPoint> points) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.chartExactDates,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.55),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: points.map((point) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppTheme.darkSurfaceElevated,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '#${point.index} · ${_formatExactDate(point.date)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${point.sizeCm.toStringAsFixed(1)} cm',
+                    style: TextStyle(
+                      color: AppTheme.teal.withOpacity(0.9),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGrowthIntervals(BuildContext context, List<FishGrowthPoint> points) {
+    if (points.length < 2) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.chartGrowthByRecapture,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.55),
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...List.generate(points.length - 1, (i) {
+          final previous = points[i];
+          final current = points[i + 1];
+          final growth = current.sizeCm - previous.sizeCm;
+          final days = current.date.difference(previous.date).inDays;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurfaceElevated,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  growth >= 0 ? Icons.trending_up : Icons.trending_down,
+                  color: growth >= 0 ? AppTheme.successGreen : Colors.orange,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${_formatExactDate(previous.date)} → ${_formatExactDate(current.date)}'
+                    '${days > 0 ? ' · $days días' : ''}',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.65),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                Text(
+                  growth >= 0
+                      ? '+${growth.toStringAsFixed(1)} cm'
+                      : '${growth.toStringAsFixed(1)} cm',
+                  style: TextStyle(
+                    color: growth >= 0 ? AppTheme.successGreen : Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
       ],
     );
   }
@@ -160,7 +291,17 @@ class _GrowthTrendPainter extends CustomPainter {
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     Offset mapPoint(int i, FishGrowthPoint p) {
-      final x = leftPad + (points.length == 1 ? 0 : i / (points.length - 1)) * chartW;
+      final firstMs = points.first.date.millisecondsSinceEpoch.toDouble();
+      final lastMs = points.last.date.millisecondsSinceEpoch.toDouble();
+      final dateRange = lastMs - firstMs;
+      final useDateSpacing = dateRange.abs() > 1000;
+
+      final x = useDateSpacing
+          ? leftPad +
+              ((p.date.millisecondsSinceEpoch.toDouble() - firstMs) / dateRange) *
+                  chartW
+          : leftPad + (points.length == 1 ? 0 : i / (points.length - 1)) * chartW;
+
       final normalized = (p.sizeCm - minSize) / range;
       final y = topPad + (1 - normalized) * chartH;
       return Offset(x, y);

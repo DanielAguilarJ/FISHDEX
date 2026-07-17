@@ -2616,6 +2616,30 @@ abstract class AppLocalizations {
   /// In es, this message translates to:
   /// **'Selecciona una especie válida de la lista o deja el campo vacío'**
   String get speciesSearchInvalid;
+
+  /// No description provided for @chartExactDates.
+  ///
+  /// In es, this message translates to:
+  /// **'Fechas exactas'**
+  String get chartExactDates;
+
+  /// No description provided for @chartGrowthByRecapture.
+  ///
+  /// In es, this message translates to:
+  /// **'Crecimiento por recaptura'**
+  String get chartGrowthByRecapture;
+
+  /// No description provided for @chartGrowthTitle.
+  ///
+  /// In es, this message translates to:
+  /// **'Crecimiento del pez'**
+  String get chartGrowthTitle;
+
+  /// No description provided for @collectionRecaptureIndex.
+  ///
+  /// In es, this message translates to:
+  /// **'Recaptura #{index}'**
+  String collectionRecaptureIndex(int index);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

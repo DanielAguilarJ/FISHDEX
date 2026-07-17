@@ -573,5 +573,16 @@
   "baitOther": "Jiné",
   "speciesSearchLabel": "Vyberte druh (volitelně)",
   "speciesSearchHint": "Ponechte prázdné pro identifikaci pomocí AI",
-  "speciesSearchInvalid": "Vyberte platný druh ze seznamu nebo nechte pole prázdné"
+  "speciesSearchInvalid": "Vyberte platný druh ze seznamu nebo nechte pole prázdné",
+  "chartExactDates": "Přesná data",
+  "chartGrowthByRecapture": "Růst při znovulapení",
+  "chartGrowthTitle": "Růst ryby",
+  "collectionRecaptureIndex": "Znovulapení #{index}",
+  "@collectionRecaptureIndex": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  }
 }

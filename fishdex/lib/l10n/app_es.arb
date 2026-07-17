@@ -577,5 +577,16 @@
   "baitOther": "Otro",
   "speciesSearchLabel": "Selecciona una especie (opcional)",
   "speciesSearchHint": "Déjalo vacío para que la IA la identifique",
-  "speciesSearchInvalid": "Selecciona una especie válida de la lista o deja el campo vacío"
+  "speciesSearchInvalid": "Selecciona una especie válida de la lista o deja el campo vacío",
+  "chartExactDates": "Fechas exactas",
+  "chartGrowthByRecapture": "Crecimiento por recaptura",
+  "chartGrowthTitle": "Crecimiento del pez",
+  "collectionRecaptureIndex": "Recaptura #{index}",
+  "@collectionRecaptureIndex": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  }
 }

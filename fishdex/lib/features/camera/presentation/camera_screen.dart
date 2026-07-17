@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../data/services/capture_location_service.dart';
@@ -31,6 +32,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   // Duración máxima de grabación en segundos
   static const int _maxDurationSeconds = 10;
+
+  void _goBack() {
+    if (_isRecording) return;
+
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/map');
+    }
+  }
 
   @override
   void initState() {
@@ -219,6 +230,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
           // Indicadores superiores
           if (_isInitialized) _buildTopIndicators(),
+
+          // Botón atrás visible siempre que no esté grabando (incluso en carga/error)
+          if (!_isRecording)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              left: 16,
+              child: _buildCircleButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: _goBack,
+              ),
+            ),
 
           // Controles de grabación (abajo)
           if (_isInitialized)

@@ -234,7 +234,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               // Botón editar perfil
               IconButton(
                 icon: const Icon(Icons.edit, color: Colors.white70, size: 22),
-                onPressed: () => context.go('/profile-setup'),
+                onPressed: () => context.push('/profile-setup'),
                 tooltip: context.l10n.profileEditButton,
               ),
               // Botón admin (solo visible para admins)
@@ -242,7 +242,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 IconButton(
                   icon: const Icon(Icons.admin_panel_settings,
                       color: Colors.orange, size: 22),
-                  onPressed: () => context.go('/admin'),
+                  onPressed: () => context.push('/admin'),
                   tooltip: context.l10n.profileAdminPanel,
                 ),
               // Botón logout
@@ -703,7 +703,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 icon: Icons.camera_alt,
                 label: context.l10n.navIdentify,
                 color: Colors.green,
-                onTap: () => context.go('/camera'),
+                onTap: () => context.push('/camera'),
               ),
             ],
           ),
@@ -713,7 +713,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => context.go('/admin'),
+                onPressed: () => context.push('/admin'),
                 icon: const Icon(Icons.admin_panel_settings, size: 18),
                 label: Text(context.l10n.profileAdminPanel),
                 style: OutlinedButton.styleFrom(

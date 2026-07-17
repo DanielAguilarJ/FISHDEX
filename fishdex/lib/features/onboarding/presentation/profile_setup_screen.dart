@@ -168,7 +168,11 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
     final notifier = ref.read(profileSetupProvider.notifier);
     final success = await notifier.saveProfile();
     if (success && mounted) {
-      context.go('/map');
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        context.go('/map');
+      }
     }
   }
 
@@ -230,8 +234,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              if (Navigator.of(context).canPop()) ...[
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 12),
+              ],
               Text(
                 context.l10n.profileSetupStep(_currentStep + 1, _totalSteps),
                 style: TextStyle(
@@ -239,6 +251,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen>
                   fontSize: 14,
                 ),
               ),
+              const Spacer(),
               Text(
                 '${((_currentStep + 1) / _totalSteps * 100).toInt()}%',
                 style: const TextStyle(

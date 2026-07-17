@@ -23,6 +23,14 @@ class QuickSpotScreen extends ConsumerStatefulWidget {
 
 class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
     with SingleTickerProviderStateMixin {
+  void _goBack() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/map');
+    }
+  }
+
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
   final _areaSearchController = TextEditingController();
@@ -491,7 +499,7 @@ class _QuickSpotScreenState extends ConsumerState<QuickSpotScreen>
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => context.go('/map'),
+            onTap: _goBack,
             child: Container(
               width: 38,
               height: 38,

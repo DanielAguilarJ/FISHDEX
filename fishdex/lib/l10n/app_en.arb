@@ -573,5 +573,16 @@
   "baitOther": "Other",
   "speciesSearchLabel": "Select a species (optional)",
   "speciesSearchHint": "Leave empty and the AI will identify it",
-  "speciesSearchInvalid": "Select a valid species from the list or leave it empty"
+  "speciesSearchInvalid": "Select a valid species from the list or leave it empty",
+  "chartExactDates": "Exact dates",
+  "chartGrowthByRecapture": "Growth by recapture",
+  "chartGrowthTitle": "Fish growth",
+  "collectionRecaptureIndex": "Recapture #{index}",
+  "@collectionRecaptureIndex": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  }
 }

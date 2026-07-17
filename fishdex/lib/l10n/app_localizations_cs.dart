@@ -1325,4 +1325,18 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get speciesSearchInvalid => 'Vyberte platný druh ze seznamu nebo nechte pole prázdné';
+
+  @override
+  String get chartExactDates => 'Přesná data';
+
+  @override
+  String get chartGrowthByRecapture => 'Růst při znovulapení';
+
+  @override
+  String get chartGrowthTitle => 'Růst ryby';
+
+  @override
+  String collectionRecaptureIndex(int index) {
+    return 'Znovulapení #$index';
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../camera/presentation/video_preview_screen.dart';
@@ -40,6 +41,14 @@ class _GalleryScreenState extends State<GalleryScreen>
     super.dispose();
   }
 
+  void _goBack() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/map');
+    }
+  }
+
   Future<void> _pickVideo() async {
     if (_isPicking) return;
     setState(() => _isPicking = true);
@@ -53,15 +62,15 @@ class _GalleryScreenState extends State<GalleryScreen>
       if (!mounted) return;
 
       if (video != null) {
-        // Video seleccionado → ir a preview/identificación
-        Navigator.of(context).push(
+        // Video seleccionado → ir a preview/identificación (reemplazando la galería para pop directo)
+        Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => VideoPreviewScreen(videoPath: video.path),
           ),
         );
       } else {
         // El usuario canceló el picker → volver al menú anterior
-        if (mounted) Navigator.of(context).maybePop();
+        if (mounted) _goBack();
       }
     } catch (e) {
       if (!mounted) return;
@@ -71,7 +80,7 @@ class _GalleryScreenState extends State<GalleryScreen>
           backgroundColor: Colors.red.shade700,
         ),
       );
-      Navigator.of(context).maybePop();
+      _goBack();
     } finally {
       if (mounted) setState(() => _isPicking = false);
     }
@@ -153,7 +162,7 @@ class _GalleryScreenState extends State<GalleryScreen>
 
                 // Botón para cancelar manualmente
                 TextButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
+                  onPressed: _goBack,
                   child: Text(
                     context.l10n.galleryCancel,
                     style: TextStyle(

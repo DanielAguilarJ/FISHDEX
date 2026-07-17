@@ -133,7 +133,7 @@ class _MainShellState extends ConsumerState<MainShell>
     _closeDial();
     final router = GoRouter.of(context);
     // Navigate immediately - no artificial delay
-    if (mounted) router.go(route);
+    if (mounted) router.push(route);
   }
 
   void _onNavTap(BuildContext context, int index) {

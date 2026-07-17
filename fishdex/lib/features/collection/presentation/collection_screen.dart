@@ -6,6 +6,7 @@ import '../../../data/czech_fish_catalog.dart';
 import '../../../data/models/fish_capture.dart';
 import '../../../data/repositories/captures_repository.dart';
 import '../../../widgets/pressable_scale.dart';
+import '../../../widgets/fish_growth_trend_chart.dart';
 import '../../auth/providers/auth_provider.dart';
 
 /// Datos de un pez en la colección del usuario
@@ -16,10 +17,12 @@ class CollectionFish {
   final double sizeCm;
   final int timesSpotted;
   final DateTime firstSeen;
+  final DateTime lastSeen;
   final bool isDiscovered;
   final String? imageBase64; // URL or base64 string
   final String? czechName;
   final String? latinName;
+  final List<FishCapture> history;
 
   const CollectionFish({
     required this.fishId,
@@ -28,10 +31,12 @@ class CollectionFish {
     required this.sizeCm,
     required this.timesSpotted,
     required this.firstSeen,
+    required this.lastSeen,
     this.isDiscovered = true,
     this.imageBase64,
     this.czechName,
     this.latinName,
+    this.history = const [],
   });
 }
 
@@ -47,44 +52,42 @@ final collectionProvider = FutureProvider<List<CollectionFish>>((ref) async {
       final captures = await capturesRepo.getCapturesForUser(
         userId: authUser.$id,
         userRole: 'fisherman',
-        limit: 200,
+        limit: 1000,
       );
 
-      // Deduplicate by fishId — keep the entry with the latest capturedAt and
-      // count total sightings per individual fish.
-      final Map<String, FishCapture> fishMap = {};
-      final Map<String, int> sightingCount = {};
+      final Map<String, List<FishCapture>> historyByFish = {};
 
       for (final capture in captures) {
         final id = capture.fishId;
-        sightingCount[id] = (sightingCount[id] ?? 0) + 1;
-        if (!fishMap.containsKey(id) ||
-            capture.capturedAt.isAfter(fishMap[id]!.capturedAt)) {
-          fishMap[id] = capture;
-        }
+        historyByFish.putIfAbsent(id, () => []);
+        historyByFish[id]!.add(capture);
       }
 
-      // Convert FishCapture → CollectionFish
-      discovered = fishMap.entries.map((entry) {
-        final capture = entry.value;
-        final catalogMatch = findCzechSpeciesByAnyName(capture.species);
+      discovered = historyByFish.entries.map((entry) {
+        final history = [...entry.value]
+          ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+
+        final firstCapture = history.first;
+        final latestCapture = history.last;
+        final catalogMatch = findCzechSpeciesByAnyName(latestCapture.species);
 
         return CollectionFish(
-          fishId: capture.fishId,
-          species: catalogMatch?.englishName ?? capture.species,
-          rarity: capture.rarity,
-          sizeCm: capture.lengthCm ?? 0.0,
-          timesSpotted: sightingCount[capture.fishId] ?? 1,
-          firstSeen: capture.capturedAt,
+          fishId: latestCapture.fishId,
+          species: catalogMatch?.englishName ?? latestCapture.species,
+          rarity: latestCapture.rarity,
+          sizeCm: latestCapture.lengthCm ?? 0.0,
+          timesSpotted: history.length,
+          firstSeen: firstCapture.capturedAt,
+          lastSeen: latestCapture.capturedAt,
           isDiscovered: true,
-          imageBase64: capture.imageUrl,
+          imageBase64: latestCapture.imageUrl,
           czechName: catalogMatch?.czechName,
-          latinName: capture.scientificName ?? catalogMatch?.latinName,
+          latinName: latestCapture.scientificName ?? catalogMatch?.latinName,
+          history: history,
         );
       }).toList();
 
-      // Newest first
-      discovered.sort((a, b) => b.firstSeen.compareTo(a.firstSeen));
+      discovered.sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
     }
   } catch (e) {
     debugPrint('❌ Collection load error: $e');
@@ -104,9 +107,11 @@ final collectionProvider = FutureProvider<List<CollectionFish>>((ref) async {
             sizeCm: 0,
             timesSpotted: 0,
             firstSeen: DateTime.now(),
+            lastSeen: DateTime.now(),
             isDiscovered: false,
             czechName: sp.czechName,
             latinName: sp.latinName,
+            history: const [],
           ))
       .toList();
 
@@ -548,10 +553,44 @@ class _FishDetailSheet extends StatelessWidget {
     }
   }
 
+  List<FishGrowthPoint> _growthPointsFromHistory() {
+    final orderedHistory = [...fish.history]
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+
+    final points = <FishGrowthPoint>[];
+
+    for (int i = 0; i < orderedHistory.length; i++) {
+      final capture = orderedHistory[i];
+      final size = capture.lengthCm;
+
+      if (size != null && size > 0) {
+        points.add(
+          FishGrowthPoint(
+            date: capture.capturedAt,
+            sizeCm: size,
+            index: i + 1,
+          ),
+        );
+      }
+    }
+
+    return points;
+  }
+
+  String _formatExactDate(DateTime date) {
+    final local = date.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+
+    return '${two(local.day)}/${two(local.month)}/${local.year} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final growthPoints = _growthPointsFromHistory();
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
+      height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -628,14 +667,16 @@ class _FishDetailSheet extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              getLocalizedSpeciesName(fish.species, Localizations.localeOf(context).languageCode),
+                              fish.isDiscovered
+                                  ? (fish.czechName ?? fish.species)
+                                  : '???',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (fish.latinName != null)
+                            if (fish.isDiscovered && fish.latinName != null)
                               Text(
                                 fish.latinName!,
                                 style: TextStyle(
@@ -666,7 +707,7 @@ class _FishDetailSheet extends StatelessWidget {
                       _buildStat(
                         context.l10n.collectionSizeLabel,
                         fish.sizeCm > 0
-                            ? '${fish.sizeCm.toStringAsFixed(0)} cm'
+                            ? '${fish.sizeCm.toStringAsFixed(1)} cm'
                             : '-',
                       ),
                       _buildStat(
@@ -679,6 +720,16 @@ class _FishDetailSheet extends StatelessWidget {
                       ),
                     ],
                   ),
+
+                  // Growth chart if recaptured
+                  if (fish.isDiscovered && growthPoints.length >= 2) ...[
+                    const SizedBox(height: 24),
+                    FishGrowthTrendCard(
+                      points: growthPoints,
+                      title: context.l10n.chartGrowthTitle,
+                    ),
+                  ],
+
                   const SizedBox(height: 24),
 
                   // Timeline entry
@@ -692,11 +743,29 @@ class _FishDetailSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildSightingEntry(
-                    context.l10n.collectionFirstSighting,
-                    fish.firstSeen,
-                    fish.sizeCm,
-                  ),
+                  if (fish.isDiscovered && fish.history.isNotEmpty)
+                    ...List.generate(fish.history.length, (index) {
+                      final capture = fish.history[index];
+                      final isFirst = index == 0;
+                      final title = isFirst
+                          ? context.l10n.collectionFirstSighting
+                          : context.l10n.collectionRecaptureIndex(index + 1);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _buildSightingEntry(
+                          title,
+                          capture.capturedAt,
+                          capture.lengthCm ?? 0,
+                        ),
+                      );
+                    })
+                  else
+                    _buildSightingEntry(
+                      context.l10n.collectionFirstSighting,
+                      fish.firstSeen,
+                      fish.sizeCm,
+                    ),
                 ],
               ),
             ),
@@ -770,8 +839,8 @@ class _FishDetailSheet extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${date.day}/${date.month}/${date.year}'
-                  '${size > 0 ? ' — ${size.toStringAsFixed(0)} cm' : ''}',
+                  '${_formatExactDate(date)}'
+                  '${size > 0 ? ' — ${size.toStringAsFixed(1)} cm' : ''}',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.5),
                     fontSize: 12,

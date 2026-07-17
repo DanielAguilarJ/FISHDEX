@@ -1325,4 +1325,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get speciesSearchInvalid => 'Selecciona una especie válida de la lista o deja el campo vacío';
+
+  @override
+  String get chartExactDates => 'Fechas exactas';
+
+  @override
+  String get chartGrowthByRecapture => 'Crecimiento por recaptura';
+
+  @override
+  String get chartGrowthTitle => 'Crecimiento del pez';
+
+  @override
+  String collectionRecaptureIndex(int index) {
+    return 'Recaptura #$index';
+  }
 }

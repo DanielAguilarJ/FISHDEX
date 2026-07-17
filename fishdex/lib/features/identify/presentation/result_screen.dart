@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/l10n/l10n_extension.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
@@ -315,9 +316,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
             top: MediaQuery.of(context).padding.top + 12,
             right: 16,
             child: GestureDetector(
-              onTap: () => Navigator.of(context).popUntil(
-                (route) => route.isFirst,
-              ),
+              onTap: () => context.go('/map'),
               behavior: HitTestBehavior.opaque,
               child: Container(
                 width: 44,
@@ -664,14 +663,38 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
           FishGrowthPoint(
             date: entry.date,
             sizeCm: entry.sizeCm!,
-            index: i + 1,
+            index: entry.catchNumber ?? i + 1,
           ),
         );
       }
     }
 
+    final currentDate =
+        DateTime.tryParse(widget.result.timestamp) ?? DateTime.now();
+
+    final currentIndex =
+        widget.result.catchNumber ?? (points.isEmpty ? 1 : points.length + 1);
+
+    final hasCurrentPoint = points.any((point) {
+      final sameCatchNumber = point.index == currentIndex;
+      final nearCurrentDate =
+          point.date.difference(currentDate).inMinutes.abs() <= 2;
+
+      return sameCatchNumber || nearCurrentDate;
+    });
+
+    if (widget.result.estimatedSizeCm > 0 && !hasCurrentPoint) {
+      points.add(
+        FishGrowthPoint(
+          date: currentDate,
+          sizeCm: widget.result.estimatedSizeCm,
+          index: currentIndex,
+        ),
+      );
+    }
+
     // Fallback if we only have previousData + current estimated size
-    if (points.length < 2 && widget.result.previousData != null) {
+    if (points.isEmpty && widget.result.previousData != null) {
       final previous = widget.result.previousData!;
       final lastDate = DateTime.tryParse(previous.lastSeenDate) ?? DateTime.now();
 
@@ -688,7 +711,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
       if (widget.result.estimatedSizeCm > 0) {
         points.add(
           FishGrowthPoint(
-            date: DateTime.tryParse(widget.result.timestamp) ?? DateTime.now(),
+            date: currentDate,
             sizeCm: widget.result.estimatedSizeCm,
             index: 2,
           ),
@@ -696,6 +719,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
       }
     }
 
+    points.sort((a, b) => a.date.compareTo(b.date));
     return points;
   }
 
@@ -799,9 +823,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
           width: double.infinity,
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
+            onPressed: () => context.go('/collection'),
             icon: const Icon(Icons.collections_bookmark),
             label: Text(context.l10n.resultViewCollection),
             style: ElevatedButton.styleFrom(
@@ -817,9 +839,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen>
           width: double.infinity,
           height: 48,
           child: OutlinedButton.icon(
-            onPressed: () {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            },
+            onPressed: () => context.go('/map'),
             icon: const Icon(Icons.map),
             label: Text(context.l10n.resultBackToMap),
             style: OutlinedButton.styleFrom(
