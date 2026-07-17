@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "fish_id": "CZ-XX-CARA-0003",
+  "area_code": "XX",
+  "species_slug": "carassius_carassius",
+  "total_captures": 1,
+  "updated_at": "2026-07-13T08:33:49.512393+00:00",
+  "captures": [
+    {
+      "job_id": "fc2a7fe2-3a37-4df7-a6ce-3e71f2967ecf",
+      "sighting_id": "ec4795b0-656b-4cd1-a888-b71cb119d5dc",
+      "fish_id": "CZ-XX-CARA-0003",
+      "area_code": "XX",
+      "species_slug": "carassius_carassius",
+      "catch_number": 1,
+      "is_new_fish": true,
+      "created_at": "2026-07-13T08:33:47.485443+00:00",
+      "preview_url": "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0003/catch_1_fc2a7fe2-3a37-4df7-a6ce-3e71f2967ecf/preview.jpg",
+      "raw_url": "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0003/catch_1_fc2a7fe2-3a37-4df7-a6ce-3e71f2967ecf/raw/raw_capture.temp",
+      "document_filename": "fish_documents/XX/carassius_carassius/CZ-XX-CARA-0003/catch_1_fc2a7fe2-3a37-4df7-a6ce-3e71f2967ecf/document.json",
+      "manifest_filename": "fish_documents/XX/carassius_carassius/CZ-XX-CARA-0003/catch_1_fc2a7fe2-3a37-4df7-a6ce-3e71f2967ecf/manifest.json",
+      "artifact_dir": "fish_media/XX/carassius_carassius/CZ-XX-CARA-0003/catch_1_fc2a7fe2-3a37-4df7-a6ce-3e71f2967ecf",
+      "linkage": {
+        "is_linked": false,
+        "strategy": "embedding_cosine",
+        "threshold": 0.7,
+        "matched_fish_id": null,
+        "final_fish_id": "CZ-XX-CARA-0003",
+        "previous_sighting_id": null,
+        "match_confidence": 0.0,
+        "confidence_band": "new_fish",
+        "decision": "new_fish",
+        "requires_human_review": false,
+        "total_sightings_before": 0,
+        "total_sightings_after": 1,
+        "same_species_required": true,
+        "area_code": "XX",
+        "latitude": null,
+        "longitude": null,
+        "nearby_area_radius_km": 5.0
+      }
+    }
+  ]
+}

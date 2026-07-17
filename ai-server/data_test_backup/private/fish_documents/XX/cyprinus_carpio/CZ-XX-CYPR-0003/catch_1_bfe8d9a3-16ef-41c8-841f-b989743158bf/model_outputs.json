@@ -1,0 +1,26 @@
+{
+  "classification_result": {
+    "available": true,
+    "predictions": [
+      {
+        "species_slug": "carassius_carassius",
+        "confidence": 0.7203668355941772
+      },
+      {
+        "species_slug": "cyprinus_carpio",
+        "confidence": 0.24283313751220703
+      },
+      {
+        "species_slug": "carassius_gibelio",
+        "confidence": 0.036800019443035126
+      }
+    ]
+  },
+  "detection_confidence": 0.2746,
+  "classification_confidence": 0.7204,
+  "match_confidence": 0.0,
+  "overall_confidence": 0.7204,
+  "detector_type": "yolov8_obb",
+  "detector_model_path": "models/detector/fish_detector_v1.onnx",
+  "classifier_model_path": "models/classifier/fish_species_v1.onnx"
+}

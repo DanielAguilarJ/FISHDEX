@@ -1,0 +1,10 @@
+{
+  "classification_result": null,
+  "detection_confidence": 0.9634,
+  "classification_confidence": 0.0,
+  "match_confidence": 0.0,
+  "overall_confidence": 0.9634,
+  "detector_type": "yolov8_obb",
+  "detector_model_path": "models/detector/fish_detector_v1.onnx",
+  "classifier_model_path": "models/classifier/fish_species_v1.onnx"
+}

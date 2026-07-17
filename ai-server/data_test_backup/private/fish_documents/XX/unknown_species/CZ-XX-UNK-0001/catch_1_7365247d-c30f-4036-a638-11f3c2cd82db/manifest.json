@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.1",
+  "job_id": "7365247d-c30f-4036-a638-11f3c2cd82db",
+  "sighting_id": "30c2a8cb-da85-4b54-b318-b2a0ff517a31",
+  "fish_id": "CZ-XX-UNK-0001",
+  "area_code": "XX",
+  "species_slug": "unknown_species",
+  "catch_number": 1,
+  "is_new_fish": true,
+  "artifact_dir": "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db",
+  "private_document_dir": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db",
+  "created_at": "2026-07-13T13:28:24.007531+00:00",
+  "files": {
+    "preview": "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/preview.jpg",
+    "annotated_preview": "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/annotated_preview.jpg",
+    "raw": "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/raw/raw_capture.temp",
+    "video": "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/raw/raw_capture.temp",
+    "images": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/images/crop_00.jpg"
+    ],
+    "images_bbox": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/images_bbox/crop_00.jpg"
+    ],
+    "frames": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_00.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_01.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_02.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_03.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [],
+    "dataset_crops_bbox": [],
+    "annotated_frames": [],
+    "document": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/document.json",
+    "manifest": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/manifest.json",
+    "model_outputs": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/model_outputs.json",
+    "fish_index": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/fish_index.json"
+  },
+  "urls": {
+    "media_type": "video",
+    "preview": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/preview.jpg",
+    "annotated_preview": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/annotated_preview.jpg",
+    "raw": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/raw/raw_capture.temp",
+    "video": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/raw/raw_capture.temp",
+    "images": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/images/crop_00.jpg"
+    ],
+    "images_bbox": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/images_bbox/crop_00.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_00.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_01.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_02.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_03.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [],
+    "dataset_crops_bbox": [],
+    "annotated_frames": []
+  },
+  "linkage": {
+    "is_linked": false,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": null,
+    "final_fish_id": "CZ-XX-UNK-0001",
+    "previous_sighting_id": null,
+    "match_confidence": 0.0,
+    "confidence_band": "new_fish",
+    "decision": "new_fish",
+    "requires_human_review": false,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1,
+    "same_species_required": true,
+    "area_code": "XX",
+    "latitude": null,
+    "longitude": null,
+    "nearby_area_radius_km": 5.0
+  }
+}

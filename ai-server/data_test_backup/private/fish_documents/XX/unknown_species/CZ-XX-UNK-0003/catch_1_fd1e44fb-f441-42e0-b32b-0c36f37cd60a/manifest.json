@@ -1,0 +1,163 @@
+{
+  "schema_version": "1.1",
+  "job_id": "fd1e44fb-f441-42e0-b32b-0c36f37cd60a",
+  "sighting_id": "b637beee-5516-43ec-9cda-cba16b80deb5",
+  "fish_id": "CZ-XX-UNK-0003",
+  "area_code": "XX",
+  "species_slug": "unknown_species",
+  "catch_number": 1,
+  "is_new_fish": true,
+  "artifact_dir": "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a",
+  "private_document_dir": "fish_documents/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a",
+  "created_at": "2026-07-14T07:59:09.243075+00:00",
+  "files": {
+    "preview": "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/preview.jpg",
+    "annotated_preview": "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated_preview.jpg",
+    "raw": "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/raw/raw_capture.temp",
+    "video": "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/raw/raw_capture.temp",
+    "images": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_00.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_01.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_02.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_03.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_04.jpg"
+    ],
+    "images_bbox": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_00.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_01.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_02.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_03.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_04.jpg"
+    ],
+    "frames": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_00.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_01.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_02.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_03.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_000.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_001.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_002.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_003.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_004.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_005.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_006.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_007.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_008.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_009.jpg"
+    ],
+    "dataset_crops_bbox": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_000_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_001_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_002_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_003_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_004_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_005_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_006_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_007_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_008_aligned.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_009_aligned.jpg"
+    ],
+    "annotated_frames": [
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_000.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_001.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_002.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_003.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_004.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_005.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_006.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_007.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_008.jpg",
+      "fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_009.jpg"
+    ],
+    "document": "fish_documents/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/document.json",
+    "manifest": "fish_documents/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/manifest.json",
+    "model_outputs": "fish_documents/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/model_outputs.json",
+    "fish_index": "fish_documents/XX/unknown_species/CZ-XX-UNK-0003/fish_index.json"
+  },
+  "urls": {
+    "media_type": "video",
+    "preview": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/preview.jpg",
+    "annotated_preview": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated_preview.jpg",
+    "raw": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/raw/raw_capture.temp",
+    "video": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/raw/raw_capture.temp",
+    "images": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_00.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_01.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_02.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_03.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images/crop_04.jpg"
+    ],
+    "images_bbox": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_00.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_01.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_02.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_03.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/images_bbox/crop_04.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_00.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_01.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_02.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_03.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_000.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_001.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_002.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_003.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_004.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_005.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_006.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_007.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_008.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_009.jpg"
+    ],
+    "dataset_crops_bbox": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_000_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_001_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_002_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_003_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_004_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_005_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_006_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_007_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_008_aligned.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/dataset/crop_009_aligned.jpg"
+    ],
+    "annotated_frames": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_000.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_001.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_002.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_003.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_004.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_005.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_006.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_007.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_008.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0003/catch_1_fd1e44fb-f441-42e0-b32b-0c36f37cd60a/annotated/frame_009.jpg"
+    ]
+  },
+  "linkage": {
+    "is_linked": false,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": null,
+    "final_fish_id": "CZ-XX-UNK-0003",
+    "previous_sighting_id": null,
+    "match_confidence": 0.0,
+    "confidence_band": "new_fish",
+    "decision": "new_fish",
+    "requires_human_review": false,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1,
+    "same_species_required": true,
+    "area_code": "XX",
+    "latitude": null,
+    "longitude": null,
+    "nearby_area_radius_km": 5.0
+  }
+}

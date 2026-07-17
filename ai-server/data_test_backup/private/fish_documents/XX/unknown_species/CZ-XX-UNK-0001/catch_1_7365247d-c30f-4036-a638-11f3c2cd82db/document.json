@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0",
+  "job": {
+    "job_id": "7365247d-c30f-4036-a638-11f3c2cd82db",
+    "status": "needs_review",
+    "created_at": "2026-07-13T13:28:21.690787+00:00",
+    "started_at": null,
+    "completed_at": "2026-07-13T13:28:21.740514+00:00"
+  },
+  "user": {
+    "user_id": "0052b235-2ee5-4e1a-bd1e-d5b85d2cddff"
+  },
+  "capture": {
+    "area_code": "XX",
+    "area_name": null,
+    "latitude": null,
+    "longitude": null,
+    "weather": null,
+    "bait": null,
+    "size_cm": null,
+    "fish_state": null,
+    "custom_name": null,
+    "notes": null
+  },
+  "species": {
+    "slug": null,
+    "english_name": null,
+    "czech_name": null,
+    "latin_name": null,
+    "rarity": "common"
+  },
+  "fish": {
+    "fish_id": "CZ-XX-UNK-0001",
+    "is_new_fish": true,
+    "catch_number": 1,
+    "previous_sighting_id": null,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1
+  },
+  "linkage": {
+    "is_linked": false,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": null,
+    "final_fish_id": "CZ-XX-UNK-0001",
+    "previous_sighting_id": null,
+    "match_confidence": 0.0,
+    "confidence_band": "new_fish",
+    "decision": "new_fish",
+    "requires_human_review": false,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1,
+    "same_species_required": true,
+    "area_code": "XX",
+    "latitude": null,
+    "longitude": null,
+    "nearby_area_radius_km": 5.0
+  },
+  "model": {
+    "detector_type": "yolov8_obb",
+    "detector_model_path": "models/detector/fish_detector_v1.onnx",
+    "classifier_model_path": "models/classifier/fish_species_v1.onnx",
+    "detection_confidence": 0.2228,
+    "classification_confidence": 0.4043,
+    "match_confidence": 0.0,
+    "overall_confidence": 0.4043,
+    "top_predictions": [
+      {
+        "species_slug": "carassius_gibelio",
+        "confidence": 0.4042915105819702
+      },
+      {
+        "species_slug": "cyprinus_carpio",
+        "confidence": 0.37345102429389954
+      },
+      {
+        "species_slug": "carassius_carassius",
+        "confidence": 0.22225746512413025
+      }
+    ]
+  },
+  "media": {
+    "media_type": "video",
+    "preview": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/preview.jpg",
+    "annotated_preview": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/annotated_preview.jpg",
+    "raw": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/raw/raw_capture.temp",
+    "video": "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/raw/raw_capture.temp",
+    "images": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/images/crop_00.jpg"
+    ],
+    "images_bbox": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/images_bbox/crop_00.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_00.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_01.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_02.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_03.jpg",
+      "/storage/fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [],
+    "dataset_crops_bbox": [],
+    "annotated_frames": []
+  },
+  "gamification": {
+    "xp_earned": 60
+  },
+  "storage": {
+    "public_artifact_dir": "fish_media/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db",
+    "private_document_dir": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db",
+    "document_filename": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/document.json",
+    "manifest_filename": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/manifest.json",
+    "model_outputs_filename": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/catch_1_7365247d-c30f-4036-a638-11f3c2cd82db/model_outputs.json",
+    "fish_index_filename": "fish_documents/XX/unknown_species/CZ-XX-UNK-0001/fish_index.json"
+  }
+}

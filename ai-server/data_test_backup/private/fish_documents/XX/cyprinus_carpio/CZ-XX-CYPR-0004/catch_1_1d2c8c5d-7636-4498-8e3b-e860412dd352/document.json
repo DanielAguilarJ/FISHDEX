@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "job": {
+    "job_id": "1d2c8c5d-7636-4498-8e3b-e860412dd352",
+    "status": "completed",
+    "created_at": "2026-07-13T12:48:30.089118+00:00",
+    "started_at": null,
+    "completed_at": "2026-07-13T12:48:30.220759+00:00"
+  },
+  "user": {
+    "user_id": "0052b235-2ee5-4e1a-bd1e-d5b85d2cddff"
+  },
+  "capture": {
+    "area_code": "XX",
+    "area_name": null,
+    "latitude": null,
+    "longitude": null,
+    "weather": null,
+    "bait": null,
+    "size_cm": null,
+    "fish_state": null,
+    "custom_name": null,
+    "notes": null
+  },
+  "species": {
+    "slug": "cyprinus_carpio",
+    "english_name": "Common carp",
+    "czech_name": "Kapr obecný",
+    "latin_name": "Cyprinus carpio",
+    "rarity": "common"
+  },
+  "fish": {
+    "fish_id": "CZ-XX-CYPR-0004",
+    "is_new_fish": true,
+    "catch_number": 1,
+    "previous_sighting_id": null,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1
+  },
+  "linkage": {
+    "is_linked": false,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": null,
+    "final_fish_id": "CZ-XX-CYPR-0004",
+    "previous_sighting_id": null,
+    "match_confidence": 0.0,
+    "confidence_band": "new_fish",
+    "decision": "new_fish",
+    "requires_human_review": false,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1,
+    "same_species_required": true,
+    "area_code": "XX",
+    "latitude": null,
+    "longitude": null,
+    "nearby_area_radius_km": 5.0
+  },
+  "model": {
+    "detector_type": "yolov8_obb",
+    "detector_model_path": "models/detector/fish_detector_v1.onnx",
+    "classifier_model_path": "models/classifier/fish_species_v1.onnx",
+    "detection_confidence": 0.3036,
+    "classification_confidence": 0.7106,
+    "match_confidence": 0.0,
+    "overall_confidence": 0.7106,
+    "top_predictions": [
+      {
+        "species_slug": "carassius_carassius",
+        "confidence": 0.7105599641799927
+      },
+      {
+        "species_slug": "cyprinus_carpio",
+        "confidence": 0.2490566521883011
+      },
+      {
+        "species_slug": "carassius_gibelio",
+        "confidence": 0.040383368730545044
+      }
+    ]
+  },
+  "media": {
+    "media_type": "video",
+    "preview": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/preview.jpg",
+    "annotated_preview": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/annotated_preview.jpg",
+    "raw": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/raw/raw_capture.temp",
+    "video": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/raw/raw_capture.temp",
+    "images": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/images/crop_00.jpg"
+    ],
+    "images_bbox": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/images_bbox/crop_00.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/frames/frame_00.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/frames/frame_01.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/frames/frame_02.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/frames/frame_03.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/dataset/crop_000.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/dataset/crop_001.jpg"
+    ],
+    "dataset_crops_bbox": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/dataset/crop_000_bbox.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/dataset/crop_001_bbox.jpg"
+    ],
+    "annotated_frames": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/annotated/frame_000.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/annotated/frame_001.jpg"
+    ]
+  },
+  "gamification": {
+    "xp_earned": 60
+  },
+  "storage": {
+    "public_artifact_dir": "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352",
+    "private_document_dir": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352",
+    "document_filename": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/document.json",
+    "manifest_filename": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/manifest.json",
+    "model_outputs_filename": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0004/catch_1_1d2c8c5d-7636-4498-8e3b-e860412dd352/model_outputs.json",
+    "fish_index_filename": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0004/fish_index.json"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.1",
+  "job_id": "cb6fda78-dae1-40f6-861b-8809ea3a1f14",
+  "sighting_id": "944fcff7-b640-48cb-b0a2-fababd8de07e",
+  "fish_id": "CZ-XX-CYPR-0002",
+  "area_code": "XX",
+  "species_slug": "cyprinus_carpio",
+  "catch_number": 1,
+  "is_new_fish": true,
+  "artifact_dir": "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14",
+  "private_document_dir": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14",
+  "created_at": "2026-07-13T07:51:00.960578+00:00",
+  "files": {
+    "preview": "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/preview.jpg",
+    "annotated_preview": "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/annotated_preview.jpg",
+    "raw": "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/raw/raw_capture.temp",
+    "video": "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/raw/raw_capture.temp",
+    "images": [
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_00.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_01.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_02.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_03.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_04.jpg"
+    ],
+    "frames": [
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_00.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_01.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_02.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_03.jpg",
+      "fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [],
+    "annotated_frames": [],
+    "document": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/document.json",
+    "manifest": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/manifest.json",
+    "model_outputs": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/model_outputs.json",
+    "fish_index": "fish_documents/XX/cyprinus_carpio/CZ-XX-CYPR-0002/fish_index.json"
+  },
+  "urls": {
+    "media_type": "video",
+    "preview": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/preview.jpg",
+    "annotated_preview": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/annotated_preview.jpg",
+    "raw": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/raw/raw_capture.temp",
+    "video": "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/raw/raw_capture.temp",
+    "images": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_00.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_01.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_02.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_03.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/images/crop_04.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_00.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_01.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_02.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_03.jpg",
+      "/storage/fish_media/XX/cyprinus_carpio/CZ-XX-CYPR-0002/catch_1_cb6fda78-dae1-40f6-861b-8809ea3a1f14/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [],
+    "annotated_frames": []
+  },
+  "linkage": {
+    "is_linked": false,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": null,
+    "final_fish_id": "CZ-XX-CYPR-0002",
+    "previous_sighting_id": null,
+    "match_confidence": 0.0,
+    "confidence_band": "new_fish",
+    "decision": "new_fish",
+    "requires_human_review": false,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1,
+    "same_species_required": true,
+    "area_code": "XX",
+    "latitude": null,
+    "longitude": null,
+    "nearby_area_radius_km": 5.0
+  }
+}

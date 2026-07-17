@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "job_id": "a2d8715a-b462-45db-9123-2168a9940e04",
+  "sighting_id": "327ac18d-c79c-45f2-8208-16b346413e80",
+  "fish_id": "CZ-471011-CYPR-0002",
+  "area_code": "471011",
+  "species_slug": "cyprinus_carpio",
+  "catch_number": 1,
+  "is_new_fish": true,
+  "artifact_dir": "fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04",
+  "private_document_dir": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04",
+  "created_at": "2026-07-13T07:12:14.315690+00:00",
+  "files": {
+    "preview": "fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/preview.jpg",
+    "raw": "fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/raw/raw_capture.jpg",
+    "video": null,
+    "images": [
+      "fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/images/crop_00.jpg"
+    ],
+    "frames": [
+      "fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/frames/frame_00.jpg"
+    ],
+    "document": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/document.json",
+    "manifest": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/manifest.json",
+    "model_outputs": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/model_outputs.json",
+    "fish_index": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/fish_index.json"
+  },
+  "urls": {
+    "media_type": "image",
+    "preview": "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/preview.jpg",
+    "raw": "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/raw/raw_capture.jpg",
+    "video": null,
+    "images": [
+      "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/images/crop_00.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_1_a2d8715a-b462-45db-9123-2168a9940e04/frames/frame_00.jpg"
+    ]
+  },
+  "linkage": {
+    "is_linked": false,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": null,
+    "final_fish_id": "CZ-471011-CYPR-0002",
+    "previous_sighting_id": null,
+    "match_confidence": 0.0,
+    "confidence_band": "new_fish",
+    "decision": "new_fish",
+    "requires_human_review": false,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1,
+    "same_species_required": true,
+    "area_code": "471011",
+    "latitude": 50.087,
+    "longitude": 14.421,
+    "nearby_area_radius_km": 5.0
+  }
+}

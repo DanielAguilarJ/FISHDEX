@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0",
+  "job": {
+    "job_id": "4dfa5f6d-55c6-4361-a93e-20806fed694e",
+    "status": "completed",
+    "created_at": "2026-07-13T08:49:13.907865+00:00",
+    "started_at": null,
+    "completed_at": "2026-07-13T08:49:14.021482+00:00"
+  },
+  "user": {
+    "user_id": "0052b235-2ee5-4e1a-bd1e-d5b85d2cddff"
+  },
+  "capture": {
+    "area_code": "XX",
+    "area_name": null,
+    "latitude": null,
+    "longitude": null,
+    "weather": "sunny",
+    "bait": "dough",
+    "size_cm": 10.0,
+    "fish_state": "lll",
+    "custom_name": "marwa",
+    "notes": "lll"
+  },
+  "species": {
+    "slug": "carassius_carassius",
+    "english_name": "Crucian carp",
+    "czech_name": "Karas obecný",
+    "latin_name": "Carassius carassius",
+    "rarity": "common"
+  },
+  "fish": {
+    "fish_id": "CZ-XX-CARA-0004",
+    "is_new_fish": true,
+    "catch_number": 1,
+    "previous_sighting_id": null,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1
+  },
+  "linkage": {
+    "is_linked": false,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": null,
+    "final_fish_id": "CZ-XX-CARA-0004",
+    "previous_sighting_id": null,
+    "match_confidence": 0.0,
+    "confidence_band": "new_fish",
+    "decision": "new_fish",
+    "requires_human_review": false,
+    "total_sightings_before": 0,
+    "total_sightings_after": 1,
+    "same_species_required": true,
+    "area_code": "XX",
+    "latitude": null,
+    "longitude": null,
+    "nearby_area_radius_km": 5.0
+  },
+  "model": {
+    "detector_type": "yolov8_obb",
+    "detector_model_path": "models/detector/fish_detector_v1.onnx",
+    "classifier_model_path": "models/classifier/fish_species_v1.onnx",
+    "detection_confidence": 0.0,
+    "classification_confidence": 0.8696,
+    "match_confidence": 0.0,
+    "overall_confidence": 0.8696,
+    "top_predictions": [
+      {
+        "species_slug": "carassius_carassius",
+        "confidence": 0.8695886731147766
+      },
+      {
+        "species_slug": "cyprinus_carpio",
+        "confidence": 0.1276632398366928
+      },
+      {
+        "species_slug": "carassius_gibelio",
+        "confidence": 0.0027481417637318373
+      }
+    ]
+  },
+  "media": {
+    "media_type": "video",
+    "preview": "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/preview.jpg",
+    "annotated_preview": "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/annotated_preview.jpg",
+    "raw": "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/raw/raw_capture.temp",
+    "video": "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/raw/raw_capture.temp",
+    "images": [
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images/crop_00.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images/crop_01.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images/crop_02.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images/crop_03.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images/crop_04.jpg"
+    ],
+    "images_bbox": [
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images_bbox/crop_00.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images_bbox/crop_01.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images_bbox/crop_02.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images_bbox/crop_03.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/images_bbox/crop_04.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/frames/frame_00.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/frames/frame_01.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/frames/frame_02.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/frames/frame_03.jpg",
+      "/storage/fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/frames/frame_04.jpg"
+    ],
+    "dataset_crops": [],
+    "dataset_crops_bbox": [],
+    "annotated_frames": []
+  },
+  "gamification": {
+    "xp_earned": 60
+  },
+  "storage": {
+    "public_artifact_dir": "fish_media/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e",
+    "private_document_dir": "fish_documents/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e",
+    "document_filename": "fish_documents/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/document.json",
+    "manifest_filename": "fish_documents/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/manifest.json",
+    "model_outputs_filename": "fish_documents/XX/carassius_carassius/CZ-XX-CARA-0004/catch_1_4dfa5f6d-55c6-4361-a93e-20806fed694e/model_outputs.json",
+    "fish_index_filename": "fish_documents/XX/carassius_carassius/CZ-XX-CARA-0004/fish_index.json"
+  }
+}

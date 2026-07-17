@@ -1,0 +1,20 @@
+{
+  "area_code": "401 001",
+  "fisherman_id": "dev-user-000",
+  "datetime": "2026-07-15T11:28:34.243089",
+  "latitude": null,
+  "longitude": null,
+  "species": "Common carp",
+  "species_slug": "cyprinus_carpio",
+  "species_czech": "Kapr obecný",
+  "species_latin": "Cyprinus carpio",
+  "fish_state": null,
+  "name": null,
+  "weather": null,
+  "bite": null,
+  "size": null,
+  "user_role": "researcher",
+  "catch_number": 2,
+  "images_count": 1,
+  "saved_at": "2026-07-15T11:28:34.245352"
+}

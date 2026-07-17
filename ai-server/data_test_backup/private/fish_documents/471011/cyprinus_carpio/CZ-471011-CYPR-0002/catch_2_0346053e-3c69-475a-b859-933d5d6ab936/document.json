@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0",
+  "job": {
+    "job_id": "0346053e-3c69-475a-b859-933d5d6ab936",
+    "status": "completed",
+    "created_at": "2026-07-13T07:12:15.162417+00:00",
+    "started_at": null,
+    "completed_at": "2026-07-13T07:12:15.177749+00:00"
+  },
+  "user": {
+    "user_id": "user_b"
+  },
+  "capture": {
+    "area_code": "471011",
+    "area_name": "Moldava River Upper",
+    "latitude": 50.088,
+    "longitude": 14.422,
+    "weather": "cloudy",
+    "bait": "spinner",
+    "size_cm": 48.2,
+    "fish_state": "released",
+    "custom_name": "Goldie Recaught",
+    "notes": "Recaptured Goldie one week later"
+  },
+  "species": {
+    "slug": "cyprinus_carpio",
+    "english_name": "Common carp",
+    "czech_name": "Kapr obecný",
+    "latin_name": "Cyprinus carpio",
+    "rarity": "common"
+  },
+  "fish": {
+    "fish_id": "CZ-471011-CYPR-0002",
+    "is_new_fish": false,
+    "catch_number": 2,
+    "previous_sighting_id": "327ac18d-c79c-45f2-8208-16b346413e80",
+    "total_sightings_before": 1,
+    "total_sightings_after": 2
+  },
+  "linkage": {
+    "is_linked": true,
+    "strategy": "embedding_cosine",
+    "threshold": 0.7,
+    "matched_fish_id": "CZ-471011-CYPR-0002",
+    "final_fish_id": "CZ-471011-CYPR-0002",
+    "previous_sighting_id": "327ac18d-c79c-45f2-8208-16b346413e80",
+    "match_confidence": 1.0,
+    "confidence_band": "high",
+    "decision": "auto_match",
+    "requires_human_review": false,
+    "total_sightings_before": 1,
+    "total_sightings_after": 2,
+    "same_species_required": true,
+    "area_code": "471011",
+    "latitude": 50.088,
+    "longitude": 14.422,
+    "nearby_area_radius_km": 5.0
+  },
+  "model": {
+    "detector_type": "yolov8_obb",
+    "detector_model_path": "models/detector/fish_detector_v1.onnx",
+    "classifier_model_path": "models/classifier/fish_species_v1.onnx",
+    "detection_confidence": 0.0,
+    "classification_confidence": 0.7279,
+    "match_confidence": 1.0,
+    "overall_confidence": 0.7279,
+    "top_predictions": [
+      {
+        "species_slug": "carassius_carassius",
+        "confidence": 0.7278540730476379
+      },
+      {
+        "species_slug": "cyprinus_carpio",
+        "confidence": 0.2341492772102356
+      },
+      {
+        "species_slug": "carassius_gibelio",
+        "confidence": 0.037996623665094376
+      }
+    ]
+  },
+  "media": {
+    "media_type": "image",
+    "preview": "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936/preview.jpg",
+    "raw": "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936/raw/raw_capture.jpg",
+    "video": null,
+    "images": [
+      "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936/images/crop_00.jpg"
+    ],
+    "frames": [
+      "/storage/fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936/frames/frame_00.jpg"
+    ]
+  },
+  "gamification": {
+    "xp_earned": 10
+  },
+  "storage": {
+    "public_artifact_dir": "fish_media/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936",
+    "private_document_dir": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936",
+    "document_filename": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936/document.json",
+    "manifest_filename": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936/manifest.json",
+    "model_outputs_filename": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/catch_2_0346053e-3c69-475a-b859-933d5d6ab936/model_outputs.json",
+    "fish_index_filename": "fish_documents/471011/cyprinus_carpio/CZ-471011-CYPR-0002/fish_index.json"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "num_classes": 3,
+  "class_to_idx": {
+    "carassius_carassius": 0,
+    "carassius_gibelio": 1,
+    "cyprinus_carpio": 2
+  },
+  "idx_to_class": {
+    "0": "carassius_carassius",
+    "1": "carassius_gibelio",
+    "2": "cyprinus_carpio"
+  },
+  "classes": [
+    "carassius_carassius",
+    "carassius_gibelio",
+    "cyprinus_carpio"
+  ],
+  "image_size": [
+    224,
+    224
+  ],
+  "normalization": {
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "split_ratios": {
+    "train": 0.8,
+    "val": 0.1,
+    "test": 0.1
+  },
+  "stats_per_class": {
+    "carassius_carassius": {
+      "train": 96,
+      "val": 3,
+      "test": 3
+    },
+    "carassius_gibelio": {
+      "train": 96,
+      "val": 3,
+      "test": 3
+    },
+    "cyprinus_carpio": {
+      "train": 40,
+      "val": 1,
+      "test": 2
+    }
+  },
+  "total_images": {
+    "train": 232,
+    "val": 7,
+    "test": 8
+  }
+}
