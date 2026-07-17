@@ -162,6 +162,23 @@ class OBBRoiService:
                 reason="empty ROI after perspective crop",
             )
 
+        # ── Validar tamaño mínimo del ROI ────────────────────────────
+        h_roi, w_roi = roi.shape[:2]
+        min_side = settings.roi_min_side_px
+        if min(h_roi, w_roi) < min_side:
+            return RoiResult(
+                qualified=False,
+                roi=None,
+                confidence=conf,
+                reason=f"ROI too small ({w_roi}x{h_roi} px, min side={min_side}px)",
+            )
+
+        # ── Normalizar a orientación horizontal (ancho > alto) ───────────
+        # Un pez debe quedar siempre apaisado para que el embedding sea
+        # consistente entre tomas (independientemente de cómo se detectó el OBB).
+        if roi.shape[0] > roi.shape[1]:
+            roi = cv2.rotate(roi, cv2.ROTATE_90_CLOCKWISE)
+
         return RoiResult(qualified=True, roi=roi, confidence=conf, reason=None)
 
     # ------------------------------------------------------------------

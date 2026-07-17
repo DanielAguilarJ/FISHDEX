@@ -121,11 +121,19 @@ def get_comparison_subset(
         except Exception as exc:
             logger.warning("Could not load nearby areas: %s", exc)
 
+    if latitude is None or longitude is None:
+        logger.warning(
+            "get_comparison_subset: NO GPS provided \u2014 5km radius filter DISABLED. "
+            "Only comparing within exact area_code='%s'. "
+            "Ensure the app sends latitude and longitude in every /identify call.",
+            area_code,
+        )
+
     logger.info(
-        "Subset for area=%s species=%s: %d fish profiles (searched %s nearby areas)",
+        "Subset for area=%s species=%s: %d fish profiles (GPS filter: %s)",
         area_code,
         species_slug,
         len(subset),
-        "with" if (latitude and longitude) else "without",
+        "active" if (latitude and longitude) else "DISABLED (no GPS)",
     )
     return subset

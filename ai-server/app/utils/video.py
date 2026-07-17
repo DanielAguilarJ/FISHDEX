@@ -223,14 +223,19 @@ def select_best_frame(frames: List[np.ndarray]) -> np.ndarray:
 
 def select_best_n_frames(frames: List[np.ndarray], n: int = 5) -> List[np.ndarray]:
     """
-    Select the top-N sharpest frames from a list, ranked by Laplacian variance.
+    Selecciona N frames combinando nitidez y diversidad temporal.
+
+    Divide el video en N segmentos uniformes y toma el frame MÁS NÍTIDO
+    de cada segmento. Esto garantiza cobertura de todo el video (distintos
+    ángulos y poses del pez), evitando N frames casi idénticos del mismo instante
+    (problema típico cuando se seleccionan por nitidez pura).
 
     Args:
         frames: List of BGR frames as NumPy arrays.
         n:      Number of frames to return (default 5).
 
     Returns:
-        List of the N sharpest frames (or all frames if fewer than N available).
+        List of N frames (one per temporal segment), each the sharpest in its segment.
     """
     if not frames:
         return []
@@ -238,15 +243,24 @@ def select_best_n_frames(frames: List[np.ndarray], n: int = 5) -> List[np.ndarra
     if len(frames) <= n:
         return list(frames)
 
-    scored: List[Tuple[float, int]] = []
-    for i, frame in enumerate(frames):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-        scored.append((score, i))
+    def _sharpness(f: np.ndarray) -> float:
+        gray = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
+        return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
-    scored.sort(reverse=True)
-    top_indices = sorted(idx for _, idx in scored[:n])  # keep temporal order
-    return [frames[i] for i in top_indices]
+    total = len(frames)
+    # Fronteras de N segmentos uniformes a lo largo del video
+    bounds = np.linspace(0, total, n + 1, dtype=int)
+
+    selected: List[np.ndarray] = []
+    for i in range(n):
+        start, end = int(bounds[i]), int(bounds[i + 1])
+        if start >= end:
+            continue
+        segment = frames[start:end]
+        best_in_segment = max(segment, key=_sharpness)
+        selected.append(best_in_segment)
+
+    return selected
 
 
 # ---------------------------------------------------------------------------

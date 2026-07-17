@@ -51,8 +51,8 @@ class Settings(BaseSettings):
     detector_nms_iou_threshold: float = 0.45
 
     # ── Video/Frame processing ───────────────────────────────────────
-    max_frames_to_save: int = 5
-    max_frames_to_extract: int = 10
+    max_frames_to_save: int = 8
+    max_frames_to_extract: int = 15
     max_video_size_mb: int = 50
     max_video_duration_seconds: int = 15
     jpeg_quality: int = 90
@@ -79,9 +79,10 @@ class Settings(BaseSettings):
     # ── New OBB ROI detector ─────────────────────────────────────────
     # Override: FISHDEX_OBB_MODEL_PATH, FISHDEX_OBB_CONF_THRESHOLD, etc.
     obb_model_path: str = "models/detector/obb_best.pt"
-    obb_conf_threshold: float = 0.20
+    obb_conf_threshold: float = 0.35
     roi_require_single_detection: bool = True
     roi_allow_center_fallback: bool = False
+    roi_min_side_px: int = 48  # Mínimo lado (px) del ROI — rechaza detecciones diminutas
 
     # ── New Fish ReID model ──────────────────────────────────────────
     # Override: FISHDEX_REID_MODEL_PATH, FISHDEX_REID_MODEL_NAME, etc.
@@ -91,15 +92,18 @@ class Settings(BaseSettings):
     reid_img_size: int = 128
     reid_batch_size: int = 64
     reid_num_workers: int = 0
+    reid_flip_tta: bool = True  # Test-time augmentation: media(embedding original + espejo horizontal)
 
     # ── Prototype matching settings ──────────────────────────────────
-    reid_max_support_images_per_identity: int = 5
-    reid_max_query_images_for_vote: int = 5
+    reid_max_support_images_per_identity: int = 12  # más soporte = prototipo estable
+    reid_max_query_images_for_vote: int = 8          # más votos = decisión robusta
     reid_random_seed: int = 1234
     # Conservative threshold: false positive (wrong recapture) is worse than
-    # false negative (missed recapture). Start at 0.75, calibrate with real data.
-    reid_similarity_threshold: float = 0.75
-    reid_cache_name: str = "fishencoder_convnext_small_512_128"
+    # false negative (missed recapture). 0.82 es punto de partida para trucha arcoíris.
+    # Calibrar con calibrate_threshold.py antes de producción real.
+    reid_similarity_threshold: float = 0.82
+    reid_min_margin: float = 0.05  # Margen mínimo entre 1º y 2º candidato
+    reid_cache_name: str = "fishencoder_convnext_small_512_128_v2"  # v2 = nueva caché tras flip TTA
 
     # ── Auth settings ────────────────────────────────────────────────
     skip_auth: bool = False

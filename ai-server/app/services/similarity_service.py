@@ -50,6 +50,8 @@ class SimilarityMatchResult:
     winning_votes: int               # votes the winner got
     candidate_count: int             # number of prototypes in the gallery
     winning_identity: Optional[str]  # always set (even when below threshold)
+    margin: float = 0.0              # gap between winner and 2nd best candidate mean scores
+    second_best_score: float = 0.0   # mean score of 2nd best candidate
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +261,8 @@ class SimilarityService:
             winning_votes=0,
             candidate_count=0,
             winning_identity=None,
+            margin=0.0,
+            second_best_score=0.0,
         )
 
         if not subset or not new_frames:
@@ -337,19 +341,43 @@ class SimilarityService:
         winning_identity = prototype_names[winning_index]
         winning_votes = vote_counts[winning_index]
 
+        # ── Margen de rechazo RELATIVO AL GANADOR (por votos) ────────────
+        # El ganador se decide por votos; el margen debe medir cuánto
+        # destaca ESE ganador frente a su competidor más cercano, no el
+        # ganador global por media. Por eso comparamos winner_mean contra
+        # el mejor prototipo DISTINTO del ganador.
+        mean_sims = similarities.mean(axis=0)              # (K,) media por prototipo
+        winner_mean = float(mean_sims[winning_index])
+        others = np.delete(mean_sims, winning_index)       # excluye al ganador
+        second_best = float(others.max()) if others.size > 0 else 0.0
+        match_margin = winner_mean - second_best
+
         logger.info(
             "SimilarityService: winner=%s  score=%.4f  votes=%d/%d  "
-            "candidates=%d  query_imgs=%d",
+            "candidates=%d  query_imgs=%d  margin=%.4f  2nd_best=%.4f",
             winning_identity,
             average_similarity,
             winning_votes,
             query_images_used,
             candidate_count,
             query_images_used,
+            match_margin,
+            second_best,
         )
 
-        # ── Threshold decision ───────────────────────────────────────
-        matched_fish_id = winning_identity if average_similarity >= threshold else None
+        # ── Threshold + margen de rechazo ────────────────────────────────────
+        min_margin = getattr(settings, "reid_min_margin", 0.05)
+        passes_threshold = average_similarity >= threshold
+        # Con 1 solo candidato no tiene sentido exigir margen (no hay 2º).
+        passes_margin = (candidate_count < 2) or (match_margin >= min_margin)
+        matched_fish_id = winning_identity if (passes_threshold and passes_margin) else None
+
+        if passes_threshold and not passes_margin:
+            logger.info(
+                "SimilarityService: REJECTED by margin — score=%.4f but margin=%.4f < %.4f "
+                "(ambiguous: treating as NEW fish)",
+                average_similarity, match_margin, min_margin,
+            )
 
         return SimilarityMatchResult(
             fish_id=matched_fish_id,
@@ -358,6 +386,8 @@ class SimilarityService:
             winning_votes=winning_votes,
             candidate_count=candidate_count,
             winning_identity=winning_identity,
+            margin=match_margin,
+            second_best_score=second_best,
         )
 
 

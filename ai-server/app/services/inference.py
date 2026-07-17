@@ -157,6 +157,7 @@ class InferenceService:
         t4 = time.perf_counter()
         matched_fish_id: Optional[str] = None
         similarity_score: float = 0.0
+        match_margin_val: float = 0.0
 
         if subset and cropped_frames:
             try:
@@ -169,6 +170,7 @@ class InferenceService:
                 )
                 matched_fish_id = match_result.fish_id
                 similarity_score = match_result.score
+                match_margin_val = match_result.margin
             except Exception as exc:
                 logger.warning("[Step 4] Similarity service error: %s", exc)
 
@@ -249,6 +251,15 @@ class InferenceService:
         match_confidence = similarity_score  # raw value from similarity service
         confidence = similarity_score if not is_new else 0.0
         xp_earned = xp_base + (XP_NEW_FISH_BONUS if is_new else 0)
+
+        # Recaptura ambígua: score apenas supera el umbral o margen pequeño.
+        # Permite que el usuario confirme antes de guardar como verdadera recaptura.
+        _ambiguous_band = settings.reid_similarity_threshold + 0.05
+        _min_margin = getattr(settings, "reid_min_margin", 0.05)
+        ambiguous_recapture = (
+            not is_new
+            and (similarity_score < _ambiguous_band or match_margin_val < _min_margin * 2)
+        )
         estimated_size = metadata.get("size") or 0.0
 
         # Build previous data if recapture
@@ -303,7 +314,7 @@ class InferenceService:
             "estimated_size_cm": round(float(estimated_size), 1),
             "rarity": rarity,
             "xp_earned": xp_earned,
-            "requires_manual_input": False,
+            "requires_manual_input": ambiguous_recapture,
             "previous_data": previous_data,
             "message": message,
             "timestamp": datetime.now().isoformat(),
@@ -321,6 +332,8 @@ class InferenceService:
             "roi_images_used": len(cropped_frames),
             "query_images_used": _match_result.query_images_used if _match_result else None,
             "winning_votes": _match_result.winning_votes if _match_result else None,
+            "match_margin": round(match_margin_val, 4),
+            "ambiguous_recapture": ambiguous_recapture,
         }
 
         return result

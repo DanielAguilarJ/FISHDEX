@@ -97,6 +97,8 @@ class IdentifyResponse(BaseModel):
     query_images_used: Optional[int] = Field(None, description="Number of query frames used in prototype voting")
     winning_votes: Optional[int] = Field(None, description="Votes the winning identity received")
     roi_images_used: Optional[int] = Field(None, description="Number of frames with a qualified OBB ROI")
+    match_margin: Optional[float] = Field(None, description="Margin between 1st and 2nd best candidate (higher = more certain)")
+    ambiguous_recapture: Optional[bool] = Field(None, description="True if recapture but confidence is borderline; suggest manual confirmation")
 
 
 class ErrorResponse(BaseModel):

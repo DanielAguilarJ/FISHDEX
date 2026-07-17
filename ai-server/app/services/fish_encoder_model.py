@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -537,14 +538,39 @@ def load_model_for_infer(
         loaded_keys, total_keys, len(missing_keys), len(shape_mismatches),
     )
     if missing_keys:
-        logger.debug("Missing keys: %s", missing_keys[:10])
+        logger.debug("Missing keys (first 20): %s", missing_keys[:20])
     if shape_mismatches:
-        logger.warning("Shape mismatches: %s", shape_mismatches)
+        logger.error("Shape mismatches (first 20): %s", shape_mismatches[:20])
 
-    # Sanity check — warn loudly if very few keys loaded
-    if loaded_keys < total_keys * 0.5:
-        logger.warning(
-            "WARN: Only %.0f%% of keys loaded. Check model_name='%s' matches training config.",
+    # Claves críticas de la cabeza — si faltan, los embeddings son basura.
+    # NOTA: "classifier." (AdaCos) NO se incluye: solo se usa en entrenamiento
+    # y se desactiva en inferencia; no afecta al embedding final (forward()
+    # termina en bnneck + normalize, sin tocar el classifier).
+    critical_prefixes = (
+        "reduce.", "gem.", "bnneck.", "fuse_block.", "deform_refine", "cc_s8.",
+    )
+    critical_missing = [
+        k for k in missing_keys
+        if any(k.startswith(p) or p in k for p in critical_prefixes)
+    ]
+
+    strict_mode = os.getenv("FISHDEX_REID_STRICT_LOAD", "true").lower() == "true"
+
+    if critical_missing or shape_mismatches:
+        msg = (
+            f"FishEncoder CRITICAL load failure: "
+            f"critical_missing={critical_missing[:20]}  "
+            f"shape_mismatches={shape_mismatches[:20]}. "
+            f"Check FISHDEX_REID_MODEL_NAME='{model_name}' matches the training backbone. "
+            f"Set FISHDEX_REID_STRICT_LOAD=false to bypass (dev only)."
+        )
+        if strict_mode:
+            raise RuntimeError(msg)
+        logger.error(msg)
+    elif loaded_keys < total_keys * 0.9:
+        logger.error(
+            "FishEncoder loaded only %.0f%% of keys — embeddings may be unreliable. "
+            "Check that FISHDEX_REID_MODEL_NAME='%s' matches the training backbone.",
             100.0 * loaded_keys / total_keys,
             model_name,
         )

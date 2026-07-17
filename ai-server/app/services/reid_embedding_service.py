@@ -143,11 +143,23 @@ class ReIDEmbeddingService:
 
         batch_size = max(1, settings.reid_batch_size)
         all_embeddings: list[np.ndarray] = []
+        use_flip_tta = getattr(settings, "reid_flip_tta", True)
 
         for start in range(0, len(frames), batch_size):
             batch_frames = frames[start : start + batch_size]
             tensor = self._frames_to_tensor(batch_frames).to(self._device, non_blocking=True)
             embeddings = self._model.forward_embed_bn(tensor)  # (B, D) normalised
+
+            if use_flip_tta:
+                # Espejo horizontal (flip en dimensión W = -1).
+                # Hace el sistema invariante a si el pez mira a izquierda o derecha,
+                # sin necesidad de reentrenar el modelo.
+                tensor_flip = torch.flip(tensor, dims=[-1])
+                emb_flip = self._model.forward_embed_bn(tensor_flip)
+                embeddings = embeddings + emb_flip
+                # Re-normalizar la suma para que siga siendo L2-unitario
+                embeddings = F.normalize(embeddings, dim=-1)
+
             all_embeddings.append(embeddings.cpu().numpy())
 
         return np.concatenate(all_embeddings, axis=0).astype(np.float32)
