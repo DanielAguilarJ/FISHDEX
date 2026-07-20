@@ -64,17 +64,17 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
     );
   }
 
-  /// Page 1: Fish orientation - head to the left, fish lying horizontal
+  /// Page 1: Fish orientation - head pointing up toward selfie camera
   Widget _buildPage1Orientation() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Fish silhouette with arrow showing correct orientation (horizontal fish)
+          // Fish silhouette vertical — head up, tail down
           Container(
-            width: 300,
-            height: 140,
+            width: 160,
+            height: 260,
             decoration: BoxDecoration(
               color: AppTheme.darkSurface,
               borderRadius: BorderRadius.circular(20),
@@ -407,7 +407,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
   }
 }
 
-/// Painter showing correct fish orientation (head LEFT, arrow)
+/// Painter showing correct fish orientation (head UP toward selfie camera)
 class _OrientationGuidePainter extends CustomPainter {
   final String headText;
   final String tailText;
@@ -421,64 +421,64 @@ class _OrientationGuidePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    // Simple fish outline pointing LEFT
+    // Fish outline pointing UP (vertical ellipse)
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final w = size.width * 0.7;
-    final h = w * 0.35;
+    final h = size.height * 0.6; // Long axis (vertical)
+    final w = h * 0.35; // Short axis (horizontal)
 
     final path = Path();
-    // Body ellipse (slightly to the left since head is on left)
+    // Body ellipse (slightly above center since head is on top)
     path.addOval(Rect.fromCenter(
-      center: Offset(cx - w * 0.05, cy),
-      width: w * 0.7,
-      height: h,
+      center: Offset(cx, cy - h * 0.05),
+      width: w,
+      height: h * 0.7,
     ));
     canvas.drawPath(path, paint);
 
-    // Tail (V shape on RIGHT)
+    // Tail (V shape at BOTTOM)
     final tailPaint = Paint()
       ..color = AppTheme.accentBlue.withOpacity(0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
     canvas.drawLine(
-      Offset(cx + w * 0.28, cy),
-      Offset(cx + w * 0.42, cy - h * 0.45),
+      Offset(cx, cy + h * 0.28),
+      Offset(cx - w * 0.45, cy + h * 0.42),
       tailPaint,
     );
     canvas.drawLine(
-      Offset(cx + w * 0.28, cy),
-      Offset(cx + w * 0.42, cy + h * 0.45),
+      Offset(cx, cy + h * 0.28),
+      Offset(cx + w * 0.45, cy + h * 0.42),
       tailPaint,
     );
 
-    // Arrow pointing LEFT (indicating head direction)
+    // Arrow pointing UP (indicating head direction / selfie camera)
     final arrowPaint = Paint()
       ..color = AppTheme.successGreen
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
 
-    final arrowY = cy + h * 0.8;
+    final arrowX = cx + w * 0.8;
     canvas.drawLine(
-      Offset(cx + w * 0.15, arrowY),
-      Offset(cx - w * 0.25, arrowY),
+      Offset(arrowX, cy + h * 0.15),
+      Offset(arrowX, cy - h * 0.25),
       arrowPaint,
     );
-    // Arrowhead pointing left
+    // Arrowhead pointing up
     canvas.drawLine(
-      Offset(cx - w * 0.25, arrowY),
-      Offset(cx - w * 0.18, arrowY - 6),
+      Offset(arrowX, cy - h * 0.25),
+      Offset(arrowX - 6, cy - h * 0.18),
       arrowPaint,
     );
     canvas.drawLine(
-      Offset(cx - w * 0.25, arrowY),
-      Offset(cx - w * 0.18, arrowY + 6),
+      Offset(arrowX, cy - h * 0.25),
+      Offset(arrowX + 6, cy - h * 0.18),
       arrowPaint,
     );
 
-    // "HEAD" label (left side)
+    // "HEAD" label (top)
     final headTextPainter = TextPainter(
       text: TextSpan(
         text: headText,
@@ -491,9 +491,12 @@ class _OrientationGuidePainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
     headTextPainter.layout();
-    headTextPainter.paint(canvas, Offset(cx - w * 0.38, arrowY - 5));
+    headTextPainter.paint(
+      canvas,
+      Offset(cx - headTextPainter.width / 2, cy - h * 0.45),
+    );
 
-    // "TAIL" label (right side)
+    // "TAIL" label (bottom)
     final tailTextPainter = TextPainter(
       text: TextSpan(
         text: tailText,
@@ -506,7 +509,25 @@ class _OrientationGuidePainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
     tailTextPainter.layout();
-    tailTextPainter.paint(canvas, Offset(cx + w * 0.20, arrowY - 5));
+    tailTextPainter.paint(
+      canvas,
+      Offset(cx - tailTextPainter.width / 2, cy + h * 0.43),
+    );
+
+    // Selfie camera icon hint at top
+    final camPaint = Paint()
+      ..color = Colors.white.withOpacity(0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    // Small camera icon representation
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, 14), width: 20, height: 12),
+        const Radius.circular(3),
+      ),
+      camPaint,
+    );
+    canvas.drawCircle(Offset(cx, 14), 4, camPaint);
   }
 
   @override
