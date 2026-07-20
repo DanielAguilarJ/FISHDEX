@@ -40,6 +40,11 @@ class IdentificationJobRepository {
     double? sizeCm,
     String? fishState,
     String? customName,
+    double? gpsAccuracyM,
+    String? gpsTimestamp,
+    bool gpsIsMocked = false,
+    String? gpsSource,
+    String? areaSelectionSource,
   }) async {
     final fields = <String, String>{
       'user_id': userId,
@@ -62,6 +67,12 @@ class IdentificationJobRepository {
     if (sizeCm != null) fields['size_cm'] = sizeCm.toString();
     if (fishState != null) fields['fish_state'] = fishState;
     if (customName != null) fields['custom_name'] = customName;
+    // GPS metadata
+    if (gpsAccuracyM != null) fields['gps_accuracy_m'] = gpsAccuracyM.toString();
+    if (gpsTimestamp != null) fields['gps_timestamp'] = gpsTimestamp;
+    if (gpsIsMocked) fields['gps_is_mocked'] = 'true';
+    if (gpsSource != null) fields['gps_source'] = gpsSource;
+    if (areaSelectionSource != null) fields['area_selection_source'] = areaSelectionSource;
 
     final response = await _apiClient.multipartPost(
       '/api/v1/jobs/upload',

@@ -821,6 +821,31 @@ def process_identification_job(
             previous_sighting_id = None
             total_sightings_before = 0
 
+            # --- RE-MATCH inside write lock to prevent concurrent duplicates ---
+            # Another job may have stored a new embedding between our first match
+            # (outside the lock) and now. Re-run the pipeline under the lock.
+            pipeline_result_locked = pipeline.run(
+                query_embeddings=query_embeddings,
+                metadata=pipeline_metadata,
+                quality_score=quality_score,
+                valid_crop_count=len(cropped_frames),
+                track_consistent=track_consistent,
+                multiple_fish_detected=multiple_fish_detected,
+            )
+
+            # Use the locked result (may differ from pre-lock result)
+            pipeline_decision = pipeline_result_locked.decision
+            pipeline_result = pipeline_result_locked
+            matched_fish_id = pipeline_result.fish_id
+            proposed_fish_id = pipeline_result.proposed_fish_id
+            scoring = pipeline_result.scoring
+            if scoring:
+                match_confidence = scoring.top1_score
+                top2_score = scoring.top2_score
+                match_margin = scoring.margin
+                candidates_evaluated = scoring.candidates_evaluated
+            is_new_fish = pipeline_decision == "new_fish"
+
             # --- DECISION LOGIC (via unified pipeline) ---
             # The pipeline has already made the decision: auto_match, new_fish,
             # needs_manual_review, or repeat_capture

@@ -11,6 +11,7 @@ from app.config import settings
 from app.database import get_db_connection
 from app.data.czech_species import CZECH_SPECIES
 from app.services.job_service import process_identification_job
+from app.services.czech_area_service import validate_area_code
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
@@ -55,6 +56,11 @@ async def upload_job_video(
     size_cm: Optional[float] = Form(default=None),
     fish_state: Optional[str] = Form(default=None),
     custom_name: Optional[str] = Form(default=None),
+    gps_accuracy_m: Optional[float] = Form(default=None),
+    gps_timestamp: Optional[str] = Form(default=None),
+    gps_is_mocked: Optional[bool] = Form(default=False),
+    gps_source: Optional[str] = Form(default="current"),
+    area_selection_source: Optional[str] = Form(default="user_selected"),
     x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
     authorization: Optional[str] = Header(default=None),
 ):
@@ -98,6 +104,22 @@ async def upload_job_video(
         raise HTTPException(
             status_code=422,
             detail="Las coordenadas GPS de la captura no son válidas",
+        )
+
+    # Validate Czech area code if provided
+    if area_code and area_code.strip():
+        area_valid, area_error = validate_area_code(area_code.strip())
+        if not area_valid:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Código de revír inválido: {area_error}",
+            )
+
+    # Reject obviously mocked GPS
+    if gps_is_mocked:
+        raise HTTPException(
+            status_code=422,
+            detail="GPS simulado detectado. Use ubicación real para la captura.",
         )
 
     upload_file = file or video
@@ -168,13 +190,16 @@ async def upload_job_video(
                 id, user_id, status, raw_video_filename, area_code, area_name, 
                 latitude, longitude, species_slug, notes,
                 weather, bite, size_cm, fish_state, custom_name,
-                created_at, media_type, original_filename, content_type, raw_media_filename
-            ) VALUES (?, ?, 'uploaded', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                created_at, media_type, original_filename, content_type, raw_media_filename,
+                gps_accuracy_m, gps_timestamp, gps_is_mocked, gps_source, area_selection_source
+            ) VALUES (?, ?, 'uploaded', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 job_id, user_id, raw_filename, area_clean, area_name,
                 latitude, longitude, species_slug, notes,
                 weather, bite, size_cm, fish_state, custom_name,
-                now_str, media_type, original_filename, content_type, raw_filename
+                now_str, media_type, original_filename, content_type, raw_filename,
+                gps_accuracy_m, gps_timestamp, 1 if gps_is_mocked else 0,
+                gps_source or "current", area_selection_source or "user_selected"
             )
         )
         conn.commit()
