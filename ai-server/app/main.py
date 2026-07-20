@@ -90,6 +90,17 @@ async def lifespan(app: FastAPI):
     global _server_start_time
     _server_start_time = time.time()
 
+    # SECURITY: Reject default secrets in production
+    if settings.environment == "production":
+        _default_secrets = {"change-me", "change-me-in-production"}
+        for secret_name in ("ai_server_secret", "client_secret", "dashboard_secret"):
+            val = getattr(settings, secret_name, "")
+            if val in _default_secrets:
+                raise RuntimeError(
+                    f"FATAL: {secret_name} is set to a default value in production. "
+                    f"Override it with a real secret before deploying."
+                )
+
     # Start background system monitoring
     start_system_monitor()
 
@@ -182,9 +193,17 @@ app.include_router(auth.router)
 app.include_router(sightings.router)
 
 # Mount local storage folder to serve frames and videos directly
+# WARNING: This is unauthenticated. In production, use signed URLs or
+# protect this endpoint behind auth middleware (e.g., nginx/Caddy).
 storage_path = Path(settings.server_data_dir) / "storage"
 storage_path.mkdir(parents=True, exist_ok=True)
-app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
+if settings.environment != "production":
+    app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
+else:
+    logger.warning(
+        "PUBLIC /storage mount DISABLED in production. "
+        "Serve media through authenticated endpoint or reverse proxy with signed URLs."
+    )
 
 
 # ─── Root endpoints ─────────────────────────────────────────────────────
@@ -241,10 +260,10 @@ async def health_ready() -> JSONResponse:
 
     # 4. FishEncoder loaded
     try:
-        from app.services.reid_embedding_service import get_reid_service
-        reid = get_reid_service()
-        checks["reid_model_loaded"] = reid.available
-        if not reid.available:
+        from app.services.reid_embedding_service import get_reid_embedding_service
+        reid = get_reid_embedding_service()
+        checks["reid_model_loaded"] = reid.is_loaded
+        if not reid.is_loaded:
             ready = False
     except Exception:
         checks["reid_model_loaded"] = False

@@ -269,8 +269,13 @@ def _check_auto_match(ctx: DecisionContext, t: dict) -> list[str]:
     if not ctx.index_complete:
         failures.append("Index incomplete (partial search)")
 
-    # Calibration: allow match with warning if unavailable but don't block
-    # (the warning is added in the caller if decision passes)
+    # Calibration: BLOCK auto_match if calibration is unavailable.
+    # While MODEL_VALIDATED=false, all matches must go to manual review.
+    if not ctx.calibration_available:
+        failures.append(
+            "Calibration unavailable (MODEL_VALIDATED=false) — "
+            "auto_match disabled until scientific validation"
+        )
 
     return failures
 

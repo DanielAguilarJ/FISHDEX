@@ -34,6 +34,7 @@ from app.services.identity_decision_service import (
     IdentityDecision,
     DEFAULT_THRESHOLDS,
 )
+from app.calibration import load_calibration
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,9 @@ class IdentificationPipeline:
         self._matching = get_matching_service()
         self._radius_m = (settings.nearby_area_radius_km or 5.0) * 1000.0
         self._model_version = settings.reid_cache_name or "fishencoder_512_v1"
+        # Check if calibration exists for this model version
+        self._calibration = load_calibration(self._model_version)
+        self._calibration_available = self._calibration is not None
 
     def run(
         self,
@@ -190,7 +194,7 @@ class IdentificationPipeline:
             valid_crop_count=valid_crop_count,
             track_consistent=track_consistent,
             multiple_fish_detected=multiple_fish_detected,
-            calibration_available=False,  # Phase 7
+            calibration_available=self._calibration_available,
             index_complete=True,  # Assumed until audit says otherwise
             model_version_compatible=True,
         )

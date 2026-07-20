@@ -68,7 +68,9 @@ async def verify_appwrite_jwt(
     jwt_token = credentials.credentials
 
     # ── Call Appwrite to validate ───────────────────────────────────
-    appwrite_url = f"{settings.appwrite_endpoint}/v1/account"
+    # settings.appwrite_endpoint already ends with /v1, so just append /account
+    base = settings.appwrite_endpoint.rstrip("/")
+    appwrite_url = f"{base}/account"
     headers = {
         "Content-Type": "application/json",
         "X-Appwrite-Project": settings.appwrite_project_id,

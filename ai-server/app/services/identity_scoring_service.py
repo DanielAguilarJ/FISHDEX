@@ -7,6 +7,7 @@ Implements per-individual scoring with multi-frame voting:
 3. Returns top-1, top-2, margin, agreement, and per-frame breakdown
 """
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from typing import Optional
@@ -128,7 +129,12 @@ def score_candidates(
         # Limit support set size (random sample without replacement)
         S_i = support.shape[0]
         if S_i > max_support_per_identity:
-            rng = np.random.default_rng(seed=hash(fish_id) & 0xFFFFFFFF)
+            # Use hashlib for deterministic seed across processes
+            # (Python's hash() changes between processes due to hash randomization)
+            stable_seed = int.from_bytes(
+                hashlib.sha256(fish_id.encode()).digest()[:8], "big"
+            )
+            rng = np.random.default_rng(seed=stable_seed & 0xFFFFFFFF)
             indices = rng.choice(S_i, size=max_support_per_identity, replace=False)
             support = support[indices]
             S_i = max_support_per_identity

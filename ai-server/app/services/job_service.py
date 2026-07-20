@@ -17,6 +17,12 @@ from app.services.classifier_service import get_classifier_service
 from app.services.detector_service import get_detector_service
 from app.services.reid_embedding_service import get_reid_embedding_service
 from app.services.matching_service import get_matching_service
+from app.services.identification_pipeline import (
+    get_identification_pipeline,
+    CaptureMetadata,
+)
+from app.services.fish_tracking_service import validate_single_fish
+from app.services.capture_quality_service import evaluate_capture
 from app.services.event_bus import event_bus
 from app.services.artifact_service import (
     save_job_artifacts,
@@ -658,39 +664,113 @@ def process_identification_job(
             f"rarity={species_info.get('rarity')}"
         )
 
-        # --- Step 10: Generate embedding (FishEncoder 512-d) ---
-        _emit_progress(job_id, "matching_individual", 85, "Generating FishEncoder embeddings")
-        logger.info(f"[Job {job_id}] Generating FishEncoder embeddings from {len(cropped_frames)} crops")
-        # extract_prototype returns a single (512,) L2-normalised vector
-        # (internally averages per-frame embeddings with optional flip TTA)
-        embedding_vector = embedding_service.extract_prototype(cropped_frames)
-        logger.info(f"[Job {job_id}] Embedding shape: {embedding_vector.shape} (FishEncoder 512-d)")
+        # --- Step 10: Tracking + Quality assessment ---
+        _emit_progress(job_id, "analyzing_quality", 75, "Assessing capture quality and tracking")
 
-        # --- Step 11: Run matching ---
-        logger.info(f"[Job {job_id}] Running matching against known fish")
-        match_result = matching.find_match(
-            embedding=embedding_vector,
-            species_slug=species_slug,
-            area_code=job_doc.get("area_code"),
-            threshold=settings.reid_similarity_threshold,
-            latitude=job_doc.get("latitude"),
-            longitude=job_doc.get("longitude"),
-            radius_km=settings.nearby_area_radius_km,
+        # Build per-frame detection list for tracking
+        frame_detections_for_tracking: list[list[dict]] = []
+        detection_dicts_for_quality: list[dict] = []
+
+        for d_frame, d_det, d_conf in dataset_frame_detections:
+            bbox = _get_detection_bbox(d_det)
+            if bbox and len(bbox) >= 4:
+                det_dict = {
+                    "bbox": [float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])],
+                    "confidence": float(d_conf),
+                    "frame_height": d_frame.shape[0],
+                    "frame_width": d_frame.shape[1],
+                }
+                frame_detections_for_tracking.append([det_dict])
+                detection_dicts_for_quality.append(det_dict)
+            else:
+                frame_detections_for_tracking.append([])
+
+        # Run tracking to verify single fish
+        tracking_result = validate_single_fish(frame_detections_for_tracking)
+        track_consistent = tracking_result.is_single_fish
+        multiple_fish_detected = tracking_result.multiple_fish_detected
+
+        # Assess capture quality
+        quality_result = evaluate_capture(
+            cropped_frames=cropped_frames,
+            detections=detection_dicts_for_quality[:len(cropped_frames)],
         )
-
-        matched_fish_id = match_result["fish_id"]
-        match_confidence = match_result["score"]
-        top2_score = match_result["top2_score"]
-        match_margin = match_result["margin"]
-        candidates_evaluated = match_result["candidates_evaluated"]
-        decision_context = match_result["decision_context"]
-
-        is_new_fish = matched_fish_id is None
+        quality_score = quality_result.overall_score
 
         logger.info(
-            f"[Job {job_id}] Match result: "
-            f"{'NEW FISH' if is_new_fish else f'matched {matched_fish_id}'} "
-            f"(confidence: {match_confidence:.3f})"
+            f"[Job {job_id}] Tracking: consistent={track_consistent}, "
+            f"multiple_fish={multiple_fish_detected}. "
+            f"Quality: score={quality_score:.3f}"
+        )
+
+        # --- Step 11: Generate per-frame embedding matrix ---
+        _emit_progress(job_id, "matching_individual", 85, "Generating FishEncoder embeddings")
+        logger.info(f"[Job {job_id}] Generating per-frame embeddings from {len(cropped_frames)} crops")
+
+        # extract_embedding_matrix returns (N, 512) L2-normalised matrix
+        query_embeddings = embedding_service.extract_embedding_matrix(cropped_frames)
+        logger.info(f"[Job {job_id}] Embedding matrix shape: {query_embeddings.shape}")
+
+        # --- Step 12: Run unified IdentificationPipeline ---
+        logger.info(f"[Job {job_id}] Running unified IdentificationPipeline")
+        pipeline = get_identification_pipeline()
+
+        pipeline_metadata = CaptureMetadata(
+            species_slug=species_slug,
+            area_code=job_doc.get("area_code"),
+            latitude=job_doc.get("latitude"),
+            longitude=job_doc.get("longitude"),
+            gps_accuracy_m=job_doc.get("gps_accuracy_m"),
+            gps_timestamp=job_doc.get("gps_timestamp"),
+            gps_is_mocked=bool(job_doc.get("gps_is_mocked")),
+            gps_source=job_doc.get("gps_source", "current"),
+            area_selection_source=job_doc.get("area_selection_source", "user_selected"),
+        )
+
+        pipeline_result = pipeline.run(
+            query_embeddings=query_embeddings,
+            metadata=pipeline_metadata,
+            quality_score=quality_score,
+            valid_crop_count=len(cropped_frames),
+            track_consistent=track_consistent,
+            multiple_fish_detected=multiple_fish_detected,
+        )
+
+        # Extract decision from pipeline
+        pipeline_decision = pipeline_result.decision  # auto_match, new_fish, needs_manual_review, repeat_capture
+        matched_fish_id = pipeline_result.fish_id  # Only set for auto_match
+        proposed_fish_id = pipeline_result.proposed_fish_id  # Set for needs_manual_review
+
+        # Extract scoring details
+        scoring = pipeline_result.scoring
+        if scoring:
+            match_confidence = scoring.top1_score
+            top2_score = scoring.top2_score
+            match_margin = scoring.margin
+            candidates_evaluated = scoring.candidates_evaluated
+        else:
+            match_confidence = 0.0
+            top2_score = 0.0
+            match_margin = 0.0
+            candidates_evaluated = 0
+
+        decision_context = {
+            "decision": pipeline_decision,
+            "reasons": pipeline_result.reasons,
+            "model_version": pipeline_result.model_version,
+            "cross_area": pipeline_result.cross_area,
+            "minimum_distance_m": pipeline_result.minimum_distance_m,
+            "quality_score": quality_score,
+            "track_consistent": track_consistent,
+            "multiple_fish_detected": multiple_fish_detected,
+        }
+
+        is_new_fish = pipeline_decision == "new_fish"
+
+        logger.info(
+            f"[Job {job_id}] Pipeline decision: {pipeline_decision} "
+            f"(score={match_confidence:.3f}, margin={match_margin:.3f}, "
+            f"candidates={candidates_evaluated}, reasons={pipeline_result.reasons})"
         )
 
         # --- Step 12: Enter Critical DB Transaction (BEGIN IMMEDIATE) ---
@@ -741,22 +821,27 @@ def process_identification_job(
             previous_sighting_id = None
             total_sightings_before = 0
 
-            # --- DECISION LOGIC (Fase 1) ---
-            # Determine confidence band BEFORE creating any individual/sighting
+            # --- DECISION LOGIC (via unified pipeline) ---
+            # The pipeline has already made the decision: auto_match, new_fish,
+            # needs_manual_review, or repeat_capture
             min_margin = getattr(settings, "reid_min_margin", 0.05)
             min_agreement = getattr(settings, "reid_min_agreement", 0.75)
             detection_confidence = best_detection_confidence if best_detection else 0.0
 
-            if is_new_fish:
-                confidence_band = "new_fish"
-                linkage_decision = "new_fish"
-                requires_human_review = False
-            elif match_confidence >= 0.85 and match_margin >= min_margin:
+            if pipeline_decision == "auto_match":
                 confidence_band = "high"
                 linkage_decision = "auto_match"
                 requires_human_review = False
+            elif pipeline_decision == "new_fish":
+                confidence_band = "new_fish"
+                linkage_decision = "new_fish"
+                requires_human_review = False
+            elif pipeline_decision == "repeat_capture":
+                confidence_band = "repeat_capture"
+                linkage_decision = "repeat_capture"
+                requires_human_review = True
             else:
-                # AMBIGUOUS: Do NOT create sighting or modify individuals
+                # needs_manual_review (gray zone, GPS uncertain, multiple fish, etc.)
                 confidence_band = "gray_zone"
                 linkage_decision = "needs_manual_review"
                 requires_human_review = True
@@ -769,22 +854,26 @@ def process_identification_job(
 
                 linkage = {
                     "is_linked": False,
-                    "strategy": "fishencoder_512d_cosine",
+                    "strategy": "unified_pipeline_v1",
                     "threshold": settings.reid_similarity_threshold,
                     "matched_fish_id": None,
-                    "proposed_fish_id": match_result.get("fish_id"),
+                    "proposed_fish_id": proposed_fish_id,
                     "proposed_score": round(match_confidence, 4),
-                    "top2_fish_id": match_result.get("top2_fish_id"),
+                    "top2_fish_id": scoring.top2_fish_id if scoring else None,
                     "top2_score": round(top2_score, 4),
                     "margin": round(match_margin, 4),
                     "confidence_band": confidence_band,
                     "decision": linkage_decision,
                     "requires_human_review": True,
+                    "reasons": pipeline_result.reasons,
                     "area_code": area_code_clean,
                     "latitude": job_doc.get("latitude"),
                     "longitude": job_doc.get("longitude"),
                     "nearby_area_radius_km": settings.nearby_area_radius_km,
                     "candidates_evaluated": candidates_evaluated,
+                    "quality_score": quality_score,
+                    "track_consistent": track_consistent,
+                    "multiple_fish_detected": multiple_fish_detected,
                 }
 
                 # Update job status only — no sighting, no individual, no embedding
@@ -865,7 +954,7 @@ def process_identification_job(
 
             linkage = {
                 "is_linked": not is_new_fish,
-                "strategy": "fishencoder_512d_cosine",
+                "strategy": "unified_pipeline_v1",
                 "threshold": settings.reid_similarity_threshold,
                 "matched_fish_id": matched_fish_id,
                 "final_fish_id": fish_id,
@@ -876,6 +965,7 @@ def process_identification_job(
                 "confidence_band": confidence_band,
                 "decision": linkage_decision,
                 "requires_human_review": False,
+                "reasons": pipeline_result.reasons,
                 "total_sightings_before": total_sightings_before,
                 "total_sightings_after": total_sightings_after,
                 "same_species_required": True,
@@ -884,6 +974,10 @@ def process_identification_job(
                 "longitude": job_doc.get("longitude"),
                 "nearby_area_radius_km": settings.nearby_area_radius_km,
                 "candidates_evaluated": candidates_evaluated,
+                "quality_score": quality_score,
+                "track_consistent": track_consistent,
+                "multiple_fish_detected": multiple_fish_detected,
+                "model_version": pipeline_result.model_version,
             }
 
             # Build document schema exactly as requested
@@ -1107,7 +1201,9 @@ def process_identification_job(
                     (str(uuid.uuid4()), user_id, xp_earned, now_str)
                 )
 
-            # Store embedding
+            # Store embedding (averaged prototype for the embedding index)
+            embedding_vector = np.mean(query_embeddings, axis=0)
+            embedding_vector = embedding_vector / (np.linalg.norm(embedding_vector) + 1e-12)
             matching.store_embedding(
                 fish_id=fish_id,
                 embedding=embedding_vector,

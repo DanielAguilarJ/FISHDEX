@@ -589,7 +589,8 @@ def load_model_for_infer(
     # Verify the model produces valid embeddings before declaring readiness
     try:
         img_size = getattr(settings, 'reid_img_size', 128)
-        dummy_input = torch.randn(1, 3, img_size, img_size)
+        device = next(model.parameters()).device
+        dummy_input = torch.randn(1, 3, img_size, img_size, device=device)
         with torch.no_grad():
             test_output = model(dummy_input)
 

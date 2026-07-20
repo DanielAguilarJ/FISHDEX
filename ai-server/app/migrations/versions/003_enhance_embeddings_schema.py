@@ -53,8 +53,36 @@ def up(conn: sqlite3.Connection) -> None:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='fish_embeddings'"
         )
         if not cursor.fetchone():
-            # Table doesn't exist yet; skip gracefully — it will be created
-            # by the embedding service and this migration re-checked on next run.
+            # Table doesn't exist yet — create it now so columns and indexes
+            # are ready when the embedding service starts storing data.
+            emb_conn.execute("""
+                CREATE TABLE fish_embeddings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fish_id TEXT NOT NULL,
+                    sighting_id TEXT,
+                    species_slug TEXT NOT NULL,
+                    model_version TEXT NOT NULL,
+                    area_code TEXT,
+                    embedding BLOB NOT NULL,
+                    latitude REAL,
+                    longitude REAL,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    dimensions INTEGER,
+                    quality_score REAL,
+                    frame_index INTEGER,
+                    vector_type TEXT DEFAULT 'prototype',
+                    gps_accuracy_m REAL
+                )
+            """)
+            emb_conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_embeddings_species_model
+                ON fish_embeddings(species_slug, model_version)
+            """)
+            emb_conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_embeddings_fish_model
+                ON fish_embeddings(fish_id, model_version)
+            """)
+            emb_conn.commit()
             return
 
         for col_name, col_type in COLUMNS:

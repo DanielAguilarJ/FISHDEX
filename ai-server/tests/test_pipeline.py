@@ -237,7 +237,8 @@ class TestPipelineIntegration:
 
     @pytest.fixture
     def pipeline(self, tmp_path, monkeypatch):
-        """Create a pipeline with temp database."""
+        """Create a pipeline with temp database and calibration."""
+        import json
         from app.services.identification_pipeline import IdentificationPipeline
         
         db_path = str(tmp_path / "test_emb.sqlite")
@@ -245,11 +246,31 @@ class TestPipelineIntegration:
         monkeypatch.setattr("app.config.settings.reid_cache_name", "test_model_v1")
         monkeypatch.setattr("app.config.settings.nearby_area_radius_km", 5.0)
 
-        # Reset singleton
+        # Create a test calibration file so auto_match is not blocked
+        cal_path = tmp_path / "test_calibration.json"
+        cal_path.write_text(json.dumps({
+            "schema_version": "1",
+            "model_version": "test_model_v1",
+            "dataset_version": "test_eval",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "global": {
+                "review_threshold": 0.70,
+                "auto_match_threshold": 0.85,
+                "single_candidate_threshold": 0.88,
+                "min_margin": 0.05,
+                "min_agreement": 0.70,
+            },
+            "species": {},
+        }))
+        monkeypatch.setattr("app.config.settings.reid_calibration_path", str(cal_path))
+
+        # Reset singletons
         import app.services.identification_pipeline as pip_mod
         pip_mod._pipeline_instance = None
         import app.services.matching_service as ms_mod
         ms_mod._instance = None
+        import app.calibration as cal_mod
+        cal_mod._calibration_cache = None
 
         return IdentificationPipeline()
 
