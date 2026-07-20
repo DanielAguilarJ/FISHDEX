@@ -27,7 +27,12 @@ import numpy as np
 from app.config import settings
 from app.utils.geo import is_within_radius, gps_uncertainty_within_radius
 from app.utils.area_utils import normalize_area_code
-from app.services.identity_scoring_service import score_candidates, ScoringResult
+from app.services.identity_scoring_service import (
+    score_candidates,
+    ScoringResult,
+    SupportMetadata,
+    ReferenceEvidence,
+)
 from app.services.identity_decision_service import (
     decide_identity,
     DecisionContext,
@@ -69,6 +74,16 @@ class PipelineResult:
     reasons: list[str] = field(default_factory=list)
     error: Optional[str] = None
 
+    # Reference evidence fields (propagated from ScoringResult.reference)
+    reference_embedding_id: Optional[str] = None
+    reference_sighting_id: Optional[str] = None
+    reference_score: float = 0.0
+    reference_area_code: Optional[str] = None
+    reference_latitude: Optional[float] = None
+    reference_longitude: Optional[float] = None
+    reference_distance_m: Optional[float] = None
+    reference_created_at: Optional[str] = None
+
 
 class IdentificationPipeline:
     """
@@ -86,7 +101,14 @@ class IdentificationPipeline:
     def __init__(self):
         from app.services.matching_service import get_matching_service
         self._matching = get_matching_service()
-        self._radius_m = (settings.nearby_area_radius_km or 5.0) * 1000.0
+        self._auto_match_radius_m = (
+            getattr(settings, "reid_auto_match_radius_km", None)
+            or settings.nearby_area_radius_km
+            or 5.0
+        ) * 1000.0
+        self._review_search_radius_m = (
+            getattr(settings, "reid_review_search_radius_km", None) or 50.0
+        ) * 1000.0
         self._model_version = settings.reid_cache_name or "fishencoder_512_v1"
         # Check if calibration exists for this model version
         self._calibration = load_calibration(self._model_version)
@@ -145,7 +167,7 @@ class IdentificationPipeline:
         if not metadata.species_slug:
             raise ValueError("species_slug is required")
 
-        # --- Step 2: Retrieve geo-species candidates ---
+        # --- Step 2: Retrieve geo-species candidates (two-level search) ---
         candidates = self._retrieve_candidates(metadata)
 
         if not candidates:
@@ -155,25 +177,42 @@ class IdentificationPipeline:
                 track_consistent, multiple_fish_detected,
             )
 
-        # --- Step 3: Build identity gallery ---
-        gallery = self._build_gallery(candidates)
+        # --- Step 3: Build identity gallery with metadata ---
+        gallery, gallery_metadata = self._build_gallery(candidates)
 
         # --- Step 4: Score candidates ---
         scoring = score_candidates(
             query_embeddings=query_embeddings,
             candidate_gallery=gallery,
+            candidate_support_metadata=gallery_metadata,
             max_support_per_identity=getattr(settings, "reid_max_support_per_identity", 8),
         )
 
         # --- Step 5: Compute distance context ---
         min_distance_m = None
         cross_area = False
+        outside_auto_match_radius = False
+
         if scoring.top1_fish_id and scoring.top1_fish_id in candidates:
             candidate_info = candidates[scoring.top1_fish_id]
             min_distance_m = candidate_info.get("min_distance_m")
-            matched_area = candidate_info.get("area_code", "XX")
+
+            # Use reference's area for cross_area if available
+            if scoring.reference and scoring.reference.area_code:
+                matched_area = normalize_area_code(scoring.reference.area_code)
+            else:
+                matched_area = candidate_info.get("area_code", "XX")
+
             query_area = normalize_area_code(metadata.area_code)
-            cross_area = (matched_area != query_area) and (query_area != "XX") and (matched_area != "XX")
+            cross_area = (
+                (matched_area != query_area)
+                and (query_area != "XX")
+                and (matched_area != "XX")
+            )
+
+            # Check if outside auto-match radius but inside review radius
+            if min_distance_m is not None and min_distance_m > self._auto_match_radius_m:
+                outside_auto_match_radius = True
 
         # --- Step 6: Build decision context ---
         gps_status = self._evaluate_gps_uncertainty(metadata, min_distance_m)
@@ -205,30 +244,62 @@ class IdentificationPipeline:
             top1_fish_id=scoring.top1_fish_id,
         )
 
+        # Force to manual review if high similarity but outside auto-match radius
+        final_decision = decision.decision
+        final_reasons = list(decision.reasons)
+
+        if (
+            outside_auto_match_radius
+            and final_decision == "auto_match"
+        ):
+            final_decision = "needs_manual_review"
+            final_reasons.append(
+                f"high_similarity_outside_auto_match_radius "
+                f"(distance={min_distance_m:.0f}m > {self._auto_match_radius_m:.0f}m)"
+            )
+
+        # --- Build result with reference evidence ---
+        ref = scoring.reference
+
         return PipelineResult(
-            decision=decision.decision,
-            fish_id=scoring.top1_fish_id if decision.decision == "auto_match" else None,
-            proposed_fish_id=scoring.top1_fish_id if decision.decision == "needs_manual_review" else None,
+            decision=final_decision,
+            fish_id=scoring.top1_fish_id if final_decision == "auto_match" else None,
+            proposed_fish_id=scoring.top1_fish_id if final_decision == "needs_manual_review" else None,
             scoring=scoring,
             identity_decision=decision,
             candidates_evaluated=scoring.candidates_evaluated,
             minimum_distance_m=min_distance_m,
             cross_area=cross_area,
             model_version=self._model_version,
-            reasons=decision.reasons,
+            reasons=final_reasons,
+            # Reference evidence
+            reference_embedding_id=ref.embedding_id if ref else None,
+            reference_sighting_id=ref.sighting_id if ref else None,
+            reference_score=ref.score if ref else 0.0,
+            reference_area_code=ref.area_code if ref else None,
+            reference_latitude=ref.latitude if ref else None,
+            reference_longitude=ref.longitude if ref else None,
+            reference_distance_m=ref.distance_m if ref else None,
+            reference_created_at=ref.created_at if ref else None,
         )
 
     def _retrieve_candidates(self, metadata: CaptureMetadata) -> dict:
         """
         Retrieve eligible candidate embeddings from the database.
 
-        Filters:
-        - Same species_slug
-        - Compatible model_version
-        - GPS distance <= radius (mandatory)
+        Two-level geographic search:
+        - Within auto_match_radius: candidates eligible for auto_match
+        - Within review_search_radius: candidates eligible for manual review
+          (marked with "review_only" flag)
 
         Returns:
-            dict[fish_id -> {"embeddings": list[np.ndarray], "min_distance_m": float, "area_code": str}]
+            dict[fish_id -> {
+                "embeddings": list[np.ndarray],
+                "supports": list[SupportMetadata],
+                "min_distance_m": float,
+                "area_code": str,
+                "review_only": bool,
+            }]
         """
         if metadata.latitude is None or metadata.longitude is None:
             logger.warning("No GPS available — cannot retrieve candidates")
@@ -237,7 +308,8 @@ class IdentificationPipeline:
         with self._matching._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT fish_id, embedding, area_code, latitude, longitude
+                SELECT id, fish_id, sighting_id, embedding, area_code,
+                       latitude, longitude, created_at, model_version
                 FROM fish_embeddings
                 WHERE species_slug = ? AND model_version = ?
                 """,
@@ -247,47 +319,85 @@ class IdentificationPipeline:
         if not rows:
             return {}
 
-        # Group by fish_id, filter by GPS
+        # Group by fish_id, filter by GPS (two-level)
         candidates: dict = {}
 
-        for fish_id, emb_blob, stored_area, stored_lat, stored_lng in rows:
-            within, distance_m = is_within_radius(
+        for row in rows:
+            emb_id = row[0]
+            fish_id = row[1]
+            sighting_id = row[2]
+            emb_blob = row[3]
+            stored_area = row[4]
+            stored_lat = row[5]
+            stored_lng = row[6]
+            created_at = row[7]
+            # row[8] = model_version (already filtered in query)
+
+            within_review, distance_m = is_within_radius(
                 metadata.latitude, metadata.longitude,
                 stored_lat, stored_lng,
-                radius_m=self._radius_m,
+                radius_m=self._review_search_radius_m,
             )
-            if not within:
+            if not within_review:
                 continue
 
+            # Determine if within auto-match radius
+            within_auto = (
+                distance_m is not None and distance_m <= self._auto_match_radius_m
+            )
+
             emb = np.frombuffer(emb_blob, dtype=np.float32)
+            support_meta = SupportMetadata(
+                embedding_id=emb_id if isinstance(emb_id, str) else str(emb_id),
+                sighting_id=sighting_id,
+                area_code=normalize_area_code(stored_area),
+                latitude=stored_lat,
+                longitude=stored_lng,
+                distance_m=distance_m,
+                created_at=created_at,
+            )
 
             if fish_id not in candidates:
                 candidates[fish_id] = {
                     "embeddings": [],
+                    "supports": [],
                     "min_distance_m": distance_m or 0.0,
                     "area_code": normalize_area_code(stored_area),
+                    "review_only": not within_auto,
                 }
 
             candidates[fish_id]["embeddings"].append(emb)
+            candidates[fish_id]["supports"].append(support_meta)
 
             if distance_m is not None and distance_m < candidates[fish_id]["min_distance_m"]:
                 candidates[fish_id]["min_distance_m"] = distance_m
 
+            # If any embedding is within auto radius, the fish is auto-eligible
+            if within_auto:
+                candidates[fish_id]["review_only"] = False
+
         return candidates
 
-    def _build_gallery(self, candidates: dict) -> dict[str, np.ndarray]:
+    def _build_gallery(
+        self, candidates: dict
+    ) -> tuple[dict[str, np.ndarray], dict[str, list[SupportMetadata]]]:
         """
         Convert raw candidate embeddings into numpy arrays suitable for scoring.
 
         Returns:
-            dict[fish_id -> np.ndarray of shape (S, D)]
+            tuple of:
+            - dict[fish_id -> np.ndarray of shape (S, D)]
+            - dict[fish_id -> list[SupportMetadata]] (aligned with embeddings)
         """
         gallery: dict[str, np.ndarray] = {}
+        gallery_metadata: dict[str, list[SupportMetadata]] = {}
         for fish_id, info in candidates.items():
             embs = info["embeddings"]
+            supports = info["supports"]
             if embs:
                 gallery[fish_id] = np.stack(embs)
-        return gallery
+                gallery_metadata[fish_id] = supports
+        return gallery, gallery_metadata
 
     def _evaluate_gps_uncertainty(
         self, metadata: CaptureMetadata, distance_m: Optional[float]
@@ -297,25 +407,20 @@ class IdentificationPipeline:
         
         If distance is well within the radius (< 80% of limit) and query has
         good accuracy, treat as "guaranteed_inside" even without historical accuracy.
-        This prevents every match from going to review just because old embeddings
-        lack accuracy metadata.
         """
         if distance_m is None:
             return "unknown"
 
-        # If well within radius with reasonable query accuracy, don't penalize
-        # for missing historical accuracy (which is expected until Phase 5 Flutter fix)
         if metadata.gps_accuracy_m is not None:
-            # Conservative: if distance + query_accuracy < 80% of radius, call it guaranteed
-            margin_threshold = self._radius_m * 0.8
+            margin_threshold = self._auto_match_radius_m * 0.8
             if distance_m + metadata.gps_accuracy_m < margin_threshold:
                 return "guaranteed_inside"
 
         return gps_uncertainty_within_radius(
             distance_m=distance_m,
             query_accuracy_m=metadata.gps_accuracy_m,
-            historical_accuracy_m=None,  # Not available per-embedding yet
-            radius_m=self._radius_m,
+            historical_accuracy_m=None,
+            radius_m=self._auto_match_radius_m,
         )
 
     def _decide_no_candidates(

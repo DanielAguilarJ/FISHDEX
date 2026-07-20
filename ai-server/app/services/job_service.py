@@ -239,6 +239,92 @@ def _calculate_xp(species_info: Optional[dict], is_new_fish: bool) -> int:
 
     return total_xp
 
+
+def _build_similarity_reference(
+    pipeline_result,
+    scoring,
+    cursor,
+    pipeline_decision: str,
+) -> Optional[dict]:
+    """
+    Build the similarity_reference object from pipeline result.
+
+    This identifies the exact historical capture whose embedding produced
+    the highest similarity with the current query.
+
+    Returns None if no scoring or no candidates were evaluated.
+    """
+    if not scoring or not scoring.top1_fish_id:
+        return None
+
+    ref = pipeline_result.reference_sighting_id
+    ref_embedding_id = pipeline_result.reference_embedding_id
+    ref_score = pipeline_result.reference_score
+
+    # Determine status based on decision
+    if pipeline_decision == "auto_match":
+        status = "accepted"
+    elif pipeline_decision == "needs_manual_review":
+        status = "needs_manual_review"
+    elif pipeline_decision == "new_fish":
+        status = "rejected"
+    else:
+        status = "rejected"
+
+    # Load reference sighting details if available
+    reference_row = None
+    if ref:
+        cursor.execute(
+            """SELECT id, job_id, fish_id, catch_number, area_code, area_name,
+                      captured_at, created_at, preview_filename, artifact_dir, size_cm
+               FROM fish_sightings WHERE id = ? LIMIT 1""",
+            (ref,),
+        )
+        row = cursor.fetchone()
+        if row:
+            reference_row = dict(row)
+            # Validate consistency
+            if reference_row.get("fish_id") != scoring.top1_fish_id:
+                logger.warning(
+                    "Reference sighting fish_id mismatch: %s != %s",
+                    reference_row.get("fish_id"),
+                    scoring.top1_fish_id,
+                )
+                # Still include but note the inconsistency
+                pass
+
+    similarity_reference = {
+        "status": status,
+        "candidate_fish_id": scoring.top1_fish_id,
+        "reference_sighting_id": ref,
+        "reference_embedding_id": ref_embedding_id,
+        "reference_job_id": reference_row["job_id"] if reference_row else None,
+        "reference_catch_number": reference_row["catch_number"] if reference_row else None,
+        "identity_score": round(scoring.top1_score, 4),
+        "reference_score": round(ref_score, 4) if ref_score else None,
+        "threshold": settings.reid_similarity_threshold,
+        "margin": round(scoring.margin, 4),
+        "reference_area_code": pipeline_result.reference_area_code,
+        "reference_area_name": reference_row["area_name"] if reference_row else None,
+        "reference_captured_at": reference_row["captured_at"] if reference_row else None,
+        "reference_preview_url": (
+            f"/storage/{reference_row['preview_filename']}"
+            if reference_row and reference_row.get("preview_filename")
+            else None
+        ),
+        "distance_m": (
+            round(pipeline_result.reference_distance_m, 1)
+            if pipeline_result.reference_distance_m is not None
+            else None
+        ),
+        "cross_area": pipeline_result.cross_area,
+        "model_version": pipeline_result.model_version,
+        "selection_method": "highest_median_query_similarity_within_winning_identity",
+    }
+
+    return similarity_reference
+
+
 def process_identification_job(
     job_id: str,
     force: bool = False,
@@ -901,15 +987,31 @@ def process_identification_job(
                     "multiple_fish_detected": multiple_fish_detected,
                 }
 
+                # Build similarity reference for the review case
+                similarity_reference = _build_similarity_reference(
+                    pipeline_result, scoring, cursor, pipeline_decision,
+                )
+                linkage["similarity_reference"] = similarity_reference
+
                 # Update job status only — no sighting, no individual, no embedding
                 cursor.execute(
                     """UPDATE identification_jobs 
-                       SET status = ?, updated_at = ?, result_json = ?
+                       SET status = ?, updated_at = ?, result_json = ?,
+                           match_reference_fish_id = ?,
+                           match_reference_sighting_id = ?,
+                           match_reference_embedding_id = ?,
+                           match_reference_score = ?,
+                           match_cross_area = ?
                        WHERE id = ?""",
                     (
                         "needs_manual_review",
                         now_str,
                         json.dumps({"linkage": linkage, "species_slug": species_slug}, ensure_ascii=False),
+                        scoring.top1_fish_id if scoring else None,
+                        pipeline_result.reference_sighting_id,
+                        pipeline_result.reference_embedding_id,
+                        round(pipeline_result.reference_score, 4) if pipeline_result.reference_score else None,
+                        1 if pipeline_result.cross_area else 0,
                         job_id,
                     ),
                 )
@@ -1005,9 +1107,15 @@ def process_identification_job(
                 "model_version": pipeline_result.model_version,
             }
 
+            # Build similarity reference for the definitive case
+            similarity_reference = _build_similarity_reference(
+                pipeline_result, scoring, cursor, pipeline_decision,
+            )
+            linkage["similarity_reference"] = similarity_reference
+
             # Build document schema exactly as requested
             document = {
-                "schema_version": "1.0",
+                "schema_version": "1.1",
                 "job": {
                     "job_id": job_id,
                     "status": final_status,
@@ -1124,8 +1232,10 @@ def process_identification_job(
                     artifact_dir, document_filename, preview_filename, annotated_preview_filename,
                     detection_confidence, classification_confidence, match_confidence, catch_number,
                     media_type, video_filename, rarity,
-                    previous_sighting_id, total_sightings_before, total_sightings_after, linkage_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    previous_sighting_id, total_sightings_before, total_sightings_after, linkage_json,
+                    match_reference_fish_id, match_reference_sighting_id, match_reference_embedding_id,
+                    match_reference_score, match_cross_area
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     sighting_id, user_id, fish_id, job_id, species_slug,
                     species_info.get("english_name") if species_info else None,
@@ -1156,7 +1266,12 @@ def process_identification_job(
                     previous_sighting_id,
                     total_sightings_before,
                     total_sightings_after,
-                    json.dumps(linkage, ensure_ascii=False)
+                    json.dumps(linkage, ensure_ascii=False),
+                    scoring.top1_fish_id if scoring else None,
+                    pipeline_result.reference_sighting_id,
+                    pipeline_result.reference_embedding_id,
+                    round(pipeline_result.reference_score, 4) if pipeline_result.reference_score else None,
+                    1 if pipeline_result.cross_area else 0,
                 )
             )
 
@@ -1247,7 +1362,9 @@ def process_identification_job(
                        artifact_dir = ?, document_filename = ?, preview_filename = ?, annotated_preview_filename = ?,
                        video_filename = ?, rarity = ?, detection_confidence = ?, classification_confidence = ?,
                        match_confidence = ?, catch_number = ?, linked_fish_id = ?, previous_sighting_id = ?,
-                       total_sightings_before = ?, total_sightings_after = ?, linkage_json = ?
+                       total_sightings_before = ?, total_sightings_after = ?, linkage_json = ?,
+                       match_reference_fish_id = ?, match_reference_sighting_id = ?,
+                       match_reference_embedding_id = ?, match_reference_score = ?, match_cross_area = ?
                    WHERE id = ?""",
                 (
                     final_status, now_str, sighting_id, fish_id,
@@ -1267,6 +1384,11 @@ def process_identification_job(
                     total_sightings_before,
                     total_sightings_after,
                     json.dumps(linkage, ensure_ascii=False),
+                    scoring.top1_fish_id if scoring else None,
+                    pipeline_result.reference_sighting_id,
+                    pipeline_result.reference_embedding_id,
+                    round(pipeline_result.reference_score, 4) if pipeline_result.reference_score else None,
+                    1 if pipeline_result.cross_area else 0,
                     job_id
                 )
             )

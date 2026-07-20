@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     detector_confidence_threshold: float = 0.30
     similarity_threshold: float = 0.70
     nearby_area_radius_km: float = 5.0
+    # Two-level geographic search for ReID
+    reid_auto_match_radius_km: float = 5.0   # Within this: auto_match eligible
+    reid_review_search_radius_km: float = 50.0  # Within this: review-only candidates
 
     # ── Detector output layout ───────────────────────────────────────
     # Ultralytics YOLOv8 OBB nc=1: [cx, cy, w, h, conf, angle]  → "xywh_conf_angle"

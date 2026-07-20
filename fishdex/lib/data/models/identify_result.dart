@@ -34,6 +34,8 @@ class IdentifyResult {
   final int? winningVotes;
   final int? roiImagesUsed;
   final List<FishHistoryEntry> fullHistory;
+  // Similarity reference evidence (new in v4)
+  final SimilarityReference? similarityReference;
 
   const IdentifyResult({
     required this.success,
@@ -67,9 +69,17 @@ class IdentifyResult {
     this.winningVotes,
     this.roiImagesUsed,
     this.fullHistory = const [],
+    this.similarityReference,
   });
 
   factory IdentifyResult.fromJson(Map<String, dynamic> json) {
+    // Parse similarity_reference from either top-level or nested in linkage
+    final linkage = json['linkage'] is Map
+        ? Map<String, dynamic>.from(json['linkage'] as Map)
+        : <String, dynamic>{};
+    final referenceJson = json['similarity_reference'] ??
+        linkage['similarity_reference'];
+
     return IdentifyResult(
       success: json['success'] as bool,
       fishId: json['fish_id'] as String,
@@ -112,6 +122,10 @@ class IdentifyResult {
                   ))
               .toList() ??
           const [],
+      similarityReference: referenceJson is Map
+          ? SimilarityReference.fromJson(
+              Map<String, dynamic>.from(referenceJson))
+          : null,
     );
   }
 
@@ -147,6 +161,7 @@ class IdentifyResult {
         'winning_votes': winningVotes,
         'roi_images_used': roiImagesUsed,
         'full_history': fullHistory.map((e) => e.toJson()).toList(),
+        'similarity_reference': similarityReference?.toJson(),
       };
 }
 
@@ -234,5 +249,94 @@ class FishHistoryEntry {
         'size_cm': sizeCm,
         'catch_number': catchNumber,
         'area_code': areaCode,
+      };
+}
+
+/// Visual evidence traceability: the exact historical capture whose
+/// embedding produced the highest similarity with the current query.
+class SimilarityReference {
+  /// "accepted", "rejected", "needs_manual_review", "legacy_not_available"
+  final String status;
+  final String? candidateFishId;
+  final String? referenceSightingId;
+  final String? referenceEmbeddingId;
+  final String? referenceJobId;
+  final int? referenceCatchNumber;
+  final double identityScore;
+  final double referenceScore;
+  final double? threshold;
+  final double? margin;
+  final String? referenceAreaCode;
+  final String? referenceAreaName;
+  final String? referenceCapturedAt;
+  final String? referencePreviewUrl;
+  final double? distanceM;
+  final bool crossArea;
+  final String? modelVersion;
+  final String? selectionMethod;
+
+  const SimilarityReference({
+    required this.status,
+    this.candidateFishId,
+    this.referenceSightingId,
+    this.referenceEmbeddingId,
+    this.referenceJobId,
+    this.referenceCatchNumber,
+    this.identityScore = 0.0,
+    this.referenceScore = 0.0,
+    this.threshold,
+    this.margin,
+    this.referenceAreaCode,
+    this.referenceAreaName,
+    this.referenceCapturedAt,
+    this.referencePreviewUrl,
+    this.distanceM,
+    this.crossArea = false,
+    this.modelVersion,
+    this.selectionMethod,
+  });
+
+  factory SimilarityReference.fromJson(Map<String, dynamic> json) {
+    return SimilarityReference(
+      status: json['status'] as String? ?? 'legacy_not_available',
+      candidateFishId: json['candidate_fish_id'] as String?,
+      referenceSightingId: json['reference_sighting_id'] as String?,
+      referenceEmbeddingId: json['reference_embedding_id'] as String?,
+      referenceJobId: json['reference_job_id'] as String?,
+      referenceCatchNumber: json['reference_catch_number'] as int?,
+      identityScore: (json['identity_score'] as num?)?.toDouble() ?? 0.0,
+      referenceScore: (json['reference_score'] as num?)?.toDouble() ?? 0.0,
+      threshold: (json['threshold'] as num?)?.toDouble(),
+      margin: (json['margin'] as num?)?.toDouble(),
+      referenceAreaCode: json['reference_area_code'] as String?,
+      referenceAreaName: json['reference_area_name'] as String?,
+      referenceCapturedAt: json['reference_captured_at'] as String?,
+      referencePreviewUrl: json['reference_preview_url'] as String?,
+      distanceM: (json['distance_m'] as num?)?.toDouble(),
+      crossArea: json['cross_area'] as bool? ?? false,
+      modelVersion: json['model_version'] as String?,
+      selectionMethod: json['selection_method'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'status': status,
+        'candidate_fish_id': candidateFishId,
+        'reference_sighting_id': referenceSightingId,
+        'reference_embedding_id': referenceEmbeddingId,
+        'reference_job_id': referenceJobId,
+        'reference_catch_number': referenceCatchNumber,
+        'identity_score': identityScore,
+        'reference_score': referenceScore,
+        'threshold': threshold,
+        'margin': margin,
+        'reference_area_code': referenceAreaCode,
+        'reference_area_name': referenceAreaName,
+        'reference_captured_at': referenceCapturedAt,
+        'reference_preview_url': referencePreviewUrl,
+        'distance_m': distanceM,
+        'cross_area': crossArea,
+        'model_version': modelVersion,
+        'selection_method': selectionMethod,
       };
 }

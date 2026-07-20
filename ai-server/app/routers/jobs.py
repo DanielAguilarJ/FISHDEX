@@ -16,6 +16,40 @@ from app.services.czech_area_service import validate_area_code
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
+
+def _get_user_role(cursor, user_id: Optional[str]) -> str:
+    """Get user role from database. Never trust client-submitted role."""
+    if not user_id:
+        return "fisherman"
+    cursor.execute("SELECT role FROM users WHERE id = ? LIMIT 1", (user_id,))
+    row = cursor.fetchone()
+    if row:
+        return row["role"] or "fisherman"
+    return "fisherman"
+
+
+def _strip_sensitive_for_fisherman(data: dict) -> dict:
+    """Remove historical GPS coordinates and user IDs from response for fisherman role."""
+    sensitive_keys = [
+        "location_lat", "location_lng", "latitude", "longitude",
+        "user_id", "first_seen_by", "last_seen_by",
+    ]
+    # Strip from previous_catch and matched_reference_catch
+    for catch_key in ("previous_catch", "matched_reference_catch"):
+        catch = data.get(catch_key)
+        if isinstance(catch, dict):
+            for k in sensitive_keys:
+                catch.pop(k, None)
+
+    # Strip GPS from similarity_reference
+    sim_ref = data.get("similarity_reference")
+    if isinstance(sim_ref, dict):
+        sim_ref.pop("reference_area_code", None)
+        sim_ref.pop("reference_area_name", None)
+        sim_ref.pop("distance_m", None)
+        # Keep reference_score and identity_score — those are safe
+    return data
+
 def _validate_auth(
     x_fishdex_client_secret: Optional[str] = None,
     authorization: Optional[str] = None,
@@ -293,7 +327,29 @@ async def get_job_result(
         conn.close()
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    result_sighting_id = job_row["result_sighting_id"]
+    job_data = dict(job_row)
+
+    # Handle needs_manual_review: return linkage from result_json
+    if job_data.get("status") == "needs_manual_review":
+        import json as _json
+        result_json_str = job_data.get("result_json") or job_data.get("linkage_json")
+        linkage = {}
+        if result_json_str:
+            try:
+                parsed = _json.loads(result_json_str)
+                linkage = parsed.get("linkage", parsed) if isinstance(parsed, dict) else {}
+            except (ValueError, TypeError):
+                pass
+
+        conn.close()
+        return {
+            "status": "needs_manual_review",
+            "job_id": job_id,
+            "similarity_reference": linkage.get("similarity_reference"),
+            "linkage": linkage,
+        }
+
+    result_sighting_id = job_data.get("result_sighting_id")
     if not result_sighting_id:
         conn.close()
         raise HTTPException(status_code=404, detail="Job result sighting ID is missing")
@@ -307,8 +363,21 @@ async def get_job_result(
 
     sighting_data = dict(sighting_row)
     previous_catch = None
+    matched_reference_catch = None
 
-    # Retrieve previous sighting if linked
+    # Parse linkage_json
+    import json as _json
+    linkage = {}
+    if sighting_data.get("linkage_json"):
+        try:
+            linkage = _json.loads(sighting_data["linkage_json"])
+        except (ValueError, TypeError):
+            linkage = {}
+
+    sighting_data["linkage"] = linkage
+    sighting_data["similarity_reference"] = linkage.get("similarity_reference")
+
+    # Retrieve previous sighting (chronological) if linked
     prev_id = sighting_data.get("previous_sighting_id")
     if prev_id:
         cursor.execute("SELECT * FROM fish_sightings WHERE id = ?", (prev_id,))
@@ -316,9 +385,27 @@ async def get_job_result(
         if prev_row:
             previous_catch = dict(prev_row)
 
+    # Retrieve matched reference sighting (visual evidence) if different from previous
+    ref_id = sighting_data.get("match_reference_sighting_id")
+    if ref_id and ref_id != prev_id:
+        cursor.execute("SELECT * FROM fish_sightings WHERE id = ?", (ref_id,))
+        ref_row = cursor.fetchone()
+        if ref_row:
+            matched_reference_catch = dict(ref_row)
+
+    # Get user role from database (never from client)
+    user_id = sighting_data.get("user_id")
+    user_role = _get_user_role(cursor, user_id)
+
     conn.close()
 
     sighting_data["previous_catch"] = previous_catch
+    sighting_data["matched_reference_catch"] = matched_reference_catch
+
+    # Strip sensitive location data for fisherman role
+    if user_role == "fisherman":
+        sighting_data = _strip_sensitive_for_fisherman(sighting_data)
+
     return sighting_data
 
 

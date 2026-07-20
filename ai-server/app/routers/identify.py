@@ -37,6 +37,21 @@ from app.utils.video import (
 
 logger = logging.getLogger(__name__)
 
+# ──────────────────────────────────────────────────────────────────────────────
+# LEGACY ENDPOINT — this router implements the old /api/v1/identify flow which
+# uses inference.py, similarity_service.py, and storage_service.py.
+#
+# The CANONICAL identification flow is /api/v1/jobs/{id}/process which calls
+# IdentificationPipeline (identification_pipeline.py → identity_scoring_service.py
+# → identity_decision_service.py). That pipeline includes:
+# - similarity_reference traceability
+# - two-level geographic search
+# - re-match under BEGIN IMMEDIATE lock
+# - proper calibration gating
+#
+# This endpoint is kept for backward compatibility but should be migrated to
+# use the unified pipeline. Do NOT add new features here.
+# ──────────────────────────────────────────────────────────────────────────────
 router = APIRouter()
 
 # Rate limiter (uses the instance stored on app.state by main.py)
