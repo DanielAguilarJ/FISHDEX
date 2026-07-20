@@ -668,7 +668,7 @@ def process_identification_job(
 
         # --- Step 11: Run matching ---
         logger.info(f"[Job {job_id}] Running matching against known fish")
-        matched_fish_id, match_confidence = matching.find_match(
+        match_result = matching.find_match(
             embedding=embedding_vector,
             species_slug=species_slug,
             area_code=job_doc.get("area_code"),
@@ -677,6 +677,13 @@ def process_identification_job(
             longitude=job_doc.get("longitude"),
             radius_km=settings.nearby_area_radius_km,
         )
+
+        matched_fish_id = match_result["fish_id"]
+        match_confidence = match_result["score"]
+        top2_score = match_result["top2_score"]
+        match_margin = match_result["margin"]
+        candidates_evaluated = match_result["candidates_evaluated"]
+        decision_context = match_result["decision_context"]
 
         is_new_fish = matched_fish_id is None
 
@@ -734,6 +741,91 @@ def process_identification_job(
             previous_sighting_id = None
             total_sightings_before = 0
 
+            # --- DECISION LOGIC (Fase 1) ---
+            # Determine confidence band BEFORE creating any individual/sighting
+            min_margin = getattr(settings, "reid_min_margin", 0.05)
+            min_agreement = getattr(settings, "reid_min_agreement", 0.75)
+            detection_confidence = best_detection_confidence if best_detection else 0.0
+
+            if is_new_fish:
+                confidence_band = "new_fish"
+                linkage_decision = "new_fish"
+                requires_human_review = False
+            elif match_confidence >= 0.85 and match_margin >= min_margin:
+                confidence_band = "high"
+                linkage_decision = "auto_match"
+                requires_human_review = False
+            else:
+                # AMBIGUOUS: Do NOT create sighting or modify individuals
+                confidence_band = "gray_zone"
+                linkage_decision = "needs_manual_review"
+                requires_human_review = True
+
+            if requires_human_review:
+                # --- AMBIGUOUS PATH: Mark job as needs_manual_review ---
+                # Do NOT create fish individual, sighting, or store embedding
+                final_status = "needs_manual_review"
+                xp_earned = 0
+
+                linkage = {
+                    "is_linked": False,
+                    "strategy": "fishencoder_512d_cosine",
+                    "threshold": settings.reid_similarity_threshold,
+                    "matched_fish_id": None,
+                    "proposed_fish_id": match_result.get("fish_id"),
+                    "proposed_score": round(match_confidence, 4),
+                    "top2_fish_id": match_result.get("top2_fish_id"),
+                    "top2_score": round(top2_score, 4),
+                    "margin": round(match_margin, 4),
+                    "confidence_band": confidence_band,
+                    "decision": linkage_decision,
+                    "requires_human_review": True,
+                    "area_code": area_code_clean,
+                    "latitude": job_doc.get("latitude"),
+                    "longitude": job_doc.get("longitude"),
+                    "nearby_area_radius_km": settings.nearby_area_radius_km,
+                    "candidates_evaluated": candidates_evaluated,
+                }
+
+                # Update job status only — no sighting, no individual, no embedding
+                cursor.execute(
+                    """UPDATE identification_jobs 
+                       SET status = ?, updated_at = ?, result_json = ?
+                       WHERE id = ?""",
+                    (
+                        "needs_manual_review",
+                        now_str,
+                        json.dumps({"linkage": linkage, "species_slug": species_slug}, ensure_ascii=False),
+                        job_id,
+                    ),
+                )
+                conn.commit()
+
+                logger.info(
+                    f"[Job {job_id}] AMBIGUOUS result (score={match_confidence:.4f}, "
+                    f"margin={match_margin:.4f}) — marked needs_manual_review. "
+                    f"No individual or sighting created."
+                )
+
+                _emit_progress(job_id, "needs_manual_review", 100, "Requires human review")
+
+                return {
+                    "status": "needs_manual_review",
+                    "job_id": job_id,
+                    "fish_id": None,
+                    "sighting_id": None,
+                    "species_slug": species_slug,
+                    "species_english": species_info.get("english_name") if species_info else None,
+                    "confidence": round(match_confidence, 4),
+                    "is_new_fish": False,
+                    "xp_earned": 0,
+                    "detection_confidence": round(detection_confidence, 4),
+                    "match_confidence": round(match_confidence, 4),
+                    "requires_human_review": True,
+                    "linkage": linkage,
+                }
+
+            # --- DEFINITIVE PATH: auto_match or new_fish ---
             if is_new_fish:
                 fish_id = _generate_fish_id(cursor, area_code_clean, species_slug)
                 catch_number = 1
@@ -761,7 +853,6 @@ def process_identification_job(
             total_sightings_after = catch_number
 
             # Determine confidence values
-            detection_confidence = best_detection_confidence if best_detection else 0.0
             overall_confidence = (
                 (detection_confidence + match_confidence) / 2.0
                 if not is_new_fish
@@ -772,11 +863,6 @@ def process_identification_job(
 
             xp_earned = _calculate_xp(species_info, is_new_fish)
 
-            # Build linkage structure and gray zone indicators
-            confidence_band = "new_fish" if is_new_fish else ("high" if match_confidence >= 0.85 else "gray_zone")
-            linkage_decision = "new_fish" if is_new_fish else ("auto_match" if match_confidence >= 0.85 else "auto_match_with_warning")
-            requires_human_review = bool(not is_new_fish and match_confidence < 0.85)
-
             linkage = {
                 "is_linked": not is_new_fish,
                 "strategy": "fishencoder_512d_cosine",
@@ -785,9 +871,11 @@ def process_identification_job(
                 "final_fish_id": fish_id,
                 "previous_sighting_id": previous_sighting_id,
                 "match_confidence": round(match_confidence, 4),
+                "top2_score": round(top2_score, 4),
+                "margin": round(match_margin, 4),
                 "confidence_band": confidence_band,
                 "decision": linkage_decision,
-                "requires_human_review": requires_human_review,
+                "requires_human_review": False,
                 "total_sightings_before": total_sightings_before,
                 "total_sightings_after": total_sightings_after,
                 "same_species_required": True,
@@ -795,6 +883,7 @@ def process_identification_job(
                 "latitude": job_doc.get("latitude"),
                 "longitude": job_doc.get("longitude"),
                 "nearby_area_radius_km": settings.nearby_area_radius_km,
+                "candidates_evaluated": candidates_evaluated,
             }
 
             # Build document schema exactly as requested

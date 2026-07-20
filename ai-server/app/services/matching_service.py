@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 _instance: Optional["MatchingService"] = None
 
 from app.utils.area_utils import normalize_area_code
+from app.utils.geo import is_within_radius
 import math
 
 SCHEMA_SQL = """
@@ -105,22 +106,52 @@ class MatchingService:
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
         radius_km: Optional[float] = None,
-    ) -> tuple[Optional[str], float]:
+        model_version: Optional[str] = None,
+    ) -> dict:
         """
         Find the best matching fish_id for a given embedding.
 
-        Searches all embeddings with the same species_slug and matches if:
-        1. Normalised area codes match exactly, OR
-        2. Sighting GPS coordinates lie within radius_km (default: 5.0) of a stored candidate.
+        STRICT RULES (Fase 1):
+        - Only same species_slug candidates are considered.
+        - Only embeddings with compatible model_version are compared.
+        - Eligibility requires GPS distance <= radius (default 5 km)
+          between the REAL GPS of the query and the REAL GPS of the historical sighting.
+        - same_area NEVER bypasses the radius check.
+        - If query GPS is missing, no auto-match is possible.
 
-        Returns:
-            (fish_id, score) if score >= threshold, else (None, best_score).
+        Returns a dict with:
+            fish_id: matched fish or None
+            score: best cosine similarity
+            top2_fish_id: second best candidate
+            top2_score: second best score
+            margin: top1 - top2
+            candidates_evaluated: number of eligible candidates
+            decision_context: metadata for decision engine
         """
-        if not species_slug:
-            return (None, 0.0)
+        empty_result = {
+            "fish_id": None,
+            "score": 0.0,
+            "top2_fish_id": None,
+            "top2_score": 0.0,
+            "margin": 0.0,
+            "candidates_evaluated": 0,
+            "decision_context": {},
+        }
 
+        if not species_slug:
+            return empty_result
+
+        # GPS is MANDATORY for matching — no GPS means no match possible
+        if latitude is None or longitude is None:
+            logger.warning(
+                "find_match called without query GPS — no candidates eligible"
+            )
+            empty_result["decision_context"] = {"reason": "missing_query_gps"}
+            return empty_result
+
+        radius_m = (radius_km or settings.nearby_area_radius_km or 5.0) * 1000.0
         query_area = normalize_area_code(area_code)
-        radius = radius_km or settings.nearby_area_radius_km or 5.0
+        active_model = model_version or settings.reid_cache_name or "fishencoder_512_v1"
 
         with self._connect() as conn:
             rows = conn.execute(
@@ -129,68 +160,102 @@ class MatchingService:
                 FROM fish_embeddings
                 WHERE species_slug = ? AND model_version = ?
                 """,
-                (species_slug, "fishencoder_512_v1"),
+                (species_slug, active_model),
             ).fetchall()
 
         if not rows:
-            return (None, 0.0)
-
-        best_fish_id: Optional[str] = None
-        best_score = 0.0
+            return empty_result
 
         # Normalize query embedding once
         embedding = embedding.flatten().astype(np.float32)
 
+        # Collect scores per fish_id (individual-level matching)
+        fish_scores: dict[str, list[float]] = {}
+        fish_distances: dict[str, float] = {}
+        fish_areas: dict[str, str] = {}
+        candidates_evaluated = 0
+
         for fish_id, emb_blob, stored_area, stored_lat, stored_lng in rows:
-            stored_area_norm = normalize_area_code(stored_area)
+            # STRICT: GPS distance check between real coordinates
+            within, distance_m = is_within_radius(
+                latitude, longitude,
+                stored_lat, stored_lng,
+                radius_m=radius_m,
+            )
 
-            # Match criteria: same normalized area OR within geographic proximity radius
-            same_area = bool(query_area != "XX" and stored_area_norm == query_area)
-
-            nearby = False
-            if (
-                latitude is not None
-                and longitude is not None
-                and stored_lat is not None
-                and stored_lng is not None
-            ):
-                try:
-                    dist = _haversine_km(
-                        float(latitude),
-                        float(longitude),
-                        float(stored_lat),
-                        float(stored_lng),
-                    )
-                    nearby = (dist <= radius)
-                except Exception:
-                    nearby = False
-
-            # If not in the same area and not geographically nearby, ignore this candidate
-            if not same_area and not nearby:
+            if not within:
                 continue
+
+            candidates_evaluated += 1
 
             stored = np.frombuffer(emb_blob, dtype=np.float32)
             score = _cosine_similarity(embedding, stored)
-            if score > best_score:
-                best_score = score
-                best_fish_id = fish_id
 
-        if best_score >= threshold and best_fish_id:
+            if fish_id not in fish_scores:
+                fish_scores[fish_id] = []
+                fish_distances[fish_id] = distance_m if distance_m is not None else 0.0
+                fish_areas[fish_id] = normalize_area_code(stored_area)
+            fish_scores[fish_id].append(score)
+
+            # Track minimum distance for this individual
+            if distance_m is not None and distance_m < fish_distances.get(fish_id, float("inf")):
+                fish_distances[fish_id] = distance_m
+
+        if not fish_scores:
+            empty_result["decision_context"] = {"reason": "no_candidates_within_radius"}
+            return empty_result
+
+        # Aggregate per-individual: use median score across embeddings
+        fish_aggregated: dict[str, float] = {}
+        for fid, scores in fish_scores.items():
+            # Use median for robustness against outlier embeddings
+            fish_aggregated[fid] = float(np.median(scores))
+
+        # Sort by score descending
+        sorted_candidates = sorted(fish_aggregated.items(), key=lambda x: x[1], reverse=True)
+
+        top1_fish_id, top1_score = sorted_candidates[0]
+        top2_fish_id: Optional[str] = None
+        top2_score = 0.0
+        if len(sorted_candidates) > 1:
+            top2_fish_id, top2_score = sorted_candidates[1]
+
+        margin = top1_score - top2_score
+
+        # Determine cross_area status
+        top1_area = fish_areas.get(top1_fish_id, "XX")
+        cross_area = (top1_area != query_area) and (query_area != "XX") and (top1_area != "XX")
+
+        result = {
+            "fish_id": top1_fish_id if top1_score >= threshold else None,
+            "score": round(top1_score, 6),
+            "top2_fish_id": top2_fish_id,
+            "top2_score": round(top2_score, 6),
+            "margin": round(margin, 6),
+            "candidates_evaluated": candidates_evaluated,
+            "decision_context": {
+                "threshold_used": threshold,
+                "radius_m": radius_m,
+                "query_area": query_area,
+                "matched_area": top1_area,
+                "cross_area": cross_area,
+                "minimum_distance_m": round(fish_distances.get(top1_fish_id, 0.0), 1),
+                "total_individuals": len(fish_scores),
+            },
+        }
+
+        if top1_score >= threshold and top1_fish_id:
             logger.info(
-                "Match found: fish_id=%s score=%.4f threshold=%.2f",
-                best_fish_id,
-                best_score,
-                threshold,
+                "Match found: fish_id=%s score=%.4f margin=%.4f threshold=%.2f cross_area=%s",
+                top1_fish_id, top1_score, margin, threshold, cross_area,
             )
-            return (best_fish_id, best_score)
+        else:
+            logger.info(
+                "No match above threshold %.2f. Best=%s score=%.4f",
+                threshold, top1_fish_id, top1_score,
+            )
 
-        logger.info(
-            "No match above threshold %.2f. Best candidate=%s score=%.4f",
-            threshold,
-            best_fish_id,
-            best_score,
-        )
-        return (None, best_score)
+        return result
 
     def store_embedding(
         self,
@@ -201,6 +266,7 @@ class MatchingService:
         embedding: np.ndarray,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
+        model_version: Optional[str] = None,
     ):
         """Store an embedding for a fish sighting with optional coordinates."""
         import uuid
@@ -208,6 +274,7 @@ class MatchingService:
         record_id = str(uuid.uuid4())
         emb_bytes = embedding.flatten().astype(np.float32).tobytes()
         now = datetime.now(timezone.utc).isoformat()
+        active_model = model_version or settings.reid_cache_name or "fishencoder_512_v1"
 
         with self._connect() as conn:
             conn.execute(
@@ -227,15 +294,15 @@ class MatchingService:
                     latitude,
                     longitude,
                     emb_bytes,
-                    "fishencoder_512_v1",
+                    active_model,
                     now,
                 ),
             )
             conn.commit()
 
         logger.info(
-            "Stored embedding for fish_id=%s sighting=%s (lat=%s, lon=%s)",
-            fish_id, sighting_id, latitude, longitude
+            "Stored embedding for fish_id=%s sighting=%s model=%s (lat=%s, lon=%s)",
+            fish_id, sighting_id, active_model, latitude, longitude
         )
 
     def get_fish_embeddings(self, fish_id: str) -> list[np.ndarray]:
