@@ -11,7 +11,7 @@ Implements the full 7-step identification pipeline:
   6. Save to local cache (frames + embeddings for future comparisons)
   7. Build role-based response
 
-IMPORTANT: This service proposes a fish_id. Appwrite's `match-fish-id`
+IMPORTANT: This service proposes a fish_id. The identification pipeline
 function is the authoritative confirmation step.  The local disk storage
 is a cache for the similarity pipeline, NOT the source of truth.
 """

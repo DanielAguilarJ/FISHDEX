@@ -27,7 +27,9 @@ dependencies:
   # Navegación
   go_router: ^14.2.7
 
-  # Backend - Appwrite
+  # DEPRECATED: Appwrite SDK kept temporarily for compilation.
+  # All backend operations now go through AI server REST API.
+  # TODO: Remove after Flutter services are fully migrated.
   appwrite: 12.0.4
 
   # Mapas y Geolocalización

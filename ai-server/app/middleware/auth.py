@@ -1,14 +1,15 @@
 """
 FishDex AI Server - Authentication Middleware
 ===============================================
-Validates Appwrite JWT tokens by calling Appwrite's /account endpoint.
-Provides a FastAPI dependency for protected routes.
+Validates requests using a shared secret (X-FishDex-Client-Secret header)
+or a Bearer token matching the server secret.
+
+In dev mode (SKIP_AUTH=True), all requests are accepted with a dummy user.
 """
 
 import logging
 from dataclasses import dataclass
 
-import httpx
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -23,31 +24,27 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 # ─── Authenticated user model ───────────────────────────────────────────
 @dataclass
 class AuthenticatedUser:
-    """Represents a user whose JWT has been validated against Appwrite."""
+    """Represents an authenticated user."""
 
     user_id: str
     email: str
     name: str
 
 
-# ─── JWT verification dependency ────────────────────────────────────────
-async def verify_appwrite_jwt(
+# ─── Auth verification dependency ───────────────────────────────────────
+async def verify_auth(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> AuthenticatedUser:
     """
-    FastAPI dependency that validates an Appwrite JWT.
+    FastAPI dependency that validates authentication.
 
-    In dev mode (SKIP_AUTH=True), returns a dummy user so the endpoint
-    can be tested without a real token.
-
-    For production, sends the JWT to Appwrite's GET /account endpoint
-    with the X-Appwrite-JWT header. If Appwrite confirms the token,
-    we return an AuthenticatedUser with the account details.
+    In dev mode (SKIP_AUTH=True), returns a dummy user.
+    In production, validates the Bearer token or X-FishDex-Client-Secret header
+    against the configured server secret.
 
     Raises:
-        HTTPException 401: Missing or invalid JWT.
-        HTTPException 503: Appwrite service unreachable.
+        HTTPException 401: Missing or invalid credentials.
     """
     # ── Dev bypass ──────────────────────────────────────────────────
     if settings.skip_auth:
@@ -58,68 +55,34 @@ async def verify_appwrite_jwt(
             name="Dev User",
         )
 
-    # ── Require token ───────────────────────────────────────────────
-    if credentials is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing authentication token. Provide a Bearer JWT.",
+    # ── Check X-FishDex-Client-Secret header first ──────────────────
+    client_secret = request.headers.get("X-FishDex-Client-Secret")
+    if client_secret and client_secret == settings.client_secret:
+        # Extract user_id from the request body/form if available
+        # For now, trust the user_id from the form data
+        return AuthenticatedUser(
+            user_id="client-auth",
+            email="",
+            name="Client Auth",
         )
 
-    jwt_token = credentials.credentials
+    # ── Check Bearer token ──────────────────────────────────────────
+    if credentials is not None:
+        token = credentials.credentials
+        if token == settings.ai_server_secret:
+            return AuthenticatedUser(
+                user_id="server-auth",
+                email="",
+                name="Server Auth",
+            )
 
-    # ── Call Appwrite to validate ───────────────────────────────────
-    # settings.appwrite_endpoint already ends with /v1, so just append /account
-    base = settings.appwrite_endpoint.rstrip("/")
-    appwrite_url = f"{base}/account"
-    headers = {
-        "Content-Type": "application/json",
-        "X-Appwrite-Project": settings.appwrite_project_id,
-        "X-Appwrite-JWT": jwt_token,
-    }
+    # ── No valid auth ───────────────────────────────────────────────
+    raise HTTPException(
+        status_code=401,
+        detail="Missing or invalid authentication. "
+        "Provide X-FishDex-Client-Secret header or Bearer token.",
+    )
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(appwrite_url, headers=headers)
-    except httpx.ConnectError as exc:
-        logger.error("Cannot reach Appwrite at %s: %s", appwrite_url, exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Authentication service is unreachable. Try again later.",
-        )
-    except httpx.TimeoutException:
-        logger.error("Appwrite request timed out: %s", appwrite_url)
-        raise HTTPException(
-            status_code=503,
-            detail="Authentication service timed out. Try again later.",
-        )
 
-    if resp.status_code != 200:
-        logger.warning(
-            "Appwrite JWT rejected (HTTP %d): %s", resp.status_code, resp.text[:200]
-        )
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired authentication token.",
-        )
-
-    # ── Parse Appwrite account response ────────────────────────────
-    try:
-        account = resp.json()
-    except Exception:
-        raise HTTPException(
-            status_code=401,
-            detail="Malformed response from authentication service.",
-        )
-
-    user_id = account.get("$id", "")
-    email = account.get("email", "")
-    name = account.get("name", "")
-
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication succeeded but user ID is missing.",
-        )
-
-    logger.info("Authenticated user: %s (%s)", user_id, email)
-    return AuthenticatedUser(user_id=user_id, email=email, name=name)
+# Keep backward-compatible alias
+verify_appwrite_jwt = verify_auth

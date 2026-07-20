@@ -22,7 +22,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.config import settings
-from app.middleware.auth import AuthenticatedUser, verify_appwrite_jwt
+from app.middleware.auth import AuthenticatedUser, verify_auth
 from app.models.schemas import ErrorResponse, IdentifyResponse
 from app.services.obb_roi_service import get_obb_roi_service
 from app.services.inference import get_inference_service
@@ -60,7 +60,7 @@ MAX_VIDEO_SIZE = settings.max_video_size_mb * 1024 * 1024
     Crops the fish body using YOLO OBB, compares against existing fish
     profiles in the same area using FishEncoder prototype matching,
     and returns identification with full history.
-    Requires a valid Appwrite JWT in the Authorization header.
+    Requires authentication (Bearer token or client secret).
     """,
 )
 @limiter.limit("10/minute")
@@ -78,7 +78,7 @@ async def identify_fish(
     latitude: Optional[float] = Form(None, description="GPS latitude"),
     longitude: Optional[float] = Form(None, description="GPS longitude"),
     confidence_threshold: float = Form(0.70, description="Confidence threshold for manual input flag"),
-    current_user: AuthenticatedUser = Depends(verify_appwrite_jwt),
+    current_user: AuthenticatedUser = Depends(verify_auth),
 ) -> IdentifyResponse:
     """
     7-step fish identification pipeline.

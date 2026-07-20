@@ -4,16 +4,15 @@ FishDex AI Server - Storage Service
 Hierarchical fish storage system on server disk.
 Structure: server-data/{area_code_clean}/{species_slug}/{fish_id}/catch_N/images/ + data.json
 
-IMPORTANT ARCHITECTURAL NOTE:
-This service acts as a **local cache for the AI matching pipeline**.
-Appwrite is the authoritative source of truth for all fish metadata,
-sightings, and user data.  The disk storage here exists solely to:
-  1. Cache frame images for embedding comparison (avoids re-downloading)
-  2. Store pre-computed embeddings (embeddings.npy) for fast matching
+This service manages the local storage for the AI matching pipeline.
+The SQLite database is the authoritative source of truth for all fish
+metadata, sightings, and user data. The disk storage here exists to:
+  1. Cache frame images for embedding comparison
+  2. Store pre-computed embeddings for fast matching
+  3. Preserve raw video and crop artifacts for audit/rebuild
 
 If the disk cache is lost, it can be reconstructed by re-processing
-sightings from Appwrite.  The AI server should NEVER be treated as
-the canonical store of fish history or metadata.
+from the database using rebuild_embeddings.
 """
 
 import json

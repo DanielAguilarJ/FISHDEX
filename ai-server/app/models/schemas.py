@@ -24,7 +24,7 @@ class FishPreviousData(BaseModel):
 class IdentifyRequest(BaseModel):
     """Request para identificar un pez (cuando se envía metadata junto al video)."""
     area_code: str = Field(..., description="Czech fishing area code e.g. '401 001'")
-    fisherman_id: str = Field(..., description="UUID of the user (from Appwrite)")
+    fisherman_id: str = Field(..., description="UUID of the user")
     user_role: str = Field("fisherman", description="'fisherman' or 'researcher'")
     species: Optional[str] = Field(None, description="Species if already known (skip Step 1)")
     fish_state: Optional[str] = Field(None, description="Injury notes or distinguishing marks")

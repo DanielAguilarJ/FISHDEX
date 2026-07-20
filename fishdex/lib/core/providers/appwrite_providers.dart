@@ -1,132 +1,31 @@
+/// Stub providers — Appwrite has been removed.
+/// These providers exist to maintain compilation while the app
+/// is migrated to direct AI server communication only.
+///
+/// TODO: Replace with proper auth system (JWT from AI server, or similar).
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../features/auth/providers/auth_provider.dart';
-import '../../data/repositories/auth_repository.dart';
 
-/// Mock classes replacing the Appwrite Python/Dart SDK in local mode.
-/// This prevents Downstream Widget compile errors and mimics the SDK interfaces.
+/// Stub — no longer backed by Appwrite.
+/// Returns null; screens that use this must handle the null case.
+final appwriteAccountProvider = Provider<dynamic>((ref) => null);
 
-class MockUser {
-  final String $id;
-  final String email;
-  final String name;
+/// Stub — current user session.
+/// Returns null (no auth system active).
+final currentUserProvider = FutureProvider<dynamic>((ref) async => null);
 
-  MockUser({
-    required String id,
-    required this.email,
-    required this.name,
-  }) : $id = id;
-}
+/// Stub — current user ID.
+/// Returns a placeholder until proper auth is implemented.
+final currentUserIdProvider = Provider<String>((ref) => 'local-user');
 
-class MockAccount {
-  final Ref _ref;
-  MockAccount(this._ref);
+/// Stub — databases client.
+/// Returns null; database operations go through AI server REST API.
+final appwriteDatabasesProvider = Provider<dynamic>((ref) => null);
 
-  Future<MockUser> get() async {
-    final user = _ref.read(authStateProvider).value;
-    if (user == null) {
-      // Simulate Appwrite 401 Unauthorized exception by throwing an object with code
-      throw MockAppwriteException('Unauthorized user session', 401);
-    }
-    return MockUser(
-      id: user.id,
-      email: user.email,
-      name: user.name,
-    );
-  }
+/// Stub — storage client.
+/// Returns null; storage is served by AI server.
+final appwriteStorageProvider = Provider<dynamic>((ref) => null);
 
-  Future<void> deleteSession({required String sessionId}) async {
-    await _ref.read(authRepositoryProvider).logout();
-  }
-}
-
-class MockAppwriteException implements Exception {
-  final String message;
-  final int code;
-
-  MockAppwriteException(this.message, this.code);
-
-  @override
-  String toString() => 'MockAppwriteException: [$code] $message';
-}
-
-class MockDatabases {
-  Future<dynamic> getDocument({
-    required String databaseId,
-    required String collectionId,
-    required String documentId,
-  }) async {
-    throw MockAppwriteException("Appwrite Databases disabled in local mode", 404);
-  }
-
-  Future<dynamic> updateDocument({
-    required String databaseId,
-    required String collectionId,
-    required String documentId,
-    required Map<String, dynamic> data,
-  }) async {
-    throw MockAppwriteException("Appwrite Databases disabled in local mode", 404);
-  }
-
-  Future<dynamic> createDocument({
-    required String databaseId,
-    required String collectionId,
-    required String documentId,
-    required Map<String, dynamic> data,
-  }) async {
-    throw MockAppwriteException("Appwrite Databases disabled in local mode", 404);
-  }
-
-  Future<MockResponse> listDocuments({
-    required String databaseId,
-    required String collectionId,
-    List<dynamic>? queries,
-  }) async {
-    return MockResponse(documents: []);
-  }
-}
-
-class MockResponse {
-  final List<dynamic> documents;
-  MockResponse({required this.documents});
-}
-
-class MockStorage {
-  Future<dynamic> createFile({
-    required String bucketId,
-    required String fileId,
-    required dynamic file,
-  }) async {
-    throw MockAppwriteException("Appwrite Storage disabled in local mode", 500);
-  }
-}
-
-class MockRealtime {
-  MockSubscription subscribe(List<String> channels) {
-    return MockSubscription();
-  }
-}
-
-class MockSubscription {
-  Stream<MockRealtimeEvent> get stream => const Stream<MockRealtimeEvent>.empty();
-}
-
-class MockRealtimeEvent {
-  Map<String, dynamic> get payload => {};
-}
-
-class MockFunctions {
-  Future<dynamic> createExecution({
-    required String functionId,
-    String? body,
-  }) async {
-    throw MockAppwriteException("Appwrite Functions disabled in local mode", 500);
-  }
-}
-
-// Global mock providers
-final appwriteClientProvider = Provider<dynamic>((ref) => null);
-final appwriteAccountProvider = Provider<MockAccount>((ref) => MockAccount(ref));
-final appwriteDatabasesProvider = Provider<MockDatabases>((ref) => MockDatabases());
-final appwriteStorageProvider = Provider<MockStorage>((ref) => MockStorage());
-final appwriteRealtimeProvider = Provider<MockRealtime>((ref) => MockRealtime());
-final appwriteFunctionsProvider = Provider<MockFunctions>((ref) => MockFunctions());
+/// Stub — realtime client.
+/// Returns null; realtime via WebSocket to AI server.
+final appwriteRealtimeProvider = Provider<dynamic>((ref) => null);

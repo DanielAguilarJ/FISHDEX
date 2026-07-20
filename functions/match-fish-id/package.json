@@ -1,9 +1,0 @@
-{
-  "name": "match-fish-id",
-  "version": "1.0.0",
-  "description": "Matches a fish sighting to an existing individual based on species and proximity",
-  "main": "src/main.js",
-  "dependencies": {
-    "node-appwrite": "^12.0.0"
-  }
-}

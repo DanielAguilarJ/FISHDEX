@@ -20,17 +20,6 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     """Server configuration. Override with environment variables prefixed FISHDEX_."""
 
-    # ── Appwrite ─────────────────────────────────────────────────────
-    appwrite_endpoint: str = "https://fra.cloud.appwrite.io/v1"
-    appwrite_project_id: str = ""
-    appwrite_api_key: str = ""
-    appwrite_database_id: str = "fishdex_db"
-
-    # ── Storage Buckets (all point to fish_photos on free plan) ────
-    capture_raw_videos_bucket: str = "fish_photos"
-    capture_frames_bucket: str = "fish_photos"
-    fish_reference_images_bucket: str = "fish_photos"
-
     # ── Models ───────────────────────────────────────────────────────
     detector_model_path: str = "models/detector/fish_detector_v1.onnx"
     classifier_model_path: str = "models/classifier/fish_species_v1.onnx"

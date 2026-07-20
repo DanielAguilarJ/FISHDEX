@@ -29,9 +29,6 @@ onnxruntime==1.19.2
 # Scientific computing (Haversine, similarity)
 scipy==1.13.1
 
-# Appwrite Python SDK (server-side with API key)
-appwrite==6.1.0
-
 # Utilities
 python-dotenv==1.0.1
 pydantic==2.9.1
