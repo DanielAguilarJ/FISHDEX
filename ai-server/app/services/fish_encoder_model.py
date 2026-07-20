@@ -29,6 +29,8 @@ import torch.nn.functional as F
 from torchvision import transforms
 from torchvision.ops import DeformConv2d
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -586,7 +588,6 @@ def load_model_for_infer(
     # --- WARM-UP SELF-TEST (Fase 2) ---
     # Verify the model produces valid embeddings before declaring readiness
     try:
-        import torch
         img_size = getattr(settings, 'reid_img_size', 128)
         dummy_input = torch.randn(1, 3, img_size, img_size)
         with torch.no_grad():
