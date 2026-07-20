@@ -64,17 +64,17 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
     );
   }
 
-  /// Page 1: Fish orientation - head to the left
+  /// Page 1: Fish orientation - head to the left, phone horizontal
   Widget _buildPage1Orientation() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Fish silhouette with arrow showing correct orientation
+          // Fish silhouette with arrow showing correct orientation (landscape)
           Container(
-            width: 280,
-            height: 160,
+            width: 300,
+            height: 140,
             decoration: BoxDecoration(
               color: AppTheme.darkSurface,
               borderRadius: BorderRadius.circular(20),
@@ -88,6 +88,23 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
                 tailText: context.l10n.arTailLabel,
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          // Landscape phone icon hint
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.screen_rotation, color: AppTheme.accentBlue.withOpacity(0.7), size: 18),
+              const SizedBox(width: 8),
+              Text(
+                context.l10n.arHorizontal,
+                style: TextStyle(
+                  color: AppTheme.accentBlue.withOpacity(0.7),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 32),
           Text(
@@ -407,7 +424,7 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
   }
 }
 
-/// Painter showing correct fish orientation (head RIGHT, arrow)
+/// Painter showing correct fish orientation (head LEFT, arrow)
 class _OrientationGuidePainter extends CustomPainter {
   final String headText;
   final String tailText;
@@ -421,39 +438,39 @@ class _OrientationGuidePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    // Simple fish outline pointing RIGHT
+    // Simple fish outline pointing LEFT
     final cx = size.width / 2;
     final cy = size.height / 2;
     final w = size.width * 0.7;
     final h = w * 0.35;
 
     final path = Path();
-    // Body ellipse (slightly to the right since head is on right)
+    // Body ellipse (slightly to the left since head is on left)
     path.addOval(Rect.fromCenter(
-      center: Offset(cx + w * 0.05, cy),
+      center: Offset(cx - w * 0.05, cy),
       width: w * 0.7,
       height: h,
     ));
     canvas.drawPath(path, paint);
 
-    // Tail (V shape on LEFT)
+    // Tail (V shape on RIGHT)
     final tailPaint = Paint()
       ..color = AppTheme.accentBlue.withOpacity(0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
     canvas.drawLine(
-      Offset(cx - w * 0.28, cy),
-      Offset(cx - w * 0.42, cy - h * 0.45),
+      Offset(cx + w * 0.28, cy),
+      Offset(cx + w * 0.42, cy - h * 0.45),
       tailPaint,
     );
     canvas.drawLine(
-      Offset(cx - w * 0.28, cy),
-      Offset(cx - w * 0.42, cy + h * 0.45),
+      Offset(cx + w * 0.28, cy),
+      Offset(cx + w * 0.42, cy + h * 0.45),
       tailPaint,
     );
 
-    // Arrow pointing RIGHT (indicating head direction)
+    // Arrow pointing LEFT (indicating head direction)
     final arrowPaint = Paint()
       ..color = AppTheme.successGreen
       ..style = PaintingStyle.stroke
@@ -462,23 +479,38 @@ class _OrientationGuidePainter extends CustomPainter {
 
     final arrowY = cy + h * 0.8;
     canvas.drawLine(
-      Offset(cx - w * 0.15, arrowY),
-      Offset(cx + w * 0.25, arrowY),
+      Offset(cx + w * 0.15, arrowY),
+      Offset(cx - w * 0.25, arrowY),
       arrowPaint,
     );
-    // Arrowhead
+    // Arrowhead pointing left
     canvas.drawLine(
-      Offset(cx + w * 0.25, arrowY),
-      Offset(cx + w * 0.18, arrowY - 6),
+      Offset(cx - w * 0.25, arrowY),
+      Offset(cx - w * 0.18, arrowY - 6),
       arrowPaint,
     );
     canvas.drawLine(
-      Offset(cx + w * 0.25, arrowY),
-      Offset(cx + w * 0.18, arrowY + 6),
+      Offset(cx - w * 0.25, arrowY),
+      Offset(cx - w * 0.18, arrowY + 6),
       arrowPaint,
     );
 
-    // "TAIL" label (left side)
+    // "HEAD" label (left side)
+    final headTextPainter = TextPainter(
+      text: TextSpan(
+        text: headText,
+        style: TextStyle(
+          color: AppTheme.successGreen.withOpacity(0.8),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    headTextPainter.layout();
+    headTextPainter.paint(canvas, Offset(cx - w * 0.38, arrowY - 5));
+
+    // "TAIL" label (right side)
     final tailTextPainter = TextPainter(
       text: TextSpan(
         text: tailText,
@@ -491,22 +523,7 @@ class _OrientationGuidePainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
     tailTextPainter.layout();
-    tailTextPainter.paint(canvas, Offset(cx - w * 0.38, arrowY - 5));
-
-    // "HEAD" label (right side)
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: headText,
-        style: TextStyle(
-          color: AppTheme.successGreen.withOpacity(0.8),
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(cx + w * 0.20, arrowY - 5));
+    tailTextPainter.paint(canvas, Offset(cx + w * 0.20, arrowY - 5));
   }
 
   @override

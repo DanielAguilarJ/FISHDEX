@@ -129,7 +129,7 @@ class _AROverlayState extends State<AROverlay>
   Widget _buildOrientationGuides() {
     return Stack(
       children: [
-        // Tail indicator (left side)
+        // Head indicator (left side — fish faces LEFT)
         Positioned(
           left: 0,
           top: 0,
@@ -144,12 +144,12 @@ class _AROverlayState extends State<AROverlay>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.arrow_back, color: AppTheme.energyOrange, size: 12),
+                  const Icon(Icons.arrow_back, color: AppTheme.successGreen, size: 12),
                   const SizedBox(width: 2),
                   Text(
-                    context.l10n.arTailLabel,
+                    context.l10n.arHeadLabel,
                     style: const TextStyle(
-                      color: AppTheme.energyOrange,
+                      color: AppTheme.successGreen,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
@@ -159,7 +159,7 @@ class _AROverlayState extends State<AROverlay>
             ),
           ),
         ),
-        // Head indicator (right side)
+        // Tail indicator (right side)
         Positioned(
           right: 0,
           top: 0,
@@ -175,15 +175,15 @@ class _AROverlayState extends State<AROverlay>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    context.l10n.arHeadLabel,
+                    context.l10n.arTailLabel,
                     style: const TextStyle(
-                      color: AppTheme.successGreen,
+                      color: AppTheme.energyOrange,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(width: 2),
-                  const Icon(Icons.arrow_forward, color: AppTheme.successGreen, size: 12),
+                  const Icon(Icons.arrow_forward, color: AppTheme.energyOrange, size: 12),
                 ],
               ),
             ),
@@ -299,7 +299,7 @@ class FishSilhouettePainter extends CustomPainter {
     _drawLateralLine(canvas, centerX, centerY, fishWidth);
   }
 
-  /// Creates a realistic fish body silhouette path (head facing RIGHT)
+  /// Creates a realistic fish body silhouette path (head facing LEFT)
   Path _createFishPath(double cx, double cy, double width, double height) {
     final path = Path();
 
@@ -307,100 +307,100 @@ class FishSilhouettePainter extends CustomPainter {
     final right = cx + width / 2;
 
     // Fish body using bezier curves for a natural shape
-    // Starting from the mouth (RIGHT side, center) — head faces RIGHT
-    final mouthX = right - width * 0.02;
+    // Starting from the mouth (LEFT side, center) — head faces LEFT
+    final mouthX = left + width * 0.02;
     final mouthY = cy;
 
     path.moveTo(mouthX, mouthY);
 
-    // Upper jaw to head (going left and up)
+    // Upper jaw to head (going right and up)
     path.cubicTo(
-      right - width * 0.08, cy - height * 0.15,
-      right - width * 0.12, cy - height * 0.30,
-      right - width * 0.18, cy - height * 0.38,
+      left + width * 0.08, cy - height * 0.15,
+      left + width * 0.12, cy - height * 0.30,
+      left + width * 0.18, cy - height * 0.38,
     );
 
     // Head to dorsal (top of head curving up)
     path.cubicTo(
-      right - width * 0.24, cy - height * 0.46,
-      right - width * 0.32, cy - height * 0.48,
-      right - width * 0.40, cy - height * 0.47,
+      left + width * 0.24, cy - height * 0.46,
+      left + width * 0.32, cy - height * 0.48,
+      left + width * 0.40, cy - height * 0.47,
     );
 
     // Dorsal region (top of body, slight arch)
     path.cubicTo(
-      right - width * 0.50, cy - height * 0.45,
-      right - width * 0.60, cy - height * 0.42,
-      right - width * 0.70, cy - height * 0.35,
+      left + width * 0.50, cy - height * 0.45,
+      left + width * 0.60, cy - height * 0.42,
+      left + width * 0.70, cy - height * 0.35,
     );
 
-    // Dorsal to caudal peduncle (narrowing toward tail on LEFT)
+    // Dorsal to caudal peduncle (narrowing toward tail on RIGHT)
     path.cubicTo(
-      right - width * 0.78, cy - height * 0.28,
-      right - width * 0.84, cy - height * 0.20,
-      right - width * 0.88, cy - height * 0.15,
+      left + width * 0.78, cy - height * 0.28,
+      left + width * 0.84, cy - height * 0.20,
+      left + width * 0.88, cy - height * 0.15,
     );
 
     // Caudal peduncle to tail fork (upper)
     path.cubicTo(
-      right - width * 0.91, cy - height * 0.10,
-      right - width * 0.93, cy - height * 0.08,
-      right - width * 0.95, cy - height * 0.25,
+      left + width * 0.91, cy - height * 0.10,
+      left + width * 0.93, cy - height * 0.08,
+      left + width * 0.95, cy - height * 0.25,
     );
 
     // Tail fin upper tip
     path.cubicTo(
-      right - width * 0.97, cy - height * 0.35,
-      right - width * 0.99, cy - height * 0.38,
-      left, cy - height * 0.30,
+      left + width * 0.97, cy - height * 0.35,
+      left + width * 0.99, cy - height * 0.38,
+      right, cy - height * 0.30,
     );
 
     // Tail fin fork (V-shape back to center)
     path.cubicTo(
-      right - width * 0.97, cy - height * 0.10,
-      right - width * 0.96, cy,
-      right - width * 0.97, cy + height * 0.10,
+      left + width * 0.97, cy - height * 0.10,
+      left + width * 0.96, cy,
+      left + width * 0.97, cy + height * 0.10,
     );
 
     // Tail fin lower tip
     path.cubicTo(
-      right - width * 0.99, cy + height * 0.38,
-      right - width * 0.97, cy + height * 0.35,
-      right - width * 0.95, cy + height * 0.25,
+      left + width * 0.99, cy + height * 0.38,
+      left + width * 0.97, cy + height * 0.35,
+      left + width * 0.95, cy + height * 0.25,
     );
 
     // Caudal peduncle lower
     path.cubicTo(
-      right - width * 0.93, cy + height * 0.08,
-      right - width * 0.91, cy + height * 0.10,
-      right - width * 0.88, cy + height * 0.15,
+      left + width * 0.93, cy + height * 0.08,
+      left + width * 0.91, cy + height * 0.10,
+      left + width * 0.88, cy + height * 0.15,
     );
 
     // Lower body (belly, wider in middle)
     path.cubicTo(
-      right - width * 0.84, cy + height * 0.22,
-      right - width * 0.78, cy + height * 0.32,
-      right - width * 0.70, cy + height * 0.38,
+      left + width * 0.84, cy + height * 0.22,
+      left + width * 0.78, cy + height * 0.32,
+      left + width * 0.70, cy + height * 0.38,
     );
 
     // Belly to ventral
     path.cubicTo(
-      right - width * 0.60, cy + height * 0.44,
-      right - width * 0.50, cy + height * 0.47,
-      right - width * 0.40, cy + height * 0.48,
+      left + width * 0.60, cy + height * 0.44,
+      left + width * 0.50, cy + height * 0.47,
+      left + width * 0.40, cy + height * 0.48,
     );
 
     // Ventral to anal region
     path.cubicTo(
-      right - width * 0.32, cy + height * 0.47,
-      right - width * 0.24, cy + height * 0.44,
-      right - width * 0.18, cy + height * 0.38,
+      left + width * 0.32, cy + height * 0.47,
+      left + width * 0.24, cy + height * 0.44,
+      left + width * 0.18, cy + height * 0.38,
     );
 
     // Lower head back to mouth
     path.cubicTo(
-      right - width * 0.12, cy + height * 0.30,
-      right - width * 0.08, cy + height * 0.15,
+      left + width * 0.12, cy + height * 0.30,
+      left + width * 0.08, cy + height * 0.15,
       mouthX, mouthY,
     );
 
@@ -415,12 +415,12 @@ class FishSilhouettePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
-    final right = cx + width / 2;
-    final dashWidth = 6.0;
-    final dashGap = 4.0;
-    // Lateral line from tail (left) to head (right)
-    var startX = right - width * 0.85;
-    final endX = right - width * 0.18;
+    final left = cx - width / 2;
+    const dashWidth = 6.0;
+    const dashGap = 4.0;
+    // Lateral line from head (left) to tail (right)
+    var startX = left + width * 0.18;
+    final endX = left + width * 0.85;
 
     while (startX < endX) {
       canvas.drawLine(
@@ -431,14 +431,14 @@ class FishSilhouettePainter extends CustomPainter {
       startX += dashWidth + dashGap;
     }
 
-    // Eye indicator (small circle on the head — RIGHT side)
+    // Eye indicator (small circle on the head — LEFT side)
     final eyePaint = Paint()
       ..color = Colors.white.withOpacity(0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
 
     canvas.drawCircle(
-      Offset(right - width * 0.12, cy - width * 0.04),
+      Offset(left + width * 0.12, cy - width * 0.04),
       width * 0.02,
       eyePaint,
     );
