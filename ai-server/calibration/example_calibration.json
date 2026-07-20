@@ -1,0 +1,40 @@
+{
+  "_comment": "EXAMPLE calibration file — DO NOT use in production without real evaluation data",
+  "schema_version": "1",
+  "model_version": "fishencoder:REPLACE_WITH_REAL_SHA:convnext-small:512:128:prep1:flip1:crop1",
+  "dataset_version": "NOT_YET_EVALUATED",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "global": {
+    "review_threshold": 0.70,
+    "auto_match_threshold": 0.88,
+    "single_candidate_threshold": 0.91,
+    "min_margin": 0.07,
+    "min_agreement": 0.75
+  },
+  "species": {},
+  "dataset_stats": {
+    "total_identities": 0,
+    "total_sessions": 0,
+    "total_pairs": 0,
+    "note": "This is a placeholder. Real calibration requires an independent validation dataset."
+  },
+  "evaluation_criteria": {
+    "required_before_production_auto_match": {
+      "FAR_at_threshold": "≤ 0.1%",
+      "min_identities_per_species": 10,
+      "min_sessions_per_identity": 3,
+      "train_test_split": "by_individual_and_video_and_day",
+      "metrics_required": [
+        "ROC curve",
+        "FMR/FAR",
+        "FNMR/FRR",
+        "EER",
+        "TAR at FAR=0.1%",
+        "top-1 accuracy",
+        "recall per identity",
+        "cross-day evaluation",
+        "cross-device evaluation"
+      ]
+    }
+  }
+}

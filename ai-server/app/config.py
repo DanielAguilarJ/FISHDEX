@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     reid_similarity_threshold: float = 0.82
     reid_min_margin: float = 0.05  # Margen mínimo entre 1º y 2º candidato
     reid_cache_name: str = "fishencoder_convnext_small_512_128_v2"  # v2 = nueva caché tras flip TTA
+    reid_calibration_path: str = ""  # Path to calibration JSON (empty = uncalibrated)
 
     # ── Auth settings ────────────────────────────────────────────────
     skip_auth: bool = False
