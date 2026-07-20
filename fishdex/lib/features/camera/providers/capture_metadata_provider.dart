@@ -14,6 +14,13 @@ class CaptureMetadata {
   final double? size;
   final double? lat;
   final double? lon;
+  // GPS metadata (Phase 5)
+  final double? gpsAccuracyMeters;
+  final DateTime? gpsTimestamp;
+  final bool gpsIsMocked;
+  final String gpsSource; // "current", "recorded_at_capture", "last_known", "debug_fixture"
+  // Area selection metadata
+  final String areaSelectionSource; // "user_selected", "suggested", "manual_entry"
 
   const CaptureMetadata({
     this.areaCode,
@@ -26,6 +33,11 @@ class CaptureMetadata {
     this.size,
     this.lat,
     this.lon,
+    this.gpsAccuracyMeters,
+    this.gpsTimestamp,
+    this.gpsIsMocked = false,
+    this.gpsSource = 'current',
+    this.areaSelectionSource = 'user_selected',
   });
 
   CaptureMetadata copyWith({
@@ -39,6 +51,11 @@ class CaptureMetadata {
     double? size,
     double? lat,
     double? lon,
+    double? gpsAccuracyMeters,
+    DateTime? gpsTimestamp,
+    bool? gpsIsMocked,
+    String? gpsSource,
+    String? areaSelectionSource,
   }) {
     return CaptureMetadata(
       areaCode: areaCode ?? this.areaCode,
@@ -51,6 +68,11 @@ class CaptureMetadata {
       size: size ?? this.size,
       lat: lat ?? this.lat,
       lon: lon ?? this.lon,
+      gpsAccuracyMeters: gpsAccuracyMeters ?? this.gpsAccuracyMeters,
+      gpsTimestamp: gpsTimestamp ?? this.gpsTimestamp,
+      gpsIsMocked: gpsIsMocked ?? this.gpsIsMocked,
+      gpsSource: gpsSource ?? this.gpsSource,
+      areaSelectionSource: areaSelectionSource ?? this.areaSelectionSource,
     );
   }
 
@@ -63,8 +85,12 @@ class CaptureMetadataNotifier extends StateNotifier<CaptureMetadata> {
   CaptureMetadataNotifier() : super(CaptureMetadata.empty);
 
   /// Set the fishing area code and name
-  void setArea(String code, String name) {
-    state = state.copyWith(areaCode: code, areaName: name);
+  void setArea(String code, String name, {String source = 'user_selected'}) {
+    state = state.copyWith(
+      areaCode: code,
+      areaName: name,
+      areaSelectionSource: source,
+    );
   }
 
   /// Set the species (from dropdown selection)
@@ -97,12 +123,26 @@ class CaptureMetadataNotifier extends StateNotifier<CaptureMetadata> {
     state = state.copyWith(size: size);
   }
 
-  /// Set GPS location
-  void setLocation(double lat, double lon) {
-    state = state.copyWith(lat: lat, lon: lon);
+  /// Set GPS location with full metadata (Phase 5)
+  void setLocation(
+    double lat,
+    double lon, {
+    double? accuracyMeters,
+    DateTime? timestamp,
+    bool isMocked = false,
+    String source = 'current',
+  }) {
+    state = state.copyWith(
+      lat: lat,
+      lon: lon,
+      gpsAccuracyMeters: accuracyMeters,
+      gpsTimestamp: timestamp,
+      gpsIsMocked: isMocked,
+      gpsSource: source,
+    );
   }
 
-  /// Reset all metadata after successful identification
+  /// Reset all metadata — MUST be called at start/end of each capture
   void reset() {
     state = CaptureMetadata.empty;
   }
