@@ -64,14 +64,14 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
     );
   }
 
-  /// Page 1: Fish orientation - head to the left, phone horizontal
+  /// Page 1: Fish orientation - head to the left, fish lying horizontal
   Widget _buildPage1Orientation() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Fish silhouette with arrow showing correct orientation (landscape)
+          // Fish silhouette with arrow showing correct orientation (horizontal fish)
           Container(
             width: 300,
             height: 140,
@@ -88,23 +88,6 @@ class _CaptureGuideScreenState extends State<CaptureGuideScreen> {
                 tailText: context.l10n.arTailLabel,
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Landscape phone icon hint
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.screen_rotation, color: AppTheme.accentBlue.withOpacity(0.7), size: 18),
-              const SizedBox(width: 8),
-              Text(
-                context.l10n.arHorizontal,
-                style: TextStyle(
-                  color: AppTheme.accentBlue.withOpacity(0.7),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
           ),
           const SizedBox(height: 32),
           Text(
