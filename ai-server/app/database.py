@@ -230,5 +230,19 @@ def init_db():
     """)
     
     conn.commit()
+
+    # Run versioned migrations (Fase 2)
+    try:
+        from app.migrations.runner import run_migrations
+        final_version = run_migrations(conn)
+        logger.info("Migrations applied up to version %d", final_version)
+    except Exception as exc:
+        logger.warning("Migration runner failed (non-fatal for existing DBs): %s", exc)
+
+    # Enable WAL mode and foreign keys for performance and safety
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+
     conn.close()
     logger.info(f"Local SQLite database initialized at {DB_PATH.resolve()}")

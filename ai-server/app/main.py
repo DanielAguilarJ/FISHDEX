@@ -188,45 +188,125 @@ app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
 
 
 # ─── Root endpoints ─────────────────────────────────────────────────────
+from fastapi.responses import HTMLResponse, JSONResponse
+
+
+@app.get("/health/live", tags=["System"])
+async def health_live() -> dict:
+    """Liveness probe — only checks that the process responds."""
+    return {"alive": True}
+
+
+@app.get("/health/ready", tags=["System"])
+async def health_ready() -> JSONResponse:
+    """
+    Readiness probe — verifies the full pipeline is operational.
+    Returns 503 if any critical component is not ready.
+    """
+    checks: dict = {}
+    ready = True
+
+    # 1. Database accessible
+    try:
+        from app.database import get_db_connection
+        conn = get_db_connection()
+        conn.execute("SELECT 1")
+        conn.close()
+        checks["db_accessible"] = True
+    except Exception as e:
+        checks["db_accessible"] = False
+        checks["db_error"] = str(e)
+        ready = False
+
+    # 2. Migrations applied
+    try:
+        from app.migrations.runner import get_current_version
+        from app.database import get_db_connection as _gdb
+        _conn = _gdb()
+        checks["db_migration_version"] = get_current_version(_conn)
+        _conn.close()
+    except Exception:
+        checks["db_migration_version"] = 0
+
+    # 3. Detector loaded
+    try:
+        from app.services.detector_service import get_detector_service
+        det = get_detector_service()
+        checks["detector_loaded"] = det.available
+        if not det.available:
+            ready = False
+    except Exception:
+        checks["detector_loaded"] = False
+        ready = False
+
+    # 4. FishEncoder loaded
+    try:
+        from app.services.reid_embedding_service import get_reid_service
+        reid = get_reid_service()
+        checks["reid_model_loaded"] = reid.available
+        if not reid.available:
+            ready = False
+    except Exception:
+        checks["reid_model_loaded"] = False
+        ready = False
+
+    # 5. Model fingerprint
+    try:
+        from app.services.model_fingerprint_service import get_model_version, get_model_fingerprint
+        fp = get_model_fingerprint()
+        checks["reid_model_version"] = get_model_version()
+        checks["embedding_dimensions"] = fp.embedding_dim
+    except Exception:
+        checks["reid_model_version"] = None
+
+    # 6. Embeddings DB
+    try:
+        from app.services.matching_service import get_matching_service
+        ms = get_matching_service()
+        with ms._connect() as econn:
+            row = econn.execute("SELECT COUNT(*) FROM fish_embeddings").fetchone()
+            checks["historical_embeddings"] = row[0] if row else 0
+    except Exception:
+        checks["historical_embeddings"] = 0
+
+    # 7. Czech areas catalog
+    try:
+        from app.data.czech_areas import CZECH_AREAS
+        checks["czech_areas_loaded"] = len(CZECH_AREAS)
+    except Exception:
+        checks["czech_areas_loaded"] = 0
+        ready = False
+
+    # 8. Configuration
+    checks["match_radius_km"] = settings.nearby_area_radius_km
+    checks["reid_similarity_threshold"] = settings.reid_similarity_threshold
+
+    response = {"ready": ready, **checks}
+    status_code = 200 if ready else 503
+    return JSONResponse(content=response, status_code=status_code)
+
+
 @app.get("/health", tags=["System"])
 async def health_check() -> dict:
-    """
-    Quick health check for Docker / load balancers.
-    For detailed info use /api/v1/health/detailed.
-    """
+    """Quick health check — use /health/ready for full pipeline check."""
     increment_request_count()
-
     uptime_seconds = round(time.time() - _server_start_time, 1) if _server_start_time else 0.0
 
-    # Model status
     try:
-        from app.services.crop_service import get_crop_service
-        model_loaded = get_crop_service().available
+        from app.services.detector_service import get_detector_service
+        detector_loaded = get_detector_service().available
     except Exception:
-        model_loaded = False
-
-    # Embedding service status (may be added later)
-    embedding_status = "unknown"
-    try:
-        from app.services.embedding_service import get_embedding_service  # noqa: F401
-        embedding_status = "available"
-    except ImportError:
-        embedding_status = "not_installed"
-    except Exception:
-        embedding_status = "error"
+        detector_loaded = False
 
     return {
         "status": "healthy",
         "service": "fishdex-ai-server",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "uptime_seconds": uptime_seconds,
-        "model_loaded": model_loaded,
-        "embedding_service": embedding_status,
+        "detector_loaded": detector_loaded,
         "request_count": _request_count,
     }
 
-
-from fastapi.responses import HTMLResponse
 
 @app.get("/", tags=["System"])
 async def root() -> HTMLResponse:

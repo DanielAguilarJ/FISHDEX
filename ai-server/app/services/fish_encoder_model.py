@@ -568,17 +568,69 @@ def load_model_for_infer(
             raise RuntimeError(msg)
         logger.error(msg)
     elif loaded_keys < total_keys * 0.9:
-        logger.error(
-            "FishEncoder loaded only %.0f%% of keys — embeddings may be unreliable. "
-            "Check that FISHDEX_REID_MODEL_NAME='%s' matches the training backbone.",
-            100.0 * loaded_keys / total_keys,
-            model_name,
+        msg_90 = (
+            f"FishEncoder loaded only {100.0 * loaded_keys / total_keys:.0f}% of keys — "
+            f"embeddings may be unreliable. "
+            f"Check that FISHDEX_REID_MODEL_NAME='{model_name}' matches the training backbone."
         )
+        if strict_mode:
+            raise RuntimeError(msg_90)
+        logger.error(msg_90)
 
     # Disable classifier head gradients (not needed at inference)
     for param in model.classifier.parameters():
         param.requires_grad_(False)
 
     model.eval()
+
+    # --- WARM-UP SELF-TEST (Fase 2) ---
+    # Verify the model produces valid embeddings before declaring readiness
+    try:
+        import torch
+        img_size = getattr(settings, 'reid_img_size', 128)
+        dummy_input = torch.randn(1, 3, img_size, img_size)
+        with torch.no_grad():
+            test_output = model(dummy_input)
+
+        # Validate output
+        expected_dim = getattr(settings, 'reid_embedding_dim', 512)
+        actual_dim = test_output.shape[-1]
+
+        if actual_dim != expected_dim:
+            raise RuntimeError(
+                f"FishEncoder self-test FAILED: expected dim={expected_dim}, got {actual_dim}"
+            )
+        if not torch.isfinite(test_output).all():
+            raise RuntimeError(
+                "FishEncoder self-test FAILED: output contains NaN or Inf"
+            )
+
+        norm = torch.norm(test_output, dim=-1).item()
+        if norm < 0.5 or norm > 2.0:
+            logger.warning(
+                "FishEncoder self-test: L2 norm=%.4f (expected ~1.0). "
+                "Model may not be properly trained.",
+                norm,
+            )
+
+        # Verify deterministic output
+        with torch.no_grad():
+            test_output_2 = model(dummy_input)
+        if not torch.allclose(test_output, test_output_2, atol=1e-6):
+            raise RuntimeError(
+                "FishEncoder self-test FAILED: non-deterministic output in eval mode"
+            )
+
+        logger.info(
+            "FishEncoder self-test PASSED: dim=%d, norm=%.4f, deterministic=True",
+            actual_dim, norm,
+        )
+    except ImportError:
+        logger.warning("torch not available — skipping FishEncoder self-test")
+    except RuntimeError as e:
+        if strict_mode:
+            raise
+        logger.error("FishEncoder self-test failed (non-strict mode): %s", e)
+
     logger.info("FishEncoder ready for inference.")
     return model
