@@ -63,7 +63,7 @@ def _draw_annotated_frame(
 
     box_color = (30, 230, 110) if not is_new_fish else (30, 210, 255)  # BGR green / cyan
 
-    # --- Draw bounding polygon or rectangle ---
+    # --- Draw outer bounding polygon or rectangle for FULL FISH ---
     if polygon and len(polygon) >= 3:
         pts = np.array([[int(p[0]), int(p[1])] for p in polygon], dtype=np.int32)
         # Thin semi-transparent fill
@@ -80,6 +80,31 @@ def _draw_annotated_frame(
         if x2 > x1 and y2 > y1:
             cv2.rectangle(img, (x1, y1), (x2, y2), box_color, 3)
 
+    # --- Draw inner FINGERPRINT SPOT-REGION box if enabled ---
+    if settings.reid_fingerprint_crop_enabled and bbox and len(bbox) >= 4:
+        bx1, by1, bx2, by2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+        bw_box = bx2 - bx1
+        bh_box = by2 - by1
+
+        fp_x1 = max(0, int(bx1 + bw_box * settings.reid_fingerprint_x_start))
+        fp_x2 = min(w, int(bx1 + bw_box * settings.reid_fingerprint_x_end))
+        fp_y1 = max(0, int(by1 + bh_box * settings.reid_fingerprint_y_start))
+        fp_y2 = min(h, int(by1 + bh_box * settings.reid_fingerprint_y_end))
+
+        fp_color = (0, 235, 255)  # BGR bright yellow
+        if fp_x2 > fp_x1 and fp_y2 > fp_y1:
+            cv2.rectangle(img, (fp_x1, fp_y1), (fp_x2, fp_y2), fp_color, 2)
+            cv2.putText(
+                img,
+                "FINGERPRINT (SPOTS)",
+                (fp_x1 + 4, max(fp_y1 - 4, 15)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.38,
+                fp_color,
+                1,
+                cv2.LINE_AA,
+            )
+
     # --- Label block (top-left) ---
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale = max(0.40, min(0.72, w / 950))
@@ -94,6 +119,8 @@ def _draw_annotated_frame(
         (f"DET   {detection_conf:.1%}", (80, 230, 80)),             # green
         (f"CLS   {classification_conf:.1%}", (255, 200, 80)),       # blue-cyan
     ]
+    if settings.reid_fingerprint_crop_enabled:
+        lines.append(("FP SPOTS   ACTIVE", (0, 235, 255)))          # bright yellow
     if is_new_fish:
         lines.append(("[ NEW FISH ]", (80, 255, 180)))
     else:
