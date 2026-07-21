@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--config", choices=["A", "B", "C"], default="A")
     parser.add_argument("--cols", type=int, default=5)
     parser.add_argument("--rows", type=int, default=6)
+    parser.add_argument("--manifest")
     args = parser.parse_args()
 
     out_dir = Path(args.output_dir)
@@ -36,22 +37,41 @@ def main():
 
     cfg = CONFIGS[args.config]
 
-    db_conn = get_db_connection()
-    db_conn.row_factory = sqlite3.Row
-    cursor = db_conn.cursor()
+    sightings = []
 
-    query = "SELECT s.id, s.fish_id, sp.slug as species_slug, s.artifact_dir FROM fish_sightings s JOIN species sp ON s.species_id = sp.id WHERE s.artifact_dir IS NOT NULL"
-    params = []
-    if args.species:
-        query += " AND sp.slug = ?"
-        params.append(args.species)
-    query += " ORDER BY RANDOM() LIMIT ?"
-    params.append(args.max_samples)
+    if args.manifest and Path(args.manifest).exists():
+        with open(args.manifest, "r", encoding="utf-8") as f:
+            manifest_items = json.load(f)
+        for item in manifest_items[:args.max_samples]:
+            sightings.append({
+                "id": item.get("capture_id", "unk"),
+                "fish_id": item.get("fish_id", "unk"),
+                "species_slug": item.get("species_slug", "unk"),
+                "crop_path": item["path"],
+            })
+    else:
+        db_conn = get_db_connection()
+        db_conn.row_factory = sqlite3.Row
+        cursor = db_conn.cursor()
 
-    cursor.execute(query, params)
-    sightings = cursor.fetchall()
+        query = "SELECT s.id, s.fish_id, sp.slug as species_slug, s.artifact_dir FROM fish_sightings s JOIN species sp ON s.species_id = sp.id WHERE s.artifact_dir IS NOT NULL"
+        params = []
+        if args.species:
+            query += " AND sp.slug = ?"
+            params.append(args.species)
+        query += " ORDER BY RANDOM() LIMIT ?"
+        params.append(args.max_samples)
 
-    storage_base = Path(settings.server_data_dir) / 'storage'
+        cursor.execute(query, params)
+        db_rows = cursor.fetchall()
+        storage_base = Path(settings.server_data_dir) / 'storage'
+        for row in db_rows:
+            sightings.append({
+                "id": row["id"],
+                "fish_id": row["fish_id"],
+                "species_slug": row["species_slug"],
+                "crop_path": str(storage_base / row["artifact_dir"] / "images" / "crop_00.jpg"),
+            })
 
     cell_w, cell_h = 200, 200
     sheet_w = cell_w * args.cols
@@ -59,8 +79,8 @@ def main():
 
     crops = []
 
-    for row in sightings:
-        crop_path = storage_base / row["artifact_dir"] / "images" / "crop_00.jpg"
+    for item in sightings:
+        crop_path = Path(item["crop_path"])
         if not crop_path.exists():
             continue
 
@@ -88,9 +108,9 @@ def main():
         text_color = (255, 255, 255)
 
         texts = [
-            f"Sp: {row['species_slug']}",
-            f"F: {row['fish_id']}",
-            f"S: {row['id']}",
+            f"Sp: {item['species_slug']}",
+            f"F: {item['fish_id']}",
+            f"S: {item['id']}",
             f"{orig_w}x{orig_h}"
         ]
 

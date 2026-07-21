@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "model_version": "unknown",
+  "dataset_version": "unknown",
+  "generated_at": "2026-07-21T12:01:35.701880",
+  "validated": false,
+  "validation_far": 0.001,
+  "global": {
+    "review_threshold": 0.3,
+    "auto_match_threshold": 0.35,
+    "single_candidate_threshold": 0.3,
+    "min_margin": 0.04,
+    "min_agreement": 0.3
+  },
+  "species": {},
+  "dataset_stats": {
+    "identities": 9,
+    "avg_sessions": 15.555555555555555,
+    "pairs_same": 36,
+    "pairs_diff": 95,
+    "calibration_far": 0.0,
+    "test_far": 0.16216216216216217,
+    "calibration_recall": 0.46153846153846156,
+    "test_recall": 1.0
+  }
+}

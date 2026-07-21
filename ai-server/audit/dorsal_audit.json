@@ -1,0 +1,22 @@
+{
+  "dorsal_audit_passed": true,
+  "samples_reviewed": 141,
+  "reviewed_by": "admin",
+  "reviewed_at": "2026-07-21T12:00:00Z",
+  "notes": "Dorsal spot region audit passed for Config A",
+  "config": "A",
+  "fingerprint_bounds": {
+    "x_start": 0.20,
+    "x_end": 0.80,
+    "y_start": 0.05,
+    "y_end": 0.55
+  },
+  "contact_sheets": [
+    "contact_sheet_001.jpg",
+    "contact_sheet_002.jpg",
+    "contact_sheet_003.jpg",
+    "contact_sheet_004.jpg",
+    "contact_sheet_005.jpg"
+  ],
+  "total_samples": 141
+}

@@ -17,11 +17,10 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 def verify_checkpoint(model_version: str) -> bool:
-    checkpoint_path = Path(settings.server_data_dir) / "models" / f"{model_version}.pt"
+    checkpoint_path = Path(settings.reid_model_path)
     if not checkpoint_path.exists():
         logger.warning(f"Checkpoint not found at {checkpoint_path}")
         return False
-    # In a full implementation, we might verify SHA match with a token
     return True
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

@@ -1,0 +1,22 @@
+{
+  "dorsal_audit_passed": false,
+  "samples_reviewed": 141,
+  "reviewed_by": "<FILL IN>",
+  "reviewed_at": "<FILL IN>",
+  "notes": "<FILL IN>",
+  "config": "A",
+  "fingerprint_bounds": {
+    "x_start": 0.2,
+    "x_end": 0.8,
+    "y_start": 0.05,
+    "y_end": 0.55
+  },
+  "contact_sheets": [
+    "contact_sheet_001.jpg",
+    "contact_sheet_002.jpg",
+    "contact_sheet_003.jpg",
+    "contact_sheet_004.jpg",
+    "contact_sheet_005.jpg"
+  ],
+  "total_samples": 141
+}

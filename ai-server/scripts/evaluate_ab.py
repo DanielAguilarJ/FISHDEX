@@ -135,10 +135,7 @@ def evaluate_species(species_slug: str, species_manifest: List[Dict], embeddings
                     for p in g_paths:
                         gal_embs.append(embeddings[p])
                         gal_metas.append(SupportMetadata(
-                            capture_id=g_session, # Using session_id as capture_id for support
-                            frame_index=0,
-                            bbox=[0,0,0,0],
-                            quality_score=1.0
+                            sighting_id=g_session,
                         ))
                 if gal_embs:
                     gallery[gal_fish] = np.array(gal_embs)
@@ -179,10 +176,7 @@ def evaluate_species(species_slug: str, species_manifest: List[Dict], embeddings
                     for p in g_paths:
                         gal_embs.append(embeddings[p])
                         gal_metas.append(SupportMetadata(
-                            capture_id=g_session,
-                            frame_index=0,
-                            bbox=[0,0,0,0],
-                            quality_score=1.0
+                            sighting_id=g_session,
                         ))
                 if gal_embs:
                     gallery[gal_fish] = np.array(gal_embs)
@@ -306,9 +300,9 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Load model
-    model_name = getattr(settings, "REID_MODEL_NAME", "resnet50")
-    model_path = getattr(settings, "REID_MODEL_PATH", "models/reid_model.pth")
-    out_dim = getattr(settings, "REID_EMBEDDING_DIM", 512)
+    model_name = getattr(settings, "reid_model_name", "convnext_small.fb_in22k_ft_in1k")
+    model_path = getattr(settings, "reid_model_path", "models/reid/reid_best.pt")
+    out_dim = getattr(settings, "reid_embedding_dim", 512)
     
     try:
         model = load_model_for_infer(model_path=model_path, model_name=model_name, out_dim=out_dim, device=device)

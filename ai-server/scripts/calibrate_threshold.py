@@ -52,6 +52,7 @@ import datetime
 from pathlib import Path
 from collections import defaultdict
 import random
+from PIL import Image
 
 import cv2
 import numpy as np
@@ -158,39 +159,36 @@ def load_from_file(f: Path, max_frames: int = 15) -> list:
         return [img] if img is not None else []
     return []
 
-def evaluate_episode(gallery_data, queries_data):
+def evaluate_episode(gallery_dict, support_meta_dict, queries_list):
     """
-    Calculates results for known matches and known non-matches.
+    Calculates results for known matches and known non-matches using production score_candidates().
     """
-    gallery_embeddings, gallery_metadata = gallery_data
-    query_embeddings, query_metadata = queries_data
-    
     same_scores, diff_scores = [], []
     same_margins, diff_margins = [], []
     same_agree, diff_agree = [], []
     
-    for i in range(len(query_embeddings)):
-        q_emb = query_embeddings[i:i+1]
-        q_meta = query_metadata[i]
+    for q_item in queries_list:
+        q_emb = q_item["embedding"]
+        if q_emb.ndim == 1:
+            q_emb = q_emb[np.newaxis, :]
+            
+        res = score_candidates(
+            query_embeddings=q_emb,
+            candidate_gallery=gallery_dict,
+            candidate_support_metadata=support_meta_dict,
+        )
         
-        candidates = score_candidates(q_emb, gallery_embeddings, gallery_metadata)
-        
-        if not candidates:
+        if res.top1_fish_id is None:
             continue
             
-        best = candidates[0]
-        score = best["score"]
-        margin = best.get("margin", 0.0)
-        agree = best.get("agreement_ratio", 0.0)
-        
-        if best["individual_id"] == q_meta.individual_id:
-            same_scores.append(score)
-            same_margins.append(margin)
-            same_agree.append(agree)
+        if res.top1_fish_id == q_item["fish_id"]:
+            same_scores.append(res.top1_score)
+            same_margins.append(res.margin)
+            same_agree.append(res.agreement_ratio)
         else:
-            diff_scores.append(score)
-            diff_margins.append(margin)
-            diff_agree.append(agree)
+            diff_scores.append(res.top1_score)
+            diff_margins.append(res.margin)
+            diff_agree.append(res.agreement_ratio)
             
     return same_scores, same_margins, same_agree, diff_scores, diff_margins, diff_agree
 
@@ -213,7 +211,12 @@ def calibrate_episode_based(args):
         manifest = json.load(f)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = load_model_for_infer(settings.reid_model_name, device)
+    model = load_model_for_infer(
+        model_path=settings.reid_model_path,
+        model_name=settings.reid_model_name,
+        out_dim=settings.reid_embedding_dim,
+        device=device,
+    )
     
     config_bounds = {}
     if args.config:
@@ -231,10 +234,10 @@ def calibrate_episode_based(args):
     
     for item in manifest:
         species_slug = item.get("species_slug", "unknown")
-        individual_id = item["individual_id"]
-        session_id = item["session_id"]
+        individual_id = item.get("fish_id") or item.get("individual_id")
+        session_id = item.get("session_id")
         
-        image_path = item["image_path"]
+        image_path = item.get("path") or item.get("image_path")
         full_path = Path(image_path)
         if not full_path.exists():
             print(f"File not found: {full_path}")
@@ -244,8 +247,8 @@ def calibrate_episode_based(args):
         if img is None:
             continue
             
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        tensor = transform(img).unsqueeze(0).to(device)
+        img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        tensor = transform(img_pil).unsqueeze(0).to(device)
         
         with torch.no_grad():
             emb = model.forward_embed_bn(tensor).cpu().numpy()[0]
@@ -303,25 +306,30 @@ def calibrate_episode_based(args):
         test_ids = indiv_ids[split_idx:]
         
         def build_episodes(ids):
-            gal_embs, gal_meta = [], []
-            qry_embs, qry_meta = [], []
+            gal_dict = {}
+            gal_meta = {}
+            queries = []
             for iid in ids:
                 sessions = valid_indivs[iid]
-                gal_embs.append(sessions[0]["embedding"])
-                gal_meta.append(SupportMetadata(individual_id=iid, session_id=sessions[0]["session_id"]))
+                gal_embs = [sessions[0]["embedding"]]
+                gal_dict[iid] = np.array(gal_embs)
+                gal_meta[iid] = [SupportMetadata(sighting_id=sessions[0]["session_id"])]
                 for s in sessions[1:]:
-                    qry_embs.append(s["embedding"])
-                    qry_meta.append(SupportMetadata(individual_id=iid, session_id=s["session_id"]))
-            return (np.array(gal_embs), gal_meta), (np.array(qry_embs), qry_meta)
+                    queries.append({
+                        "fish_id": iid,
+                        "session_id": s["session_id"],
+                        "embedding": s["embedding"][np.newaxis, :] if s["embedding"].ndim == 1 else s["embedding"],
+                    })
+            return gal_dict, gal_meta, queries
 
-        cal_gal, cal_qry = build_episodes(cal_ids)
-        test_gal, test_qry = build_episodes(test_ids)
+        cal_gal_dict, cal_gal_meta, cal_queries = build_episodes(cal_ids)
+        test_gal_dict, test_gal_meta, test_queries = build_episodes(test_ids)
         
         (cal_same_sc, cal_same_ma, cal_same_ag,
-         cal_diff_sc, cal_diff_ma, cal_diff_ag) = evaluate_episode(cal_gal, cal_qry)
+         cal_diff_sc, cal_diff_ma, cal_diff_ag) = evaluate_episode(cal_gal_dict, cal_gal_meta, cal_queries)
          
         (test_same_sc, test_same_ma, test_same_ag,
-         test_diff_sc, test_diff_ma, test_diff_ag) = evaluate_episode(test_gal, test_qry)
+         test_diff_sc, test_diff_ma, test_diff_ag) = evaluate_episode(test_gal_dict, test_gal_meta, test_queries)
          
         json_output["dataset_stats"]["pairs_same"] += len(cal_same_sc) + len(test_same_sc)
         json_output["dataset_stats"]["pairs_diff"] += len(cal_diff_sc) + len(test_diff_sc)
