@@ -113,6 +113,8 @@ class IdentificationPipeline:
         # Check if calibration exists for this model version
         self._calibration = load_calibration(self._model_version)
         self._calibration_available = self._calibration is not None
+        # Check if the active model_version has sufficient coverage
+        self._index_complete = self._check_index_completeness()
 
     def run(
         self,
@@ -248,7 +250,7 @@ class IdentificationPipeline:
             track_consistent=track_consistent,
             multiple_fish_detected=multiple_fish_detected,
             calibration_available=calibration_available,
-            index_complete=True,  # Assumed until audit says otherwise
+            index_complete=self._index_complete,
             model_version_compatible=True,
         )
 
@@ -493,6 +495,34 @@ class IdentificationPipeline:
             reasons=["No candidates within radius — new individual"],
             model_version=self._model_version,
         )
+
+    def _check_index_completeness(self) -> bool:
+        """Check if the active model_version has sufficient embedding coverage.
+
+        Returns False if the active model_version has zero embeddings in the DB,
+        which blocks auto_match in decide_identity() to prevent duplicate
+        identities when the index hasn't been rebuilt yet.
+        """
+        try:
+            counts = self._matching.count_active_embeddings(self._model_version)
+            active_embeddings = counts.get("embedding_count", 0)
+
+            if active_embeddings == 0:
+                logger.warning(
+                    "Index completeness check: 0 embeddings for model_version=%s "
+                    "— index_complete=False (auto_match blocked)",
+                    self._model_version,
+                )
+                return False
+
+            return True
+        except Exception as exc:
+            # Fail-open on error: don't block startup on transient DB issues
+            logger.warning(
+                "Index completeness check failed (assuming complete): %s",
+                exc,
+            )
+            return True
 
 
 # Singleton

@@ -249,3 +249,102 @@ class TestFingerprintAppliedOnce:
 
         # This proves that applying it once vs twice gives different results
         assert result1.size != result2.size
+
+
+# ── Integration tests (Fase 5–7, Section 18 of guide) ───────────────────────
+
+
+class TestVersionedEmbeddingIsolation:
+    """Verify that different model_versions are fully isolated in queries."""
+
+    @pytest.fixture
+    def matching_service(self, tmp_path):
+        """Create a MatchingService with temp DB and UNIQUE index."""
+        from unittest.mock import patch
+
+        db_path = tmp_path / "test_embeddings.sqlite"
+        with patch("app.config.settings") as mock_settings:
+            mock_settings.embeddings_db_path = str(db_path)
+            mock_settings.reid_cache_name = "test_v1"
+
+            from app.services.matching_service import MatchingService
+            ms = MatchingService()
+
+            # Add UNIQUE index (simulating migration 005)
+            with ms._connect() as conn:
+                conn.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS
+                    idx_embeddings_sighting_model_vector
+                    ON fish_embeddings(sighting_id, model_version, vector_type)
+                """)
+                conn.commit()
+
+            yield ms
+
+    def test_two_versions_same_sighting_isolated(self, matching_service):
+        """Insert embeddings with two model_versions for the same sighting.
+        Query should only return the one matching the requested version."""
+        vec_v1 = np.random.randn(512).astype(np.float32)
+        vec_v1 = vec_v1 / np.linalg.norm(vec_v1)
+
+        vec_v2 = np.random.randn(512).astype(np.float32)
+        vec_v2 = vec_v2 / np.linalg.norm(vec_v2)
+
+        matching_service.store_embedding(
+            fish_id="fish_abc",
+            sighting_id="sight_001",
+            species_slug="test_sp",
+            area_code="CZ001",
+            embedding=vec_v1,
+            model_version="old_version_full",
+        )
+        matching_service.store_embedding(
+            fish_id="fish_abc",
+            sighting_id="sight_001",
+            species_slug="test_sp",
+            area_code="CZ001",
+            embedding=vec_v2,
+            model_version="new_version_fp",
+        )
+
+        # Both should exist
+        assert matching_service.embedding_exists("sight_001", "old_version_full")
+        assert matching_service.embedding_exists("sight_001", "new_version_fp")
+
+        # Counts should be 1 each
+        old_counts = matching_service.count_active_embeddings("old_version_full")
+        new_counts = matching_service.count_active_embeddings("new_version_fp")
+        assert old_counts["embedding_count"] == 1
+        assert new_counts["embedding_count"] == 1
+
+    def test_embedding_exists_returns_false_for_unknown_version(self, matching_service):
+        """embedding_exists returns False for a version that has never been stored."""
+        vec = np.random.randn(512).astype(np.float32)
+        vec = vec / np.linalg.norm(vec)
+
+        matching_service.store_embedding(
+            fish_id="fish_abc",
+            sighting_id="sight_001",
+            species_slug="test_sp",
+            area_code="CZ001",
+            embedding=vec,
+            model_version="existing_version",
+        )
+
+        assert matching_service.embedding_exists("sight_001", "existing_version")
+        assert not matching_service.embedding_exists("sight_001", "nonexistent_version")
+        assert not matching_service.embedding_exists("nonexistent_sighting", "existing_version")
+
+    def test_store_embedding_rejects_non_normalized(self, matching_service):
+        """store_embedding should raise ValueError for unnormalized vectors."""
+        vec = np.random.randn(512).astype(np.float32) * 10.0  # norm >> 1
+
+        with pytest.raises(ValueError, match="not L2-normalized"):
+            matching_service.store_embedding(
+                fish_id="fish1",
+                sighting_id="s1",
+                species_slug="sp1",
+                area_code="A1",
+                embedding=vec,
+            )
+

@@ -23,9 +23,6 @@ ATAJO (OPCION B - archivos sueltos directamente en calib_data/):
         pez_02_toma_b.mp4
         ...
 
-Los nombres que empiezan con el mismo "pez_XX" se consideran
-el MISMO individuo. Ajusta get_fish_id() si usas otra convencion.
-
 Uso:
     cd ai-server
     python scripts/calibrate_threshold.py
@@ -35,23 +32,48 @@ Uso:
 
     # Controlar cuantos frames se extraen de cada video:
     python scripts/calibrate_threshold.py --max-frames 20
+
+    # Nueva calibracion por episodios:
+    python scripts/calibrate_threshold.py \
+      --manifest eval_data/manifest.json \
+      [--config A|B|C] \
+      [--model-version VERSION] \
+      [--output-json calibration/VERSION.json] \
+      [--use-rois | --run-detector] \
+      [--far-target 0.001] \
+      [--cal-split 0.7] \
+      [--min-identities 10] \
+      [--min-sessions 3]
 """
 import argparse
 import sys
+import json
+import datetime
 from pathlib import Path
+from collections import defaultdict
+import random
 
 import cv2
 import numpy as np
+import torch
 
 # Asegurarse de que el path al paquete app este disponible
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.reid_embedding_service import get_reid_embedding_service
+from app.services.fish_encoder_model import load_model_for_infer, build_eval_transform
+from app.services.identity_scoring_service import score_candidates, SupportMetadata
+from app.config import settings
 
 # Extensiones soportadas
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".3gp", ".temp"}
 
+CONFIGS = {
+    "A": {"x_start": 0.20, "x_end": 0.80, "y_start": 0.05, "y_end": 0.55},
+    "B": {"x_start": 0.15, "x_end": 0.85, "y_start": 0.00, "y_end": 0.60},
+    "C": {"x_start": 0.333, "x_end": 0.667, "y_start": 0.05, "y_end": 0.35},
+}
 
 
 def get_fish_id(name: str) -> str:
@@ -136,6 +158,248 @@ def load_from_file(f: Path, max_frames: int = 15) -> list:
         return [img] if img is not None else []
     return []
 
+def evaluate_episode(gallery_data, queries_data):
+    """
+    Calculates results for known matches and known non-matches.
+    """
+    gallery_embeddings, gallery_metadata = gallery_data
+    query_embeddings, query_metadata = queries_data
+    
+    same_scores, diff_scores = [], []
+    same_margins, diff_margins = [], []
+    same_agree, diff_agree = [], []
+    
+    for i in range(len(query_embeddings)):
+        q_emb = query_embeddings[i:i+1]
+        q_meta = query_metadata[i]
+        
+        candidates = score_candidates(q_emb, gallery_embeddings, gallery_metadata)
+        
+        if not candidates:
+            continue
+            
+        best = candidates[0]
+        score = best["score"]
+        margin = best.get("margin", 0.0)
+        agree = best.get("agreement_ratio", 0.0)
+        
+        if best["individual_id"] == q_meta.individual_id:
+            same_scores.append(score)
+            same_margins.append(margin)
+            same_agree.append(agree)
+        else:
+            diff_scores.append(score)
+            diff_margins.append(margin)
+            diff_agree.append(agree)
+            
+    return same_scores, same_margins, same_agree, diff_scores, diff_margins, diff_agree
+
+
+def calibrate_episode_based(args):
+    print("=" * 60)
+    print("FishDex ReID -- Calibracion por episodios")
+    print("=" * 60)
+    
+    if settings.reid_fingerprint_crop_enabled:
+        if not args.use_rois and not args.run_detector:
+            print("ERROR: Fingerprint está activado (reid_fingerprint_crop_enabled=True),")
+            print("       debes especificar --use-rois o --run-detector.")
+            sys.exit(1)
+        if args.run_detector:
+            print("ERROR: --run-detector no esta implementado todavia.")
+            sys.exit(1)
+
+    with open(args.manifest, 'r') as f:
+        manifest = json.load(f)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = load_model_for_infer(settings.reid_model_name, device)
+    
+    config_bounds = {}
+    if args.config:
+        config_bounds = CONFIGS[args.config]
+
+    transform = build_eval_transform(
+        img_size=settings.reid_img_size, 
+        use_fingerprint_crop=settings.reid_fingerprint_crop_enabled, 
+        **config_bounds
+    )
+    
+    print("Cargando y procesando imagenes del manifest...")
+    
+    species_data = defaultdict(lambda: defaultdict(list))
+    
+    for item in manifest:
+        species_slug = item.get("species_slug", "unknown")
+        individual_id = item["individual_id"]
+        session_id = item["session_id"]
+        
+        image_path = item["image_path"]
+        full_path = Path(image_path)
+        if not full_path.exists():
+            print(f"File not found: {full_path}")
+            continue
+            
+        img = cv2.imread(str(full_path))
+        if img is None:
+            continue
+            
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        tensor = transform(img).unsqueeze(0).to(device)
+        
+        with torch.no_grad():
+            emb = model.forward_embed_bn(tensor).cpu().numpy()[0]
+        
+        species_data[species_slug][individual_id].append({
+            "session_id": session_id,
+            "embedding": emb
+        })
+
+    json_output = {
+        "schema_version": "1",
+        "model_version": args.model_version or "unknown",
+        "dataset_version": "unknown",
+        "generated_at": datetime.datetime.now().isoformat(),
+        "validated": False,
+        "validation_far": args.far_target,
+        "global": {
+            "review_threshold": 0.6,
+            "auto_match_threshold": 0.8,
+            "single_candidate_threshold": 0.65,
+            "min_margin": 0.05,
+            "min_agreement": 0.5
+        },
+        "species": {},
+        "dataset_stats": {
+            "identities": 0,
+            "avg_sessions": 0,
+            "pairs_same": 0,
+            "pairs_diff": 0,
+            "calibration_far": 1.0,
+            "test_far": 1.0,
+            "calibration_recall": 0.0,
+            "test_recall": 0.0
+        }
+    }
+
+    total_identities = 0
+    total_sessions = 0
+    
+    for species, individuals in species_data.items():
+        valid_indivs = {k: v for k, v in individuals.items() if len(v) >= args.min_sessions}
+        
+        if len(valid_indivs) < args.min_identities:
+            print(f"Skipping species {species}: only {len(valid_indivs)} valid individuals (needs {args.min_identities})")
+            continue
+            
+        total_identities += len(valid_indivs)
+        total_sessions += sum(len(v) for v in valid_indivs.values())
+            
+        indiv_ids = list(valid_indivs.keys())
+        random.shuffle(indiv_ids)
+        split_idx = int(len(indiv_ids) * args.cal_split)
+        
+        cal_ids = indiv_ids[:split_idx]
+        test_ids = indiv_ids[split_idx:]
+        
+        def build_episodes(ids):
+            gal_embs, gal_meta = [], []
+            qry_embs, qry_meta = [], []
+            for iid in ids:
+                sessions = valid_indivs[iid]
+                gal_embs.append(sessions[0]["embedding"])
+                gal_meta.append(SupportMetadata(individual_id=iid, session_id=sessions[0]["session_id"]))
+                for s in sessions[1:]:
+                    qry_embs.append(s["embedding"])
+                    qry_meta.append(SupportMetadata(individual_id=iid, session_id=s["session_id"]))
+            return (np.array(gal_embs), gal_meta), (np.array(qry_embs), qry_meta)
+
+        cal_gal, cal_qry = build_episodes(cal_ids)
+        test_gal, test_qry = build_episodes(test_ids)
+        
+        (cal_same_sc, cal_same_ma, cal_same_ag,
+         cal_diff_sc, cal_diff_ma, cal_diff_ag) = evaluate_episode(cal_gal, cal_qry)
+         
+        (test_same_sc, test_same_ma, test_same_ag,
+         test_diff_sc, test_diff_ma, test_diff_ag) = evaluate_episode(test_gal, test_qry)
+         
+        json_output["dataset_stats"]["pairs_same"] += len(cal_same_sc) + len(test_same_sc)
+        json_output["dataset_stats"]["pairs_diff"] += len(cal_diff_sc) + len(test_diff_sc)
+
+        best_config = None
+        best_recall = -1
+        
+        print(f"Grid searching for {species} (cal: {len(cal_ids)} indivs)")
+        
+        for review_thresh in np.arange(0.30, 0.80, 0.02):
+            for auto_match_thresh in np.arange(review_thresh + 0.05, 0.95, 0.02):
+                for single_thresh in np.arange(review_thresh, auto_match_thresh, 0.02):
+                    for min_margin_val in np.arange(0.01, 0.15, 0.01):
+                        for min_agree_val in np.arange(0.3, 0.9, 0.1):
+                            
+                            false_accepts = sum(1 for s, m, a in zip(cal_diff_sc, cal_diff_ma, cal_diff_ag) 
+                                                if s >= review_thresh and m >= min_margin_val and a >= min_agree_val)
+                            far = false_accepts / max(1, len(cal_diff_sc))
+                            
+                            if far <= args.far_target:
+                                true_accepts = sum(1 for s, m, a in zip(cal_same_sc, cal_same_ma, cal_same_ag) 
+                                                   if s >= review_thresh and m >= min_margin_val and a >= min_agree_val)
+                                recall = true_accepts / max(1, len(cal_same_sc))
+                                
+                                if recall > best_recall:
+                                    best_recall = recall
+                                    best_config = {
+                                        "review_threshold": round(float(review_thresh), 3),
+                                        "auto_match_threshold": round(float(auto_match_thresh), 3),
+                                        "single_candidate_threshold": round(float(single_thresh), 3),
+                                        "min_margin": round(float(min_margin_val), 3),
+                                        "min_agreement": round(float(min_agree_val), 3),
+                                        "calibration_far": far,
+                                        "calibration_recall": recall
+                                    }
+
+        if best_config:
+            rt = best_config["review_threshold"]
+            mm = best_config["min_margin"]
+            ma = best_config["min_agreement"]
+            
+            test_fa = sum(1 for s, m, a in zip(test_diff_sc, test_diff_ma, test_diff_ag) 
+                          if s >= rt and m >= mm and a >= ma)
+            test_far = test_fa / max(1, len(test_diff_sc))
+            
+            test_ta = sum(1 for s, m, a in zip(test_same_sc, test_same_ma, test_same_ag) 
+                          if s >= rt and m >= mm and a >= ma)
+            test_recall = test_ta / max(1, len(test_same_sc))
+            
+            best_config["test_far"] = test_far
+            best_config["test_recall"] = test_recall
+            
+            json_output["global"].update({k: best_config[k] for k in ["review_threshold", "auto_match_threshold", "single_candidate_threshold", "min_margin", "min_agreement"]})
+            
+            json_output["dataset_stats"]["calibration_far"] = best_config["calibration_far"]
+            json_output["dataset_stats"]["test_far"] = test_far
+            json_output["dataset_stats"]["calibration_recall"] = best_config["calibration_recall"]
+            json_output["dataset_stats"]["test_recall"] = test_recall
+            
+            if test_far <= args.far_target:
+                json_output["validated"] = True
+                
+            print(f"  Best config for {species}: FAR={test_far:.4f}, Recall={test_recall:.4f}")
+        else:
+            print(f"  Could not find valid config for {species} under FAR target.")
+            json_output["validated"] = False
+
+    if total_identities > 0:
+        json_output["dataset_stats"]["identities"] = total_identities
+        json_output["dataset_stats"]["avg_sessions"] = total_sessions / total_identities
+
+    if args.output_json:
+        out_path = Path(args.output_json)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, 'w') as f:
+            json.dump(json_output, f, indent=2)
+        print(f"Saved calibration to {out_path}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Calibra el threshold ReID optimo")
@@ -150,7 +414,23 @@ def main():
         default=15,
         help="Maximo de frames a extraer de cada video (default: 15)",
     )
+    # Nuevos argumentos:
+    parser.add_argument("--manifest", type=str, help="Ruta al manifest JSON para calibracion basada en episodios")
+    parser.add_argument("--config", type=str, choices=list(CONFIGS.keys()), help="Configuracion de crop A, B o C")
+    parser.add_argument("--model-version", type=str, help="Version del modelo a guardar en el json")
+    parser.add_argument("--output-json", type=str, help="Ruta de salida del JSON de calibracion")
+    parser.add_argument("--use-rois", action="store_true", help="Las imagenes de entrada son ROIs pre-rectificadas")
+    parser.add_argument("--run-detector", action="store_true", help="Ejecuta el detector primero (no implementado)")
+    parser.add_argument("--far-target", type=float, default=0.001, help="Target False Acceptance Rate")
+    parser.add_argument("--cal-split", type=float, default=0.7, help="Proporcion de individuos para calibracion")
+    parser.add_argument("--min-identities", type=int, default=10, help="Minimo de individuos necesarios por especie")
+    parser.add_argument("--min-sessions", type=int, default=3, help="Minimo de sesiones (tomas) por individuo")
+
     args = parser.parse_args()
+
+    if args.manifest:
+        calibrate_episode_based(args)
+        return
 
     calib_dir = Path(args.data)
     if not calib_dir.exists():

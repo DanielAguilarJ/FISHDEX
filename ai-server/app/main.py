@@ -278,15 +278,35 @@ async def health_ready() -> JSONResponse:
     except Exception:
         checks["reid_model_version"] = None
 
-    # 6. Embeddings DB
+    # 6. Embeddings DB — filter by ACTIVE model_version only
     try:
         from app.services.matching_service import get_matching_service
         ms = get_matching_service()
-        with ms._connect() as econn:
-            row = econn.execute("SELECT COUNT(*) FROM fish_embeddings").fetchone()
-            checks["historical_embeddings"] = row[0] if row else 0
+        active_version = settings.reid_cache_name
+        counts = ms.count_active_embeddings(active_version)
+        checks["active_model_version"] = active_version
+        checks["active_embeddings"] = counts["embedding_count"]
+        checks["active_fish"] = counts["fish_count"]
+        checks["active_sightings_with_embedding"] = counts["sighting_count"]
+        checks["fingerprint_enabled"] = settings.reid_fingerprint_crop_enabled
+        if settings.reid_fingerprint_crop_enabled:
+            checks["fingerprint_bounds"] = {
+                "x_start": settings.reid_fingerprint_x_start,
+                "x_end": settings.reid_fingerprint_x_end,
+                "y_start": settings.reid_fingerprint_y_start,
+                "y_end": settings.reid_fingerprint_y_end,
+            }
     except Exception:
-        checks["historical_embeddings"] = 0
+        checks["active_embeddings"] = 0
+        checks["active_fish"] = 0
+
+    # 6b. Calibration status
+    try:
+        from app.calibration import load_calibration
+        cal = load_calibration(settings.reid_cache_name)
+        checks["calibration_loaded"] = cal is not None
+    except Exception:
+        checks["calibration_loaded"] = False
 
     # 7. Czech areas catalog
     try:

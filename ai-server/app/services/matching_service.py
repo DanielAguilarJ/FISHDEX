@@ -32,7 +32,12 @@ CREATE TABLE IF NOT EXISTS fish_embeddings (
     longitude REAL,
     embedding BLOB NOT NULL,
     model_version TEXT DEFAULT 'resnet50_v2',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    dimensions INTEGER,
+    quality_score REAL,
+    frame_index INTEGER,
+    vector_type TEXT DEFAULT 'prototype',
+    gps_accuracy_m REAL
 );
 CREATE INDEX IF NOT EXISTS idx_species_area ON fish_embeddings(species_slug, area_code);
 CREATE INDEX IF NOT EXISTS idx_species ON fish_embeddings(species_slug);
@@ -267,23 +272,56 @@ class MatchingService:
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
         model_version: Optional[str] = None,
+        vector_type: str = "prototype",
+        dimensions: int = 512,
     ):
-        """Store an embedding for a fish sighting with optional coordinates."""
+        """Store an embedding for a fish sighting with optional coordinates.
+
+        Validates the vector before storage:
+        - Must be float32
+        - Must have exactly `dimensions` elements
+        - All values must be finite
+        - L2 norm must be approximately 1.0
+
+        Uses INSERT OR IGNORE with UNIQUE(sighting_id, model_version, vector_type)
+        to guarantee idempotency.
+        """
         import uuid
 
+        # ── Vector validation ────────────────────────────────────────────
+        vec = embedding.flatten().astype(np.float32)
+        if vec.shape[0] != dimensions:
+            raise ValueError(
+                f"Expected embedding with {dimensions} dimensions, "
+                f"got {vec.shape[0]}"
+            )
+        if not np.all(np.isfinite(vec)):
+            raise ValueError(
+                "Embedding contains non-finite values (NaN or Inf)"
+            )
+        norm = float(np.linalg.norm(vec))
+        if not (0.95 < norm < 1.05):
+            raise ValueError(
+                f"Embedding not L2-normalized: norm={norm:.4f} "
+                f"(expected ~1.0)"
+            )
+
         record_id = str(uuid.uuid4())
-        emb_bytes = embedding.flatten().astype(np.float32).tobytes()
+        emb_bytes = vec.tobytes()
         now = datetime.now(timezone.utc).isoformat()
         active_model = model_version or settings.reid_cache_name or "fishencoder_512_v1"
 
         with self._connect() as conn:
+            # INSERT OR IGNORE: if UNIQUE(sighting_id, model_version, vector_type)
+            # already exists, this is a no-op (idempotent rebuild).
             conn.execute(
                 """
-                INSERT INTO fish_embeddings (
+                INSERT OR IGNORE INTO fish_embeddings (
                     id, fish_id, sighting_id, species_slug, area_code,
-                    latitude, longitude, embedding, model_version, created_at
+                    latitude, longitude, embedding, model_version, created_at,
+                    dimensions, vector_type
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -296,6 +334,8 @@ class MatchingService:
                     emb_bytes,
                     active_model,
                     now,
+                    dimensions,
+                    vector_type,
                 ),
             )
             conn.commit()
@@ -330,6 +370,55 @@ class MatchingService:
             ).fetchone()
 
         return row[0] if row else 0
+
+    def embedding_exists(
+        self,
+        sighting_id: str,
+        model_version: str,
+        vector_type: str = "prototype",
+    ) -> bool:
+        """Check if an embedding already exists for this sighting + model_version.
+
+        Used by rebuild_embeddings to skip already-processed sightings
+        (informational pre-check — the UNIQUE index is the real guard).
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM fish_embeddings "
+                "WHERE sighting_id = ? AND model_version = ? "
+                "AND vector_type = ? LIMIT 1",
+                (sighting_id, model_version, vector_type),
+            ).fetchone()
+        return row is not None
+
+    def count_active_embeddings(self, model_version: str) -> dict:
+        """Count embeddings, fish, and sightings for a given model_version.
+
+        Returns:
+            {
+                "embedding_count": int,
+                "fish_count": int,
+                "sighting_count": int,
+            }
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*),
+                    COUNT(DISTINCT fish_id),
+                    COUNT(DISTINCT sighting_id)
+                FROM fish_embeddings
+                WHERE model_version = ?
+                """,
+                (model_version,),
+            ).fetchone()
+
+        return {
+            "embedding_count": row[0] if row else 0,
+            "fish_count": row[1] if row else 0,
+            "sighting_count": row[2] if row else 0,
+        }
 
 
 def get_matching_service() -> MatchingService:
