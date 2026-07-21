@@ -107,7 +107,21 @@ async def identify_fish(
       5. DECISION: new fish or recapture based on reid_similarity_threshold
       6. SAVE: ROI frames + reid embeddings to server-data/
       7. RESPOND: role-filtered history in IdentifyResponse
+
+    DEPRECATED: This endpoint is legacy. Use POST /api/v1/jobs/upload instead.
     """
+    # LEGACY ENDPOINT DISABLED — all identification must go through
+    # the canonical pipeline at /api/v1/jobs/upload which has proper
+    # calibration gating, contamination protection, and concurrency safety.
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "This endpoint has been retired. "
+            "Use POST /api/v1/jobs/upload for fish identification. "
+            "The legacy pipeline lacked calibration gating and could "
+            "contaminate the identity gallery."
+        ),
+    )
     temp_path: Optional[str] = None
 
     try:

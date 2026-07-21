@@ -56,19 +56,34 @@ def main():
     else:
         logger.info("Spec check passed.")
 
-    # 2. Calibration check
+    # 2. Calibration check — uses the same validation as production
+    from app.calibration import load_calibration, is_calibration_valid, reset_calibration_cache
+    reset_calibration_cache()  # Force fresh load
+    
     calib_path = Path(f"calibration/{args.model_version}.json")
     if not calib_path.exists():
         logger.error(f"Calibration file {calib_path} not found.")
         checks_passed = False
     else:
-        with open(calib_path, "r") as f:
-            calib_data = json.load(f)
-            if not calib_data.get("validated"):
-                logger.error("Calibration not validated.")
+        cal = load_calibration(args.model_version)
+        if cal is None:
+            logger.error("Calibration file could not be loaded.")
+            checks_passed = False
+        else:
+            valid, reason = is_calibration_valid(cal)
+            if not valid:
+                logger.error(
+                    "Calibration INVALID for auto_match: %s. "
+                    "test_far=%s, validation_far=%s, validated=%s",
+                    reason, cal.test_far, cal.validation_far, cal.validated,
+                )
+                # --force cannot bypass scientific validation for auto_match
                 checks_passed = False
             else:
-                logger.info("Calibration check passed.")
+                logger.info(
+                    "Calibration check passed (test_far=%.6f, validation_far=%.6f).",
+                    float(cal.test_far), float(cal.validation_far),
+                )
 
     # 3. Dorsal audit check
     audit_path = Path("audit/dorsal_audit.json")

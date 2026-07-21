@@ -323,15 +323,29 @@ class IdentificationPipeline:
             return {}
 
         with self._matching._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT id, fish_id, sighting_id, embedding, area_code,
-                       latitude, longitude, created_at, model_version
-                FROM fish_embeddings
-                WHERE species_slug = ? AND model_version = ?
-                """,
-                (metadata.species_slug, self._model_version),
-            ).fetchall()
+            # Try filtered query first (post-migration 006: verification_status exists)
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT id, fish_id, sighting_id, embedding, area_code,
+                           latitude, longitude, created_at, model_version
+                    FROM fish_embeddings
+                    WHERE species_slug = ? AND model_version = ?
+                      AND verification_status IN ('anchor_new', 'human_confirmed')
+                    """,
+                    (metadata.species_slug, self._model_version),
+                ).fetchall()
+            except Exception:
+                # Fallback: verification_status column doesn't exist yet (pre-migration)
+                rows = conn.execute(
+                    """
+                    SELECT id, fish_id, sighting_id, embedding, area_code,
+                           latitude, longitude, created_at, model_version
+                    FROM fish_embeddings
+                    WHERE species_slug = ? AND model_version = ?
+                    """,
+                    (metadata.species_slug, self._model_version),
+                ).fetchall()
 
         if not rows:
             return {}

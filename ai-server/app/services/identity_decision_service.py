@@ -227,15 +227,23 @@ def _check_auto_match(ctx: DecisionContext, t: dict) -> list[str]:
             f"({ctx.top1_score:.3f} < {t['auto_match_threshold']:.2f})"
         )
 
-    # Margin check (relaxed for single-candidate with high score)
-    single_candidate_pass = (
-        ctx.candidates_evaluated == 1
-        and ctx.top1_score >= t["single_candidate_threshold"]
-    )
-    if ctx.margin < t["min_margin"] and not single_candidate_pass:
-        failures.append(
-            f"Margin too small ({ctx.margin:.3f} < {t['min_margin']:.2f})"
-        )
+    # Single-candidate absolute barrier:
+    # When there is only one candidate, margin is meaningless (top1 - 0 = top1).
+    # The decision MUST rely on single_candidate_threshold as a hard gate.
+    if ctx.candidates_evaluated == 1:
+        if ctx.top1_score < t["single_candidate_threshold"]:
+            failures.append(
+                f"Single candidate: score below single_candidate_threshold "
+                f"({ctx.top1_score:.3f} < {t['single_candidate_threshold']:.2f}). "
+                f"Auto_match requires strong evidence with only one candidate."
+            )
+        # Do NOT use margin for single-candidate decisions — it is artificial (top1 - 0)
+    else:
+        # Multi-candidate: margin check applies normally
+        if ctx.margin < t["min_margin"]:
+            failures.append(
+                f"Margin too small ({ctx.margin:.3f} < {t['min_margin']:.2f})"
+            )
 
     # Agreement
     if ctx.agreement_ratio < t["min_agreement"]:

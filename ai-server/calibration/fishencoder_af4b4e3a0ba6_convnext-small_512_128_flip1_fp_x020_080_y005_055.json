@@ -3,8 +3,10 @@
   "model_version": "fishencoder_af4b4e3a0ba6_convnext-small_512_128_flip1_fp_x020_080_y005_055",
   "dataset_version": "unknown",
   "generated_at": "2026-07-21T12:01:35.701880",
-  "validated": true,
+  "validated": false,
   "validation_far": 0.001,
+  "test_far": 0.16216216216216217,
+  "quarantine_reason": "test_far=0.162 (16.2% FAR) is incompatible with individual identification. Was incorrectly marked validated=true. Quarantined pending proper open-set calibration.",
   "global": {
     "review_threshold": 0.3,
     "auto_match_threshold": 0.35,

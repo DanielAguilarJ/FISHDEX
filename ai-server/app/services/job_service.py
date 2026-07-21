@@ -439,14 +439,29 @@ def process_identification_job(
             elif current_status == "failed" and not force:
                 raise ValueError(f"Job {job_id} previously failed. Use force=True to retry.")
 
-        # --- Step 3: Update status to processing ---
-        logger.info(f"[Job {job_id}] Setting status to 'processing'")
+        # --- Step 3: Atomically transition status to processing ---
+        # Uses WHERE status='uploaded' (or 'pending_crop') to prevent race conditions.
+        # If another instance already claimed this job, rowcount will be 0.
+        logger.info(f"[Job {job_id}] Attempting atomic status transition to 'processing'")
         now_str = datetime.now(timezone.utc).isoformat()
         cursor.execute(
-            "UPDATE identification_jobs SET status = 'processing', started_at = ?, error_message = NULL WHERE id = ?",
+            "UPDATE identification_jobs SET status = 'processing', started_at = ?, error_message = NULL "
+            "WHERE id = ? AND status IN ('uploaded', 'pending_crop')",
             (now_str, job_id)
         )
         conn.commit()
+        
+        if cursor.rowcount == 0:
+            # Another process already claimed this job — exit gracefully
+            logger.info(
+                f"[Job {job_id}] Could not acquire processing lock "
+                f"(current_status={current_status}). Another instance is handling it."
+            )
+            return {
+                "status": "already_processing",
+                "job_id": job_id,
+                "message": "Job is being processed by another instance",
+            }
 
         # --- Step 4: Locate raw media (video/photo) ---
         raw_video_filename = job_doc.get("raw_media_filename") or job_doc.get("raw_video_filename")

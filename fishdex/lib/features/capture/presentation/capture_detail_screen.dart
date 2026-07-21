@@ -142,10 +142,12 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             : _customNameController.text.trim(),
       );
 
-      // 2. Trigger processing pipeline on local AI Server
-      await jobRepo.triggerProcessing(jobId: createdJobId);
+      // 2. Processing is already triggered by /upload endpoint's background_tasks.
+      // Do NOT call triggerProcessing separately — it can cause a race condition
+      // where two concurrent processing attempts run for the same job.
+      // The server atomically transitions uploaded → processing.
 
-      // 4. Navegar a la pantalla de Identificación
+      // 3. Navegar a la pantalla de Identificación
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(

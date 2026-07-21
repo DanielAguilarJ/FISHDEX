@@ -305,18 +305,22 @@ async def health_ready() -> JSONResponse:
         from app.calibration import load_calibration, is_calibration_valid
         cal = load_calibration(settings.reid_cache_name)
         checks["calibration_loaded"] = cal is not None
+        checks["reid_calibration_path"] = getattr(settings, "reid_calibration_path", None)
         if cal is not None:
             cal_valid, cal_reason = is_calibration_valid(cal)
             checks["calibration_validated"] = cal_valid
+            checks["calibration_validation_reason"] = cal_reason
             checks["calibration_validation_far"] = cal.validation_far
             checks["calibration_test_far"] = cal.test_far
         else:
             checks["calibration_validated"] = False
+            checks["calibration_validation_reason"] = "No calibration loaded"
             checks["calibration_validation_far"] = None
             checks["calibration_test_far"] = None
     except Exception:
         checks["calibration_loaded"] = False
         checks["calibration_validated"] = False
+        checks["calibration_validation_reason"] = "Exception during calibration check"
         checks["calibration_validation_far"] = None
         checks["calibration_test_far"] = None
 

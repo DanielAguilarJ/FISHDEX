@@ -259,12 +259,17 @@ def calibrate_episode_based(args):
         })
 
     json_output = {
-        "schema_version": "1",
+        "schema_version": "2",
         "model_version": args.model_version or "unknown",
         "dataset_version": "unknown",
         "generated_at": datetime.datetime.now().isoformat(),
         "validated": False,
-        "validation_far": args.far_target,
+        "validation_far": None,
+        "test_far": None,
+        "far_target": args.far_target,
+        "validation_samples": 0,
+        "test_samples": 0,
+        "unknown_test_queries": 0,
         "global": {
             "review_threshold": 0.6,
             "auto_match_threshold": 0.8,
@@ -341,17 +346,24 @@ def calibrate_episode_based(args):
         
         for review_thresh in np.arange(0.30, 0.80, 0.02):
             for auto_match_thresh in np.arange(review_thresh + 0.05, 0.95, 0.02):
-                for single_thresh in np.arange(review_thresh, auto_match_thresh, 0.02):
+                for single_thresh in np.arange(auto_match_thresh, 0.98, 0.02):
                     for min_margin_val in np.arange(0.01, 0.15, 0.01):
                         for min_agree_val in np.arange(0.3, 0.9, 0.1):
                             
-                            false_accepts = sum(1 for s, m, a in zip(cal_diff_sc, cal_diff_ma, cal_diff_ag) 
-                                                if s >= review_thresh and m >= min_margin_val and a >= min_agree_val)
+                            # FAR: false accepts are impostor queries that would get auto_match
+                            # Must use auto_match_threshold (not review_threshold) because
+                            # auto_match is what creates sightings and contaminates the gallery
+                            false_accepts = sum(
+                                1 for s, m, a in zip(cal_diff_sc, cal_diff_ma, cal_diff_ag) 
+                                if s >= auto_match_thresh and m >= min_margin_val and a >= min_agree_val
+                            )
                             far = false_accepts / max(1, len(cal_diff_sc))
                             
                             if far <= args.far_target:
-                                true_accepts = sum(1 for s, m, a in zip(cal_same_sc, cal_same_ma, cal_same_ag) 
-                                                   if s >= review_thresh and m >= min_margin_val and a >= min_agree_val)
+                                true_accepts = sum(
+                                    1 for s, m, a in zip(cal_same_sc, cal_same_ma, cal_same_ag) 
+                                    if s >= auto_match_thresh and m >= min_margin_val and a >= min_agree_val
+                                )
                                 recall = true_accepts / max(1, len(cal_same_sc))
                                 
                                 if recall > best_recall:
@@ -367,16 +379,21 @@ def calibrate_episode_based(args):
                                     }
 
         if best_config:
-            rt = best_config["review_threshold"]
+            at = best_config["auto_match_threshold"]
             mm = best_config["min_margin"]
             ma = best_config["min_agreement"]
             
-            test_fa = sum(1 for s, m, a in zip(test_diff_sc, test_diff_ma, test_diff_ag) 
-                          if s >= rt and m >= mm and a >= ma)
+            # Evaluate on test set using auto_match_threshold (same as FAR calculation)
+            test_fa = sum(
+                1 for s, m, a in zip(test_diff_sc, test_diff_ma, test_diff_ag) 
+                if s >= at and m >= mm and a >= ma
+            )
             test_far = test_fa / max(1, len(test_diff_sc))
             
-            test_ta = sum(1 for s, m, a in zip(test_same_sc, test_same_ma, test_same_ag) 
-                          if s >= rt and m >= mm and a >= ma)
+            test_ta = sum(
+                1 for s, m, a in zip(test_same_sc, test_same_ma, test_same_ag) 
+                if s >= at and m >= mm and a >= ma
+            )
             test_recall = test_ta / max(1, len(test_same_sc))
             
             best_config["test_far"] = test_far
@@ -384,13 +401,24 @@ def calibrate_episode_based(args):
             
             json_output["global"].update({k: best_config[k] for k in ["review_threshold", "auto_match_threshold", "single_candidate_threshold", "min_margin", "min_agreement"]})
             
+            # Write MEASURED FAR values to root level (required by loader)
+            json_output["validation_far"] = best_config["calibration_far"]
+            json_output["test_far"] = test_far
+            json_output["validation_samples"] = len(cal_diff_sc)
+            json_output["test_samples"] = len(test_diff_sc)
+            json_output["unknown_test_queries"] = len(test_diff_sc)
+            
+            # Also keep in dataset_stats for historical reference
             json_output["dataset_stats"]["calibration_far"] = best_config["calibration_far"]
             json_output["dataset_stats"]["test_far"] = test_far
             json_output["dataset_stats"]["calibration_recall"] = best_config["calibration_recall"]
             json_output["dataset_stats"]["test_recall"] = test_recall
             
-            if test_far <= args.far_target:
+            # validated=true ONLY if BOTH calibration and test FAR meet the target
+            if best_config["calibration_far"] <= args.far_target and test_far <= args.far_target:
                 json_output["validated"] = True
+            else:
+                json_output["validated"] = False
                 
             print(f"  Best config for {species}: FAR={test_far:.4f}, Recall={test_recall:.4f}")
         else:

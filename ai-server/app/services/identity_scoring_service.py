@@ -305,8 +305,15 @@ def score_candidates(
         top2_fish_id = None
         top2_score = 0.0
 
-    # Margin: difference between top1 and top2 median scores
-    margin = top1_score - top2_score
+    # Margin: difference between top1 and top2 median scores.
+    # IMPORTANT: When there is only one candidate, margin is NOT meaningful.
+    # We set it to 0.0 to signal "not available" rather than the misleading
+    # top1_score - 0.0 which creates an artificially huge margin.
+    # The decision service must rely on single_candidate_threshold instead.
+    if num_candidates >= 2:
+        margin = top1_score - top2_score
+    else:
+        margin = 0.0
 
     # --- Step 6: Select best reference from winner's supports ---
     reference: Optional[ReferenceEvidence] = None

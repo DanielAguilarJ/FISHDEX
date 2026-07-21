@@ -4,10 +4,18 @@ Calibration loader for ReID thresholds.
 Loads species-specific thresholds from a versioned JSON calibration file.
 If no calibration exists for the active model, falls back to global defaults
 and blocks auto_match (sends to review instead).
+
+FAIL-CLOSED POLICY:
+- test_far is REQUIRED for auto_match eligibility.
+- If test_far is missing, NaN, Inf, negative, or > 0.001 → auto_match disabled.
+- If dataset_stats.test_far exists but root test_far is missing → reject.
+- Metrics override the "validated" flag — if metrics fail, calibration is invalid
+  regardless of what validated says.
 """
 
 import json
 import logging
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -40,6 +48,11 @@ class CalibrationData:
     validated: bool = False
     validation_far: Optional[float] = None
     test_far: Optional[float] = None
+    # Required metadata for audit
+    far_target: Optional[float] = None
+    validation_samples: Optional[int] = None
+    test_samples: Optional[int] = None
+    unknown_test_queries: Optional[int] = None
 
 
 # Default uncalibrated thresholds — conservative
@@ -55,6 +68,21 @@ UNCALIBRATED_DEFAULTS = SpeciesThresholds(
 _calibration_cache: Optional[CalibrationData] = None
 
 
+def _is_valid_far_value(val) -> bool:
+    """Check if a FAR value is a valid finite number in [0.0, 1.0]."""
+    if val is None:
+        return False
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return False
+    if math.isnan(f) or math.isinf(f):
+        return False
+    if f < 0.0 or f > 1.0:
+        return False
+    return True
+
+
 def load_calibration(model_version: str) -> Optional[CalibrationData]:
     """
     Load calibration data for the given model version.
@@ -63,6 +91,9 @@ def load_calibration(model_version: str) -> Optional[CalibrationData]:
     1. FISHDEX_REID_CALIBRATION_PATH env/setting
     2. calibration/ directory next to the model
     3. Returns None if no compatible calibration exists
+    
+    FAIL-CLOSED: Extracts test_far from both root and dataset_stats.
+    If only dataset_stats has it, uses that value but logs a warning.
     """
     global _calibration_cache
     
@@ -112,6 +143,40 @@ def load_calibration(model_version: str) -> Optional[CalibrationData]:
                 min_agreement=vals["min_agreement"],
             )
 
+        # --- CRITICAL: Extract test_far correctly ---
+        # Priority: root-level test_far > dataset_stats.test_far
+        root_test_far = data.get("test_far")
+        dataset_stats = data.get("dataset_stats", {})
+        stats_test_far = dataset_stats.get("test_far") if isinstance(dataset_stats, dict) else None
+
+        # Resolve effective test_far
+        effective_test_far = root_test_far
+        if effective_test_far is None and stats_test_far is not None:
+            logger.warning(
+                "Calibration %s: test_far missing from root but found in "
+                "dataset_stats (%.6f). Using dataset_stats value. "
+                "This indicates a schema issue in the calibration generator.",
+                model_version, stats_test_far,
+            )
+            effective_test_far = stats_test_far
+
+        # If both exist and disagree, use the WORSE (higher) value
+        if root_test_far is not None and stats_test_far is not None:
+            try:
+                if abs(float(root_test_far) - float(stats_test_far)) > 1e-6:
+                    effective_test_far = max(float(root_test_far), float(stats_test_far))
+                    logger.warning(
+                        "Calibration %s: root test_far=%.6f != dataset_stats.test_far=%.6f. "
+                        "Using worse (higher) value: %.6f",
+                        model_version, float(root_test_far), float(stats_test_far),
+                        effective_test_far,
+                    )
+            except (TypeError, ValueError):
+                pass
+
+        # Extract validation_far the same way
+        root_validation_far = data.get("validation_far")
+
         _calibration_cache = CalibrationData(
             schema_version=data.get("schema_version", "1"),
             model_version=data["model_version"],
@@ -119,14 +184,19 @@ def load_calibration(model_version: str) -> Optional[CalibrationData]:
             generated_at=data.get("generated_at", "unknown"),
             global_thresholds=global_thresholds,
             species_thresholds=species_t,
-            dataset_stats=data.get("dataset_stats", {}),
+            dataset_stats=dataset_stats,
             validated=bool(data.get("validated", False)),
-            validation_far=data.get("validation_far"),
-            test_far=data.get("test_far"),
+            validation_far=root_validation_far,
+            test_far=effective_test_far,
+            far_target=data.get("far_target"),
+            validation_samples=data.get("validation_samples"),
+            test_samples=data.get("test_samples"),
+            unknown_test_queries=data.get("unknown_test_queries"),
         )
 
         logger.info(
-            "Loaded calibration for model %s (dataset=%s, species=%d, validated=%s, val_far=%s, test_far=%s)",
+            "Loaded calibration for model %s (dataset=%s, species=%d, "
+            "validated=%s, val_far=%s, test_far=%s [effective])",
             model_version, _calibration_cache.dataset_version,
             len(species_t), _calibration_cache.validated,
             _calibration_cache.validation_far, _calibration_cache.test_far,
@@ -139,15 +209,49 @@ def load_calibration(model_version: str) -> Optional[CalibrationData]:
 
 
 def is_calibration_valid(cal: Optional[CalibrationData]) -> tuple[bool, str]:
-    """Check if calibration meets scientific FAR <= 0.001 criteria for auto_match."""
+    """
+    Check if calibration meets scientific FAR <= 0.001 criteria for auto_match.
+    
+    FAIL-CLOSED POLICY:
+    - test_far MUST exist and be a valid number <= 0.001
+    - validation_far MUST exist and be a valid number <= 0.001
+    - validated flag alone is NOT sufficient — metrics must confirm
+    - NaN, Inf, negative, or > 1.0 values are rejected
+    """
     if cal is None:
         return False, "No calibration data loaded"
+
     if not cal.validated:
         return False, f"validated=False for model_version={cal.model_version}"
-    if cal.validation_far is None or float(cal.validation_far) > 0.001:
-        return False, f"validation_far ({cal.validation_far}) > 0.001"
-    if cal.test_far is not None and float(cal.test_far) > 0.001:
-        return False, f"test_far ({cal.test_far}) > 0.001"
+
+    # test_far is REQUIRED (fail-closed)
+    if not _is_valid_far_value(cal.test_far):
+        return False, (
+            f"test_far is missing or invalid ({cal.test_far}) for "
+            f"model_version={cal.model_version}. "
+            f"Auto_match requires measured test_far <= 0.001."
+        )
+
+    if float(cal.test_far) > 0.001:
+        return False, (
+            f"test_far ({cal.test_far:.6f}) > 0.001 for "
+            f"model_version={cal.model_version}"
+        )
+
+    # validation_far is REQUIRED
+    if not _is_valid_far_value(cal.validation_far):
+        return False, (
+            f"validation_far is missing or invalid ({cal.validation_far}) for "
+            f"model_version={cal.model_version}. "
+            f"Auto_match requires measured validation_far <= 0.001."
+        )
+
+    if float(cal.validation_far) > 0.001:
+        return False, (
+            f"validation_far ({cal.validation_far:.6f}) > 0.001 for "
+            f"model_version={cal.model_version}"
+        )
+
     return True, "Calibration validated"
 
 
@@ -176,6 +280,24 @@ def get_thresholds_for_species(
 
     # Fall back to global calibrated thresholds
     return (cal.global_thresholds, True)
+
+
+def get_calibration_status(model_version: str) -> dict:
+    """
+    Return calibration status suitable for /health/ready endpoint.
+    """
+    cal = load_calibration(model_version)
+    valid, reason = is_calibration_valid(cal)
+    
+    return {
+        "model_version": model_version,
+        "calibration_loaded": cal is not None,
+        "calibration_validated": valid,
+        "validation_reason": reason,
+        "validation_far": cal.validation_far if cal else None,
+        "test_far": cal.test_far if cal else None,
+        "auto_match_enabled": valid,
+    }
 
 
 def reset_calibration_cache():
