@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS fish_embeddings (
     quality_score REAL,
     frame_index INTEGER,
     vector_type TEXT DEFAULT 'prototype',
-    gps_accuracy_m REAL
+    gps_accuracy_m REAL,
+    verification_status TEXT NOT NULL DEFAULT 'legacy_untrusted'
 );
 CREATE INDEX IF NOT EXISTS idx_species_area ON fish_embeddings(species_slug, area_code);
 CREATE INDEX IF NOT EXISTS idx_species ON fish_embeddings(species_slug);
@@ -102,6 +103,9 @@ class MatchingService:
             if "vector_type" not in cols:
                 logger.info("Adding column fish_embeddings.vector_type TEXT DEFAULT 'prototype'")
                 conn.execute("ALTER TABLE fish_embeddings ADD COLUMN vector_type TEXT DEFAULT 'prototype'")
+            if "verification_status" not in cols:
+                logger.info("Adding column fish_embeddings.verification_status TEXT DEFAULT 'legacy_untrusted'")
+                conn.execute("ALTER TABLE fish_embeddings ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'legacy_untrusted'")
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -280,6 +284,7 @@ class MatchingService:
         model_version: Optional[str] = None,
         vector_type: str = "prototype",
         dimensions: int = 512,
+        verification_status: str = "legacy_untrusted",
     ):
         """Store an embedding for a fish sighting with optional coordinates.
 
@@ -325,9 +330,9 @@ class MatchingService:
                 INSERT OR IGNORE INTO fish_embeddings (
                     id, fish_id, sighting_id, species_slug, area_code,
                     latitude, longitude, embedding, model_version, created_at,
-                    dimensions, vector_type
+                    dimensions, vector_type, verification_status
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -342,6 +347,7 @@ class MatchingService:
                     now,
                     dimensions,
                     vector_type,
+                    verification_status,
                 ),
             )
             conn.commit()

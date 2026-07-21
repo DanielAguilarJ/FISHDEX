@@ -1354,6 +1354,7 @@ def process_identification_job(
             # Store embedding (averaged prototype for the embedding index)
             embedding_vector = np.mean(query_embeddings, axis=0)
             embedding_vector = embedding_vector / (np.linalg.norm(embedding_vector) + 1e-12)
+            verification_status = "anchor_new" if is_new_fish else "auto_match_unverified"
             matching.store_embedding(
                 fish_id=fish_id,
                 embedding=embedding_vector,
@@ -1362,6 +1363,7 @@ def process_identification_job(
                 sighting_id=sighting_id,
                 latitude=job_doc.get("latitude"),
                 longitude=job_doc.get("longitude"),
+                verification_status=verification_status,
             )
 
             # Update identification_jobs final status

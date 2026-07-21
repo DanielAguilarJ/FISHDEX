@@ -199,7 +199,7 @@ def run_rebuild(
 
         query = """
             SELECT id, fish_id, species_slug, artifact_dir,
-                   location_lat, location_lng, area_code
+                   location_lat, location_lng, area_code, catch_number, is_new_fish
             FROM fish_sightings
             WHERE fish_id IS NOT NULL AND fish_id != ''
         """
@@ -230,6 +230,8 @@ def run_rebuild(
         lat = row[4]
         lng = row[5]
         area_code = row[6] if len(row) > 6 else None
+        catch_number = row[7] if len(row) > 7 else None
+        is_new_fish = row[8] if len(row) > 8 else None
 
         crops = _find_crop_files(artifact_dir)
         entry = {
@@ -240,6 +242,8 @@ def run_rebuild(
             "latitude": lat,
             "longitude": lng,
             "area_code": area_code,
+            "catch_number": catch_number,
+            "is_new_fish": is_new_fish,
             "crop_count": len(crops),
             "crop_paths": [str(p) for p in crops],
         }
@@ -379,6 +383,8 @@ def run_rebuild(
                 continue
 
             # Store embedding (INSERT OR IGNORE for idempotency)
+            is_anchor = (entry.get("is_new_fish") == 1 or entry.get("catch_number") == 1)
+            v_status = "anchor_new" if is_anchor else "legacy_untrusted"
             matching.store_embedding(
                 fish_id=fish_id,
                 sighting_id=sighting_id,
@@ -390,6 +396,7 @@ def run_rebuild(
                 model_version=model_version,
                 vector_type="prototype",
                 dimensions=spec.embedding_dim,
+                verification_status=v_status,
             )
             inserted += 1
 

@@ -289,6 +289,7 @@ class TestPipelineIntegration:
             latitude=lat,
             longitude=lon,
             model_version="test_model_v1",
+            verification_status="anchor_new",
         )
         return emb
 
