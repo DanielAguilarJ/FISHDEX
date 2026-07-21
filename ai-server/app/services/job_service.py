@@ -36,7 +36,7 @@ from app.utils.video import (
     select_best_n_frames,
 )
 from app.utils.area_utils import normalize_area_code
-from app.utils.crop_utils import crop_fish_best, crop_bbox_aligned_strict, crop_bbox_preserve_frame_aspect
+from app.utils.crop_utils import crop_fish_best, crop_obb_rotated, crop_bbox_aligned_strict, crop_bbox_preserve_frame_aspect
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,25 @@ def _crop_fish_from_frame(frame: np.ndarray, detection) -> Optional[np.ndarray]:
     if result is None or result.size == 0:
         result = crop_bbox_aligned_strict(frame, detection, pad_frac=settings.crop_padding_frac)
     return result
+
+
+def _crop_primary_reid_roi(frame: np.ndarray, detection) -> Optional[np.ndarray]:
+    """
+    Returns the complete fish ROI used as input to ReID and storage.
+
+    When fingerprint mode is active, REQUIRES a valid OBB-rectified ROI
+    (axis-aligned bbox would produce incorrect anatomical coordinates).
+    Legacy full-fish mode retains the bbox fallback.
+    """
+    if settings.reid_fingerprint_crop_enabled:
+        # Strict: only OBB-rectified crop for fingerprint mode
+        result = crop_obb_rotated(frame, detection, pad_frac=settings.crop_padding_frac)
+        if result is None or result.size == 0:
+            return None  # Do NOT fall back to bbox
+        return result
+
+    # Legacy mode: try OBB first, then bbox
+    return crop_fish_best(frame, detection, pad_frac=settings.crop_padding_frac)
 
 
 def _detection_area_ratio(detection, frame_shape) -> float:
@@ -621,12 +640,11 @@ def process_identification_job(
         # --- Step 8: Crop fish — OBB-rotated (primary) + axis-aligned bbox (secondary) ---
         logger.info(f"[Job {job_id}] Cropping fish: OBB-rotated (primary) + axis-aligned bbox (secondary)")
 
-        # Primary crop: OBB-rotated tight crop.
-        # Uses the detected width, height and rotation from the model.
-        cropped_frame = crop_fish_best(
+        # Primary crop: OBB-rotated tight crop for ReID and storage.
+        # When fingerprint mode is active, REQUIRES OBB (no bbox fallback).
+        cropped_frame = _crop_primary_reid_roi(
             best_detection_frame,
             best_detection,
-            pad_frac=settings.crop_padding_frac,
         )
 
         # Secondary crop: axis-aligned bbox, only for dataset/debug diversity.
@@ -696,7 +714,7 @@ def process_identification_job(
         for _, frame, det, _ in valid_candidates[1:]:
             if len(cropped_frames) >= max_save:
                 break
-            crop = crop_fish_best(frame, det, pad_frac=settings.crop_padding_frac)
+            crop = _crop_primary_reid_roi(frame, det)
             if crop is not None:
                 cropped_frames.append(crop)
 
@@ -993,6 +1011,21 @@ def process_identification_job(
                 )
                 linkage["similarity_reference"] = similarity_reference
 
+                # Save complete ROI crops for review (the fish, not the fingerprint)
+                try:
+                    review_artifacts = save_job_artifacts(
+                        job_id=job_id,
+                        selected_frames=[],
+                        cropped_frames=cropped_frames,
+                        raw_video_path=temp_video_path,
+                    )
+                    review_artifact_dir = review_artifacts.get("job_artifact_dir")
+                    review_preview = review_artifacts.get("preview_filename")
+                except Exception as art_err:
+                    logger.warning(f"[Job {job_id}] Failed to save review artifacts: {art_err}")
+                    review_artifact_dir = None
+                    review_preview = None
+
                 # Update job status only — no sighting, no individual, no embedding
                 cursor.execute(
                     """UPDATE identification_jobs 
@@ -1001,7 +1034,9 @@ def process_identification_job(
                            match_reference_sighting_id = ?,
                            match_reference_embedding_id = ?,
                            match_reference_score = ?,
-                           match_cross_area = ?
+                           match_cross_area = ?,
+                           artifact_dir = ?,
+                           preview_filename = ?
                        WHERE id = ?""",
                     (
                         "needs_manual_review",
@@ -1012,6 +1047,8 @@ def process_identification_job(
                         pipeline_result.reference_embedding_id,
                         round(pipeline_result.reference_score, 4) if pipeline_result.reference_score else None,
                         1 if pipeline_result.cross_area else 0,
+                        review_artifact_dir,
+                        review_preview,
                         job_id,
                     ),
                 )

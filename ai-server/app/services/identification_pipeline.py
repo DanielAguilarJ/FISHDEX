@@ -39,7 +39,7 @@ from app.services.identity_decision_service import (
     IdentityDecision,
     DEFAULT_THRESHOLDS,
 )
-from app.calibration import load_calibration
+from app.calibration import load_calibration, get_thresholds_for_species
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,7 @@ class IdentificationPipeline:
             query_embeddings=query_embeddings,
             candidate_gallery=gallery,
             candidate_support_metadata=gallery_metadata,
-            max_support_per_identity=getattr(settings, "reid_max_support_per_identity", 8),
+            max_support_per_identity=settings.reid_max_support_images_per_identity,
         )
 
         # --- Step 5: Compute distance context ---
@@ -217,6 +217,20 @@ class IdentificationPipeline:
         # --- Step 6: Build decision context ---
         gps_status = self._evaluate_gps_uncertainty(metadata, min_distance_m)
 
+        # Get calibrated thresholds for this species
+        calibrated_thresholds, calibration_available = get_thresholds_for_species(
+            species_slug=metadata.species_slug,
+            model_version=self._model_version,
+        )
+
+        decision_thresholds = {
+            "review_threshold": calibrated_thresholds.review_threshold,
+            "auto_match_threshold": calibrated_thresholds.auto_match_threshold,
+            "single_candidate_threshold": calibrated_thresholds.single_candidate_threshold,
+            "min_margin": calibrated_thresholds.min_margin,
+            "min_agreement": calibrated_thresholds.min_agreement,
+        }
+
         context = DecisionContext(
             top1_score=scoring.top1_score,
             top2_score=scoring.top2_score,
@@ -233,7 +247,7 @@ class IdentificationPipeline:
             valid_crop_count=valid_crop_count,
             track_consistent=track_consistent,
             multiple_fish_detected=multiple_fish_detected,
-            calibration_available=self._calibration_available,
+            calibration_available=calibration_available,
             index_complete=True,  # Assumed until audit says otherwise
             model_version_compatible=True,
         )
@@ -242,6 +256,7 @@ class IdentificationPipeline:
         decision = decide_identity(
             context=context,
             top1_fish_id=scoring.top1_fish_id,
+            thresholds=decision_thresholds,
         )
 
         # Force to manual review if high similarity but outside auto-match radius

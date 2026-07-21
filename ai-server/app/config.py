@@ -98,6 +98,16 @@ class Settings(BaseSettings):
     reid_cache_name: str = "fishencoder_convnext_small_512_128_v2"  # v2 = nueva caché tras flip TTA
     reid_calibration_path: str = ""  # Path to calibration JSON (empty = uncalibrated)
 
+    # ── ReID fingerprint crop ───────────────────────────────────────────
+    # Extracts the spot/pattern region from the complete deskewed ROI.
+    # Default False for safe backward-compatible deployment.
+    # Activate ONLY after rebuilding the embedding index.
+    reid_fingerprint_crop_enabled: bool = False
+    reid_fingerprint_x_start: float = 0.20
+    reid_fingerprint_x_end: float = 0.80
+    reid_fingerprint_y_start: float = 0.05
+    reid_fingerprint_y_end: float = 0.55
+
     # ── Auth settings ────────────────────────────────────────────────
     skip_auth: bool = False
     ai_server_secret: str = "change-me-in-production"

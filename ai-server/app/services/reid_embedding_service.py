@@ -64,14 +64,28 @@ class ReIDEmbeddingService:
                 out_dim=settings.reid_embedding_dim,
                 device=self._device,
             )
-            self._transform = build_eval_transform(img_size=settings.reid_img_size)
+            self._transform = build_eval_transform(
+                img_size=settings.reid_img_size,
+                use_fingerprint_crop=settings.reid_fingerprint_crop_enabled,
+                x_start=settings.reid_fingerprint_x_start,
+                x_end=settings.reid_fingerprint_x_end,
+                y_start=settings.reid_fingerprint_y_start,
+                y_end=settings.reid_fingerprint_y_end,
+            )
             self.is_loaded = True
             logger.info(
-                "ReIDEmbeddingService loaded: model=%s  dim=%d  img_size=%d  device=%s",
+                "ReIDEmbeddingService loaded: model=%s  dim=%d  img_size=%d  device=%s  "
+                "fingerprint=%s x=[%.3f, %.3f] y=[%.3f, %.3f] model_version=%s",
                 settings.reid_model_name,
                 settings.reid_embedding_dim,
                 settings.reid_img_size,
                 self._device,
+                settings.reid_fingerprint_crop_enabled,
+                settings.reid_fingerprint_x_start,
+                settings.reid_fingerprint_x_end,
+                settings.reid_fingerprint_y_start,
+                settings.reid_fingerprint_y_end,
+                settings.reid_cache_name,
             )
         except Exception as exc:
             logger.error(

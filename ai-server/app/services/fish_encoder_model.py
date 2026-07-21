@@ -26,6 +26,7 @@ import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
 from torchvision import transforms
 from torchvision.ops import DeformConv2d
 
@@ -35,21 +36,129 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# FishFingerprintCrop — spot-region extractor for ReID preprocessing
+# ---------------------------------------------------------------------------
+
+class FishFingerprintCrop:
+    """
+    Extracts a single rectangular spot region from the complete deskewed
+    fish ROI for ReID embedding generation.
+
+    Default configuration:
+        x = [0.20L, 0.80L]
+        y = [0.05H, 0.55H]
+
+    This transform is used ONLY for ReID. It does NOT replace the full
+    fish crop stored in artifacts. The fingerprint can always be
+    reconstructed from the stored complete ROI.
+    """
+
+    def __init__(
+        self,
+        x_start: float = 0.20,
+        x_end: float = 0.80,
+        y_start: float = 0.05,
+        y_end: float = 0.55,
+        force_landscape: bool = True,
+    ):
+        if not 0.0 <= x_start < x_end <= 1.0:
+            raise ValueError(
+                f"Expected 0 <= x_start < x_end <= 1, got x_start={x_start}, x_end={x_end}"
+            )
+        if not 0.0 <= y_start < y_end <= 1.0:
+            raise ValueError(
+                f"Expected 0 <= y_start < y_end <= 1, got y_start={y_start}, y_end={y_end}"
+            )
+
+        self.x_start = float(x_start)
+        self.x_end = float(x_end)
+        self.y_start = float(y_start)
+        self.y_end = float(y_end)
+        self.force_landscape = bool(force_landscape)
+
+    def __call__(self, image: Image.Image) -> Image.Image:
+        if not isinstance(image, Image.Image):
+            raise TypeError(
+                f"FishFingerprintCrop expects a PIL Image, got {type(image).__name__}"
+            )
+
+        if image.width < 1 or image.height < 1:
+            raise ValueError("Cannot crop an empty image.")
+
+        # Ensure landscape orientation (OBB should already produce this,
+        # but legacy ROIs may be portrait).
+        if self.force_landscape and image.height > image.width:
+            image = image.transpose(Image.Transpose.ROTATE_270)
+
+        length, height = image.size  # width=L, height=H
+
+        x1 = int(round(self.x_start * length))
+        x2 = int(round(self.x_end * length))
+        y1 = int(round(self.y_start * height))
+        y2 = int(round(self.y_end * height))
+
+        # Clamp to image bounds
+        x1 = max(0, min(x1, length - 1))
+        x2 = max(x1 + 1, min(x2, length))
+        y1 = max(0, min(y1, height - 1))
+        y2 = max(y1 + 1, min(y2, height))
+
+        return image.crop((x1, y1, x2, y2))
+
+    def __repr__(self) -> str:
+        return (
+            f"FishFingerprintCrop(x=[{self.x_start:.2f}, {self.x_end:.2f}], "
+            f"y=[{self.y_start:.2f}, {self.y_end:.2f}])"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Transform
 # ---------------------------------------------------------------------------
 
-def build_eval_transform(img_size: int = 128) -> transforms.Compose:
-    """Standard ImageNet-normalised eval transform."""
-    return transforms.Compose(
-        [
-            transforms.Resize((img_size, img_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.485, 0.456, 0.406),
-                std=(0.229, 0.224, 0.225),
-            ),
-        ]
-    )
+def build_eval_transform(
+    img_size: int = 128,
+    use_fingerprint_crop: bool = False,
+    x_start: float = 0.20,
+    x_end: float = 0.80,
+    y_start: float = 0.05,
+    y_end: float = 0.55,
+) -> transforms.Compose:
+    """
+    Build the ReID evaluation transform.
+
+    The input must be the complete deskewed fish ROI (PIL Image).
+    When use_fingerprint_crop=True, FishFingerprintCrop is applied exactly
+    once before Resize — extracting the spot region in memory.
+
+    Args:
+        img_size: Output size (square). Keep 128 for first experiment.
+        use_fingerprint_crop: Enable spot-region extraction.
+        x_start, x_end, y_start, y_end: Fingerprint rectangle bounds.
+    """
+    operations: list = []
+
+    if use_fingerprint_crop:
+        operations.append(
+            FishFingerprintCrop(
+                x_start=x_start,
+                x_end=x_end,
+                y_start=y_start,
+                y_end=y_end,
+                force_landscape=True,
+            )
+        )
+
+    operations.extend([
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225),
+        ),
+    ])
+
+    return transforms.Compose(operations)
 
 
 # ---------------------------------------------------------------------------
