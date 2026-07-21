@@ -113,8 +113,6 @@ class IdentificationPipeline:
         # Check if calibration exists for this model version
         self._calibration = load_calibration(self._model_version)
         self._calibration_available = self._calibration is not None
-        # Check if the active model_version has sufficient coverage
-        self._index_complete = self._check_index_completeness()
 
     def run(
         self,
@@ -233,6 +231,8 @@ class IdentificationPipeline:
             "min_agreement": calibrated_thresholds.min_agreement,
         }
 
+        index_complete = self._check_index_completeness()
+
         context = DecisionContext(
             top1_score=scoring.top1_score,
             top2_score=scoring.top2_score,
@@ -250,7 +250,7 @@ class IdentificationPipeline:
             track_consistent=track_consistent,
             multiple_fish_detected=multiple_fish_detected,
             calibration_available=calibration_available,
-            index_complete=self._index_complete,
+            index_complete=index_complete,
             model_version_compatible=True,
         )
 

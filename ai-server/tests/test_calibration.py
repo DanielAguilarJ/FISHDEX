@@ -46,6 +46,9 @@ class TestCalibration:
             "model_version": "test_model_v1",
             "dataset_version": "eval_2026_01",
             "generated_at": "2026-01-15T10:00:00Z",
+            "validated": True,
+            "validation_far": 0.0005,
+            "test_far": 0.0005,
             "global": {
                 "review_threshold": 0.72,
                 "auto_match_threshold": 0.89,
@@ -85,6 +88,9 @@ class TestCalibration:
             "model_version": "test_model_v1",
             "dataset_version": "eval_2026_01",
             "generated_at": "2026-01-15T10:00:00Z",
+            "validated": True,
+            "validation_far": 0.0005,
+            "test_far": 0.0005,
             "global": {
                 "review_threshold": 0.72,
                 "auto_match_threshold": 0.89,

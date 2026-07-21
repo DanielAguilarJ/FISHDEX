@@ -2,12 +2,13 @@ import logging
 import uuid
 import os
 import io
+import asyncio
 import cv2
 import json
 import shutil
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 import numpy as np
 
 from app.config import settings
@@ -29,16 +30,29 @@ from app.services.artifact_service import (
     save_fish_capture_artifacts,
     update_fish_index_file,
 )
-import asyncio
+from dataclasses import dataclass, field
 from app.utils.video import (
     cleanup_temp_file,
     extract_frames_from_video,
+    iter_frames_from_video,
+    DecodedVideoFrame,
     select_best_n_frames,
 )
 from app.utils.area_utils import normalize_area_code
 from app.utils.crop_utils import crop_fish_best, crop_obb_rotated, crop_bbox_aligned_strict, crop_bbox_preserve_frame_aspect
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FrameCandidate:
+    frame_index: int
+    timestamp_seconds: float
+    score: float
+    frame: np.ndarray
+    detection: Any
+    confidence: float
+    crop: np.ndarray
 
 XP_BASE_MAP = {
     "common": 10,
@@ -451,280 +465,207 @@ def process_identification_job(
         if not os.path.exists(temp_video_path):
             raise FileNotFoundError(f"Raw media file not found on disk: {temp_video_path}")
 
-        # --- Step 5: Extract frames ---
-        _emit_progress(job_id, "extracting_frames", 30, f"Extracting frames from {media_type}")
-        all_frames = _load_frames_from_media(temp_video_path, media_type)
-        if not all_frames or len(all_frames) == 0:
-            raise ValueError(f"No frames could be loaded from {media_type}")
-        logger.info(f"[Job {job_id}] Loaded {len(all_frames)} frames")
+        # --- Step 5 & 6 & 7: Sequential frame decoding + single-pass detection + global top-5 selection ---
+        _emit_progress(job_id, "detecting_fish", 50, f"Scanning {media_type} frames with YOLOv8 OBB detector")
+        logger.info(f"[Job {job_id}] Decoding all frames and scoring candidates")
 
-        # --- Step 6: Select best frames ---
-        max_save = settings.max_frames_to_save or 5
-        best_frames = select_best_n_frames(all_frames, n=max_save)
-        logger.info(f"[Job {job_id}] Selected {len(best_frames)} best frames")
-
-        # --- Step 7: Detect fish — with validation + retries ---
-        _emit_progress(job_id, "detecting_fish", 50, "Running YOLOv8 OBB fish detector")
-        logger.info(f"[Job {job_id}] Running fish detection with candidate scoring")
-
-        # Collect valid tight detections from best frames.
-        # A detection recovered by retry_service is injected directly into
-        # this list so the complete identification pipeline can continue.
-        valid_candidates: list[tuple] = []  # (score, frame, det, conf)
         base_threshold = settings.detector_confidence_threshold or 0.30
+
+        decoded_frame_count = 0
+        detector_call_count = 0
+        frames_with_valid_detection = 0
+        top_candidates: list[FrameCandidate] = []
+        frame_detections_for_tracking: list[list[dict]] = []
+        video_duration_seconds = 0.0
+
+        if media_type == "image":
+            img = cv2.imread(temp_video_path)
+            if img is None:
+                raise ValueError(f"Could not read image file: {temp_video_path}")
+            frames_iter = [DecodedVideoFrame(frame_index=0, timestamp_seconds=0.0, frame=img)]
+        else:
+            frames_iter = iter_frames_from_video(temp_video_path, max_side=settings.frame_max_side or 960)
 
         if recovered_candidate is not None:
             recovered_frame = recovered_candidate.get("frame")
             recovered_detection = recovered_candidate.get("detection")
-            recovered_confidence = float(
-                recovered_candidate.get("confidence", 0.0) or 0.0
-            )
-
-            if (
-                not isinstance(recovered_frame, np.ndarray)
-                or recovered_frame.size == 0
-            ):
-                raise ValueError(
-                    "Recovered retry candidate does not contain a valid frame"
-                )
-
-            if recovered_detection is None:
-                raise ValueError(
-                    "Recovered retry candidate does not contain a detection"
-                )
-
-            recovered_score = _candidate_score(
-                recovered_frame,
-                recovered_detection,
-            )
-            valid_candidates.append(
-                (
-                    recovered_score,
-                    recovered_frame,
-                    recovered_detection,
-                    recovered_confidence,
-                )
-            )
-
-            logger.info(
-                f"[Job {job_id}] Using detection recovered by retry service: "
-                f"score={recovered_score:.3f}, "
-                f"confidence={recovered_confidence:.3f}"
-            )
-        else:
-            for frame in best_frames:
-                detections = detector.detect(
-                    frame,
-                    conf_threshold=base_threshold,
-                )
-                for det in detections:
-                    if _is_valid_tight_detection(
-                        det,
-                        frame.shape,
-                        min_conf=base_threshold,
-                    ):
-                        score = _candidate_score(frame, det)
-                        conf = _get_detection_confidence(det)
-                        valid_candidates.append(
-                            (score, frame, det, conf)
-                        )
-
-            # Retry with lowered thresholds if no valid candidates were found.
-            if not valid_candidates:
-                retry_thresholds = [0.25, 0.20]
-                for retry_idx, retry_thresh in enumerate(
-                    retry_thresholds,
-                    start=1,
-                ):
-                    logger.info(
-                        f"[Job {job_id}] Detection retry {retry_idx}: "
-                        f"threshold={retry_thresh}"
+            recovered_confidence = float(recovered_candidate.get("confidence", 0.0) or 0.0)
+            if not isinstance(recovered_frame, np.ndarray) or recovered_frame.size == 0 or recovered_detection is None:
+                raise ValueError("Recovered candidate invalid")
+            recovered_score = _candidate_score(recovered_frame, recovered_detection)
+            rec_crop = _crop_primary_reid_roi(recovered_frame, recovered_detection)
+            if rec_crop is not None and rec_crop.size > 0:
+                top_candidates.append(
+                    FrameCandidate(
+                        frame_index=0,
+                        timestamp_seconds=0.0,
+                        score=recovered_score,
+                        frame=recovered_frame,
+                        detection=recovered_detection,
+                        confidence=recovered_confidence,
+                        crop=rec_crop,
                     )
-                    for frame in all_frames:
-                        detections = detector.detect(
-                            frame,
-                            conf_threshold=retry_thresh,
-                        )
-                        for det in detections:
-                            if _is_valid_tight_detection(
-                                det,
-                                frame.shape,
-                                min_conf=retry_thresh,
-                            ):
-                                score = _candidate_score(frame, det)
-                                conf = _get_detection_confidence(det)
-                                valid_candidates.append(
-                                    (score, frame, det, conf)
+                )
+                decoded_frame_count = 1
+                detector_call_count = 1
+                frames_with_valid_detection = 1
+        else:
+            for decoded in frames_iter:
+                decoded_frame_count += 1
+                frame = decoded.frame
+                f_idx = decoded.frame_index
+                t_sec = decoded.timestamp_seconds
+
+                detector_call_count += 1
+                detections = detector.detect(frame, conf_threshold=base_threshold)
+
+                valid_frame_dets: list[dict] = []
+                best_cand_in_frame: Optional[FrameCandidate] = None
+                best_score_in_frame = -1.0
+
+                for det in detections:
+                    if _is_valid_tight_detection(det, frame.shape, min_conf=base_threshold):
+                        bbox = _get_detection_bbox(det)
+                        if bbox and len(bbox) >= 4:
+                            x1, y1, x2, y2 = bbox
+                            xywh = [
+                                float(x1),
+                                float(y1),
+                                float(max(0.0, x2 - x1)),
+                                float(max(0.0, y2 - y1)),
+                            ]
+                            conf_val = _get_detection_confidence(det)
+                            valid_frame_dets.append({"bbox": xywh, "confidence": conf_val})
+
+                        score = _candidate_score(frame, det)
+                        if score > best_score_in_frame:
+                            crop = _crop_primary_reid_roi(frame, det)
+                            if crop is not None and crop.size > 0:
+                                best_score_in_frame = score
+                                best_cand_in_frame = FrameCandidate(
+                                    frame_index=f_idx,
+                                    timestamp_seconds=t_sec,
+                                    score=score,
+                                    frame=frame,
+                                    detection=det,
+                                    confidence=_get_detection_confidence(det),
+                                    crop=crop,
                                 )
-                    if valid_candidates:
-                        logger.info(
-                            f"[Job {job_id}] Retry {retry_idx} found "
-                            f"{len(valid_candidates)} candidates"
-                        )
+
+                if valid_frame_dets:
+                    frames_with_valid_detection += 1
+                frame_detections_for_tracking.append(valid_frame_dets)
+
+                if best_cand_in_frame is not None:
+                    top_candidates.append(best_cand_in_frame)
+                    top_candidates.sort(key=lambda c: (-c.score, c.frame_index))
+                    del top_candidates[5:]
+
+            if media_type == "video" and decoded_frame_count > 0:
+                try:
+                    cap_info = cv2.VideoCapture(temp_video_path)
+                    fps_val = cap_info.get(cv2.CAP_PROP_FPS) or 0.0
+                    cap_info.release()
+                    video_duration_seconds = (decoded_frame_count / fps_val) if fps_val > 0 else 0.0
+                except Exception:
+                    video_duration_seconds = 0.0
+
+            # Retries if no valid candidates were found in primary pass
+            if not top_candidates and media_type == "video":
+                retry_thresholds = [0.25, 0.20]
+                for retry_idx, retry_thresh in enumerate(retry_thresholds, start=1):
+                    logger.info(f"[Job {job_id}] Detection retry {retry_idx}: threshold={retry_thresh}")
+                    r_frames_iter = iter_frames_from_video(temp_video_path, max_side=settings.frame_max_side or 960)
+                    for decoded in r_frames_iter:
+                        frame = decoded.frame
+                        detections = detector.detect(frame, conf_threshold=retry_thresh)
+                        for det in detections:
+                            if _is_valid_tight_detection(det, frame.shape, min_conf=retry_thresh):
+                                score = _candidate_score(frame, det)
+                                crop = _crop_primary_reid_roi(frame, det)
+                                if crop is not None and crop.size > 0:
+                                    top_candidates.append(
+                                        FrameCandidate(
+                                            frame_index=decoded.frame_index,
+                                            timestamp_seconds=decoded.timestamp_seconds,
+                                            score=score,
+                                            frame=frame,
+                                            detection=det,
+                                            confidence=_get_detection_confidence(det),
+                                            crop=crop,
+                                        )
+                                    )
+                                    top_candidates.sort(key=lambda c: (-c.score, c.frame_index))
+                                    del top_candidates[5:]
+                    if top_candidates:
                         break
 
-        # If STILL no valid candidates → mark as pending_crop
-        if not valid_candidates:
-            logger.warning(f"[Job {job_id}] No valid tight detection after 3 attempts. Marking pending_crop.")
+        # If STILL no valid candidates → mark pending_crop
+        if not top_candidates:
+            logger.warning(f"[Job {job_id}] No valid tight detection found after scanning. Marking pending_crop.")
             _emit_progress(job_id, "pending_crop", 100, "No tight fish detection found; queued for retry")
-
-            # Save raw and frames only (no fake crops)
             job_artifacts = save_job_artifacts(
                 job_id=job_id,
-                selected_frames=best_frames,
+                selected_frames=[],
                 cropped_frames=[],
                 raw_video_path=temp_video_path,
             )
-
-            # Strict mode: do NOT expose the raw frame as preview.
-            # selected_frames are kept as internal artefacts for debugging/retry.
-            temp_preview = None
-
             cursor.execute(
                 """UPDATE identification_jobs
                    SET status = 'pending_crop', error_message = ?,
                        preview_filename = ?, artifact_dir = ?, completed_at = ?
                    WHERE id = ?""",
                 (
-                    "No valid tight fish detection found after 3 attempts. Queued for background retry.",
-                    temp_preview,
+                    "No valid tight fish detection found. Queued for background retry.",
+                    None,
                     job_artifacts.get("job_artifact_dir"),
                     datetime.now(timezone.utc).isoformat(),
                     job_id,
                 ),
             )
             conn.commit()
-
             return {
                 "status": "pending_crop",
                 "job_id": job_id,
                 "reason": "no_valid_tight_detection",
-                "preview_filename": temp_preview,
-            }
-
-        # Sort by combined score (best first)
-        valid_candidates.sort(key=lambda x: x[0], reverse=True)
-
-        best_score, best_detection_frame, best_detection, best_detection_confidence = valid_candidates[0]
-        logger.info(
-            f"[Job {job_id}] Best candidate: score={best_score:.3f} "
-            f"confidence={best_detection_confidence:.3f} "
-            f"area_ratio={_detection_area_ratio(best_detection, best_detection_frame.shape):.2f}"
-        )
-
-        # --- Step 7b: Dataset pass — collect ALL valid detections from all frames ---
-        dataset_frame_detections: list[tuple] = []  # (frame, detection, conf)
-
-        if recovered_candidate is not None:
-            dataset_frame_detections.append(
-                (
-                    best_detection_frame,
-                    best_detection,
-                    best_detection_confidence,
-                )
-            )
-
-        logger.info(f"[Job {job_id}] Dataset pass: scanning {len(all_frames)} frames")
-        for d_frame in all_frames:
-            d_dets = detector.detect(d_frame, conf_threshold=base_threshold)
-            for d_det in d_dets:
-                if _is_valid_tight_detection(d_det, d_frame.shape, min_conf=base_threshold):
-                    d_conf = _get_detection_confidence(d_det)
-                    dataset_frame_detections.append((d_frame, d_det, d_conf))
-                    break  # One detection per frame for dataset
-        logger.info(
-            f"[Job {job_id}] Dataset pass: {len(dataset_frame_detections)}"
-            f"/{len(all_frames)} frames with valid tight detections"
-        )
-
-        # --- Step 8: Crop fish — OBB-rotated (primary) + axis-aligned bbox (secondary) ---
-        logger.info(f"[Job {job_id}] Cropping fish: OBB-rotated (primary) + axis-aligned bbox (secondary)")
-
-        # Primary crop: OBB-rotated tight crop for ReID and storage.
-        # When fingerprint mode is active, REQUIRES OBB (no bbox fallback).
-        cropped_frame = _crop_primary_reid_roi(
-            best_detection_frame,
-            best_detection,
-        )
-
-        # Secondary crop: axis-aligned bbox, only for dataset/debug diversity.
-        cropped_frame_bbox = crop_bbox_aligned_strict(
-            best_detection_frame,
-            best_detection,
-            pad_frac=settings.crop_padding_frac,
-        )
-
-        # Safety: if the OBB crop fails, fall back to bbox as primary.
-        # If that also fails, mark the job as pending_crop.
-        if cropped_frame is None or cropped_frame.size == 0:
-            logger.warning(
-                "[Job %s] crop_fish_best returned None for best candidate. "
-                "Attempting bbox fallback.",
-                job_id,
-            )
-            cropped_frame = cropped_frame_bbox
-            cropped_frame_bbox = None
-
-        if cropped_frame is None or cropped_frame.size == 0:
-            logger.warning(
-                "[Job %s] Both OBB and bbox crop returned None. "
-                "Marking pending_crop (strict mode — no frame fallback).",
-                job_id,
-            )
-            _emit_progress(
-                job_id,
-                "pending_crop",
-                100,
-                "Fish detected but no valid crop could be produced",
-            )
-
-            job_artifacts = save_job_artifacts(
-                job_id=job_id,
-                selected_frames=best_frames,
-                cropped_frames=[],
-                raw_video_path=temp_video_path,
-            )
-
-            cursor.execute(
-                """UPDATE identification_jobs
-                   SET status = 'pending_crop', error_message = ?,
-                       preview_filename = ?, artifact_dir = ?, completed_at = ?
-                   WHERE id = ?""",
-                (
-                    "Fish detected but both OBB and bbox crop returned no valid output.",
-                    None,  # strict: no frame-complete preview exposed
-                    job_artifacts.get("job_artifact_dir"),
-                    datetime.now(timezone.utc).isoformat(),
-                    job_id,
-                ),
-            )
-            conn.commit()
-
-            return {
-                "status": "pending_crop",
-                "job_id": job_id,
-                "reason": "obb_and_bbox_crop_failed_after_detection",
                 "preview_filename": None,
             }
 
-        cropped_frames = [cropped_frame]
-        cropped_frames_bbox = [cropped_frame_bbox] if cropped_frame_bbox is not None else []
+        selected_candidates = top_candidates
+        best_frames = [c.frame for c in selected_candidates]
+        cropped_frames = [c.crop for c in selected_candidates]
 
-        # Additional crops from other valid candidates
-        for _, frame, det, _ in valid_candidates[1:]:
-            if len(cropped_frames) >= max_save:
-                break
-            crop = _crop_primary_reid_roi(frame, det)
-            if crop is not None:
-                cropped_frames.append(crop)
+        best_candidate = selected_candidates[0]
+        best_score = best_candidate.score
+        best_detection_frame = best_candidate.frame
+        best_detection = best_candidate.detection
+        best_detection_confidence = best_candidate.confidence
 
-                bbox_crop = crop_bbox_aligned_strict(
-                    frame,
-                    det,
-                    pad_frac=settings.crop_padding_frac,
-                )
-                if bbox_crop is not None:
-                    cropped_frames_bbox.append(bbox_crop)
+        dataset_frame_detections = [
+            (c.frame, c.detection, c.confidence)
+            for c in selected_candidates
+        ]
+
+        processing_stats = {
+            "decoded_frames": decoded_frame_count,
+            "detector_calls": detector_call_count,
+            "frames_with_valid_detection": frames_with_valid_detection,
+            "selected_frame_count": len(selected_candidates),
+            "selected_frame_indices": [c.frame_index for c in selected_candidates],
+            "selected_frame_scores": [round(c.score, 6) for c in selected_candidates],
+            "selection_method": "global_top5_detection_quality",
+        }
+        logger.info(f"[Job {job_id}] Processing stats: {processing_stats}")
+
+        cropped_frames_bbox = []
+        for c in selected_candidates:
+            bbox_crop = crop_bbox_aligned_strict(
+                c.frame,
+                c.detection,
+                pad_frac=settings.crop_padding_frac,
+            )
+            if bbox_crop is not None and bbox_crop.size > 0:
+                cropped_frames_bbox.append(bbox_crop)
 
         logger.info(
             f"[Job {job_id}] Produced {len(cropped_frames)} OBB-rotated crops "
@@ -771,33 +712,49 @@ def process_identification_job(
         # --- Step 10: Tracking + Quality assessment ---
         _emit_progress(job_id, "analyzing_quality", 75, "Assessing capture quality and tracking")
 
-        # Build per-frame detection list for tracking
-        frame_detections_for_tracking: list[list[dict]] = []
         detection_dicts_for_quality: list[dict] = []
+        selected_timestamps: list[float] = []
 
-        for d_frame, d_det, d_conf in dataset_frame_detections:
-            bbox = _get_detection_bbox(d_det)
+        for c in selected_candidates:
+            selected_timestamps.append(c.timestamp_seconds)
+            bbox = _get_detection_bbox(c.detection)
             if bbox and len(bbox) >= 4:
+                x1, y1, x2, y2 = bbox
+                xywh = [
+                    float(x1),
+                    float(y1),
+                    float(max(0.0, x2 - x1)),
+                    float(max(0.0, y2 - y1)),
+                ]
                 det_dict = {
-                    "bbox": [float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])],
-                    "confidence": float(d_conf),
-                    "frame_height": d_frame.shape[0],
-                    "frame_width": d_frame.shape[1],
+                    "bbox": xywh,
+                    "confidence": float(c.confidence),
+                    "frame_height": c.frame.shape[0],
+                    "frame_width": c.frame.shape[1],
                 }
-                frame_detections_for_tracking.append([det_dict])
                 detection_dicts_for_quality.append(det_dict)
-            else:
-                frame_detections_for_tracking.append([])
 
-        # Run tracking to verify single fish
-        tracking_result = validate_single_fish(frame_detections_for_tracking)
+        # Run tracking over selected primary candidates to verify single fish
+        selected_frame_dets_for_tracking = []
+        for c in selected_candidates:
+            bbox = _get_detection_bbox(c.detection)
+            if bbox and len(bbox) >= 4:
+                x1, y1, x2, y2 = bbox
+                xywh = [float(x1), float(y1), float(max(0.0, x2 - x1)), float(max(0.0, y2 - y1))]
+                selected_frame_dets_for_tracking.append([{"bbox": xywh, "confidence": float(c.confidence)}])
+            else:
+                selected_frame_dets_for_tracking.append([])
+
+        tracking_result = validate_single_fish(selected_frame_dets_for_tracking)
         track_consistent = tracking_result.is_single_fish
         multiple_fish_detected = tracking_result.multiple_fish_detected
 
-        # Assess capture quality
+        # Assess capture quality with real duration and timestamps
         quality_result = evaluate_capture(
             cropped_frames=cropped_frames,
-            detections=detection_dicts_for_quality[:len(cropped_frames)],
+            detections=detection_dicts_for_quality,
+            frame_timestamps=selected_timestamps,
+            video_duration_seconds=video_duration_seconds if media_type == "video" else 0.0,
         )
         quality_score = quality_result.overall_score
 
@@ -867,6 +824,7 @@ def process_identification_job(
             "quality_score": quality_score,
             "track_consistent": track_consistent,
             "multiple_fish_detected": multiple_fish_detected,
+            "processing_stats": processing_stats,
         }
 
         is_new_fish = pipeline_decision == "new_fish"

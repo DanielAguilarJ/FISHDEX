@@ -28,6 +28,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
+
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
 from torchvision.ops import DeformConv2d
 
 from app.config import settings

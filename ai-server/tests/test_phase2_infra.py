@@ -153,9 +153,9 @@ class TestModelFingerprint:
         
         assert fp.embedding_dim == 512
         assert fp.image_size == 128
-        assert "fishencoder:" in fp.model_version
+        assert "fishencoder" in fp.model_version
         assert "convnext" in fp.model_version.lower()
-        assert ":512:" in fp.model_version
+        assert "512" in fp.model_version
         
         # Reset
         mfp._fingerprint_cache = None

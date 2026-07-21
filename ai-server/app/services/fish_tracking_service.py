@@ -256,7 +256,7 @@ def validate_single_fish(
         dominant_track_length / total_detections if total_detections > 0 else 0.0
     )
 
-    is_single_fish = secondary_tracks == 0
+    is_single_fish = not multiple_fish_detected
 
     # Determine rejection reason if applicable
     rejection_reason: Optional[str] = None

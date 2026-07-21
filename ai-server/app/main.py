@@ -300,13 +300,37 @@ async def health_ready() -> JSONResponse:
         checks["active_embeddings"] = 0
         checks["active_fish"] = 0
 
-    # 6b. Calibration status
+    # 6b. Calibration & Index status
     try:
-        from app.calibration import load_calibration
+        from app.calibration import load_calibration, is_calibration_valid
         cal = load_calibration(settings.reid_cache_name)
         checks["calibration_loaded"] = cal is not None
+        if cal is not None:
+            cal_valid, cal_reason = is_calibration_valid(cal)
+            checks["calibration_validated"] = cal_valid
+            checks["calibration_validation_far"] = cal.validation_far
+            checks["calibration_test_far"] = cal.test_far
+        else:
+            checks["calibration_validated"] = False
+            checks["calibration_validation_far"] = None
+            checks["calibration_test_far"] = None
     except Exception:
         checks["calibration_loaded"] = False
+        checks["calibration_validated"] = False
+        checks["calibration_validation_far"] = None
+        checks["calibration_test_far"] = None
+
+    try:
+        from app.services.matching_service import get_matching_service
+        ms = get_matching_service()
+        counts = ms.count_active_embeddings(settings.reid_cache_name)
+        index_complete = counts["embedding_count"] > 0
+        checks["index_complete"] = index_complete
+    except Exception:
+        index_complete = False
+        checks["index_complete"] = False
+
+    checks["auto_match_enabled"] = bool(checks.get("calibration_validated")) and index_complete
 
     # 7. Czech areas catalog
     try:

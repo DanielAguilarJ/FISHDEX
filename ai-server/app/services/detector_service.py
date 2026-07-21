@@ -114,12 +114,18 @@ class DetectorService:
             try:
                 import onnxruntime as ort
 
+                providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if ort.get_available_providers() and "CUDAExecutionProvider" in ort.get_available_providers() else ["CPUExecutionProvider"]
+                sess_options = ort.SessionOptions()
+                sess_options.intra_op_num_threads = 0  # 0 = Use 100% of all available CPU cores for max speed
+                sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+
                 self.session = ort.InferenceSession(
                     str(self.model_path),
-                    providers=["CPUExecutionProvider"],
+                    sess_options=sess_options,
+                    providers=providers,
                 )
                 self._available = True
-                logger.info("Detector model loaded: %s", self.model_path)
+                logger.info("Detector model loaded: %s (providers=%s)", self.model_path, providers)
             except Exception as e:
                 logger.warning("Failed to load detector model: %s", e)
         else:

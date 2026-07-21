@@ -76,6 +76,7 @@ from app.utils.area_utils import normalize_area_code
 
 @router.post("/upload")
 async def upload_job_video(
+    background_tasks: BackgroundTasks,
     video: Optional[UploadFile] = File(default=None),
     file: Optional[UploadFile] = File(default=None),
     user_id: str = Form(...),
@@ -237,6 +238,7 @@ async def upload_job_video(
             )
         )
         conn.commit()
+        background_tasks.add_task(process_identification_job, job_id)
     except Exception as e:
         conn.rollback()
         # Clean up file if database registration fails
@@ -275,10 +277,13 @@ async def process_job(
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
     current_status = row["status"]
-    if current_status == "completed" and not force:
-        raise HTTPException(status_code=409, detail=f"Job {job_id} already completed")
-    if current_status == "processing" and not force:
-        raise HTTPException(status_code=409, detail=f"Job {job_id} is already being processed")
+    if current_status in ("processing", "completed") and not force:
+        logger.info(f"Job {job_id} is already in status '{current_status}'. Returning success.")
+        return {
+            "job_id": job_id,
+            "status": current_status,
+            "message": f"Job is already {current_status}",
+        }
 
     background_tasks.add_task(process_identification_job, job_id, force=force)
 

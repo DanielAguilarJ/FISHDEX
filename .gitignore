@@ -48,6 +48,9 @@ graphify-out/
 
 # Temp / generated
 all_files.txt
+data_backup_*
+eval_data/
+eval_results/
 fish_app_codebase.md
 fish_app_codebase.zip
 fish_app_codebase/

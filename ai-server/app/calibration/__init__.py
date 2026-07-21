@@ -37,6 +37,9 @@ class CalibrationData:
     global_thresholds: SpeciesThresholds
     species_thresholds: dict[str, SpeciesThresholds]
     dataset_stats: dict  # identities, sessions, pairs per species
+    validated: bool = False
+    validation_far: Optional[float] = None
+    test_far: Optional[float] = None
 
 
 # Default uncalibrated thresholds — conservative
@@ -117,18 +120,35 @@ def load_calibration(model_version: str) -> Optional[CalibrationData]:
             global_thresholds=global_thresholds,
             species_thresholds=species_t,
             dataset_stats=data.get("dataset_stats", {}),
+            validated=bool(data.get("validated", False)),
+            validation_far=data.get("validation_far"),
+            test_far=data.get("test_far"),
         )
 
         logger.info(
-            "Loaded calibration for model %s (dataset=%s, species=%d)",
+            "Loaded calibration for model %s (dataset=%s, species=%d, validated=%s, val_far=%s, test_far=%s)",
             model_version, _calibration_cache.dataset_version,
-            len(species_t),
+            len(species_t), _calibration_cache.validated,
+            _calibration_cache.validation_far, _calibration_cache.test_far,
         )
         return _calibration_cache
 
     except Exception as e:
         logger.error("Failed to load calibration from %s: %s", cal_path, e)
         return None
+
+
+def is_calibration_valid(cal: Optional[CalibrationData]) -> tuple[bool, str]:
+    """Check if calibration meets scientific FAR <= 0.001 criteria for auto_match."""
+    if cal is None:
+        return False, "No calibration data loaded"
+    if not cal.validated:
+        return False, f"validated=False for model_version={cal.model_version}"
+    if cal.validation_far is None or float(cal.validation_far) > 0.001:
+        return False, f"validation_far ({cal.validation_far}) > 0.001"
+    if cal.test_far is not None and float(cal.test_far) > 0.001:
+        return False, f"test_far ({cal.test_far}) > 0.001"
+    return True, "Calibration validated"
 
 
 def get_thresholds_for_species(
@@ -139,11 +159,15 @@ def get_thresholds_for_species(
     Get thresholds for a species, with calibration status.
     
     Returns:
-        (thresholds, is_calibrated) — if not calibrated, returns UNCALIBRATED_DEFAULTS
+        (thresholds, is_calibrated) — if not validated or FAR > 0.001, returns UNCALIBRATED_DEFAULTS and False.
     """
     cal = load_calibration(model_version)
-    
-    if cal is None:
+    valid, reason = is_calibration_valid(cal)
+    if not valid:
+        logger.warning(
+            "Calibration for model %s is INVALID for auto_match: %s. Using fallback defaults.",
+            model_version, reason,
+        )
         return (UNCALIBRATED_DEFAULTS, False)
 
     species_t = cal.species_thresholds.get(species_slug)

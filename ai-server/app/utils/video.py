@@ -20,10 +20,66 @@ import numpy as np
 import os
 import subprocess
 import tempfile
-from typing import List, Tuple
+from dataclasses import dataclass
+from typing import Iterator, List, Tuple
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DecodedVideoFrame:
+    frame_index: int
+    timestamp_seconds: float
+    frame: np.ndarray
+
+
+def iter_frames_from_video(
+    video_path: str,
+    max_side: int = 960,
+) -> Iterator[DecodedVideoFrame]:
+    """
+    Decodes every frame from a video sequentially from index 0 to EOF without skipping.
+
+    Args:
+        video_path: Path to the video file.
+        max_side: Maximum pixels for longest side (default 960).
+
+    Yields:
+        DecodedVideoFrame for every frame in sequence.
+    """
+    rotation = _probe_video_rotation(video_path)
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        raise ValueError(f"No se pudo abrir el video: {video_path}")
+
+    try:
+        try:
+            cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 0)
+        except Exception:
+            pass
+
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        frame_idx = 0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret or frame is None or frame.size == 0:
+                break
+
+            rotated = _apply_video_rotation(frame, rotation)
+            resized = _resize_preserve_aspect(rotated, max_side=max_side)
+            ts = (frame_idx / fps) if fps > 0.0 else 0.0
+
+            yield DecodedVideoFrame(
+                frame_index=frame_idx,
+                timestamp_seconds=ts,
+                frame=resized,
+            )
+            frame_idx += 1
+    finally:
+        cap.release()
 
 
 # ---------------------------------------------------------------------------

@@ -381,7 +381,7 @@ class TestEmbeddingIdempotency:
 
         matching_service.store_embedding(
             fish_id="fish1",
-            sighting_id="s1",
+            sighting_id="s1_dup",
             species_slug="sp1",
             area_code="A1",
             embedding=vec,
@@ -389,7 +389,7 @@ class TestEmbeddingIdempotency:
         )
         matching_service.store_embedding(
             fish_id="fish1",
-            sighting_id="s1",
+            sighting_id="s1_dup",
             species_slug="sp1",
             area_code="A1",
             embedding=vec,
@@ -399,7 +399,7 @@ class TestEmbeddingIdempotency:
         with matching_service._connect() as conn:
             count = conn.execute(
                 "SELECT COUNT(*) FROM fish_embeddings "
-                "WHERE sighting_id = 'id1' OR sighting_id = 's1'"
+                "WHERE sighting_id = 's1_dup'"
             ).fetchone()[0]
 
         # Should be exactly 1 row
@@ -411,19 +411,19 @@ class TestEmbeddingIdempotency:
         vec = vec / np.linalg.norm(vec)
 
         matching_service.store_embedding(
-            fish_id="fish1", sighting_id="s1",
+            fish_id="fish1", sighting_id="s1_unique",
             species_slug="sp1", area_code="A1",
             embedding=vec, model_version="v1",
         )
         matching_service.store_embedding(
-            fish_id="fish1", sighting_id="s1",
+            fish_id="fish1", sighting_id="s1_unique",
             species_slug="sp1", area_code="A1",
             embedding=vec, model_version="v2",
         )
 
         with matching_service._connect() as conn:
             count = conn.execute(
-                "SELECT COUNT(*) FROM fish_embeddings WHERE sighting_id = 's1'"
+                "SELECT COUNT(*) FROM fish_embeddings WHERE sighting_id = 's1_unique'"
             ).fetchone()[0]
 
         assert count == 2
@@ -438,22 +438,12 @@ class TestVersionIsolation:
     @pytest.fixture
     def matching_service(self, tmp_path):
         db_path = tmp_path / "test_embeddings.sqlite"
-
-        with patch("app.config.settings") as mock_settings:
+        with patch("app.services.matching_service.settings") as mock_settings:
             mock_settings.embeddings_db_path = str(db_path)
-            mock_settings.reid_cache_name = "test_v1"
+            mock_settings.reid_cache_name = "v_old"
 
             from app.services.matching_service import MatchingService
             ms = MatchingService()
-
-            with ms._connect() as conn:
-                conn.execute("""
-                    CREATE UNIQUE INDEX IF NOT EXISTS
-                    idx_embeddings_sighting_model_vector
-                    ON fish_embeddings(sighting_id, model_version, vector_type)
-                """)
-                conn.commit()
-
             yield ms
 
     def test_embedding_exists_filters_by_version(self, matching_service):
@@ -462,13 +452,13 @@ class TestVersionIsolation:
         vec = vec / np.linalg.norm(vec)
 
         matching_service.store_embedding(
-            fish_id="fish1", sighting_id="s1",
+            fish_id="fish1", sighting_id="s1_iso",
             species_slug="sp1", area_code="A1",
             embedding=vec, model_version="v_old",
         )
 
-        assert matching_service.embedding_exists("s1", "v_old")
-        assert not matching_service.embedding_exists("s1", "v_new")
+        assert matching_service.embedding_exists("s1_iso", "v_old")
+        assert not matching_service.embedding_exists("s1_iso", "v_new")
 
     def test_count_active_embeddings_filters(self, matching_service):
         """count_active_embeddings only counts the specified version."""

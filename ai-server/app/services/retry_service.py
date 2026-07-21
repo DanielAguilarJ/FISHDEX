@@ -26,18 +26,19 @@ import numpy as np
 from app.config import settings
 from app.database import get_db_connection
 from app.utils.crop_utils import crop_fish_best
-from app.utils.video import extract_frames_from_video
+from app.utils.video import iter_frames_from_video, DecodedVideoFrame
 
 logger = logging.getLogger(__name__)
 
 _retry_task: Optional[asyncio.Task] = None
 
-# Retry configurations: (threshold, max_frames, max_area_ratio)
+# Retry configurations: (threshold, max_area_ratio)
 RETRY_CONFIGS = [
-    (0.20, 15, 0.65),
-    (0.15, 20, 0.65),
-    (0.15, 20, 0.75),
+    (0.20, 0.65),
+    (0.15, 0.65),
+    (0.15, 0.75),
 ]
+
 
 
 def _is_valid_tight(detection, frame_shape, min_conf: float, max_area: float) -> bool:
@@ -122,10 +123,10 @@ async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, ret
         logger.warning(f"[Retry {job_id}] Detector not available, skipping")
         return
 
-    threshold, max_frames, max_area = RETRY_CONFIGS[min(retry_count, len(RETRY_CONFIGS) - 1)]
+    threshold, max_area = RETRY_CONFIGS[min(retry_count, len(RETRY_CONFIGS) - 1)]
     logger.info(
         f"[Retry {job_id}] Attempt {retry_count + 1}/3: "
-        f"threshold={threshold}, max_frames={max_frames}, max_area={max_area}"
+        f"threshold={threshold}, max_area={max_area}"
     )
 
     raw_path = str(Path(settings.server_data_dir) / "storage" / raw_filename)
@@ -135,32 +136,27 @@ async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, ret
         return
 
     try:
-        # Extract more frames than the initial attempt
         if media_type == "image":
             img = cv2.imread(raw_path)
-            frames = [img] if img is not None else []
+            frames_iter = [DecodedVideoFrame(frame_index=0, timestamp_seconds=0.0, frame=img)] if img is not None else []
         else:
-            frames = extract_frames_from_video(raw_path, max_frames=max_frames)
+            frames_iter = iter_frames_from_video(raw_path, max_side=settings.frame_max_side or 960)
 
-        if not frames:
-            logger.warning(f"[Retry {job_id}] Could not extract frames")
-            _increment_retry(job_id, retry_count)
-            return
-
-        # Try detection on every frame
+        # Try detection on every decoded frame sequentially
         best_crop = None
         best_detection_frame = None
         best_detection = None
         best_conf = 0.0
 
-        for frame in frames:
+        for decoded in frames_iter:
+            frame = decoded.frame
             dets = detector.detect(frame, conf_threshold=threshold)
             for det in dets:
                 if _is_valid_tight(det, frame.shape, min_conf=threshold, max_area=max_area):
                     conf = float(getattr(det, "confidence", 0.0))
                     if conf > best_conf:
                         crop = crop_fish_best(frame, det)
-                        if crop is not None:
+                        if crop is not None and crop.size > 0:
                             best_crop = crop
                             best_detection_frame = frame
                             best_detection = det
