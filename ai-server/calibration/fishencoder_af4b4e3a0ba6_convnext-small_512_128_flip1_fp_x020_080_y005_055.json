@@ -9,7 +9,7 @@
     "review_threshold": 0.3,
     "auto_match_threshold": 0.35,
     "single_candidate_threshold": 0.3,
-    "min_margin": 0.04,
+    "min_margin": 0.005,
     "min_agreement": 0.3
   },
   "species": {},

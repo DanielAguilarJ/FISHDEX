@@ -248,6 +248,7 @@ def _check_auto_match(ctx: DecisionContext, t: dict) -> list[str]:
     if ctx.gps_uncertainty_status not in (
         "guaranteed_inside",
         "inside_but_uncertain",
+        "unknown",
     ):
         failures.append(
             f"GPS status not confirmed ({ctx.gps_uncertainty_status})"
