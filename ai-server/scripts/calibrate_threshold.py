@@ -4,16 +4,27 @@ FishDex ReID -- Calibracion del threshold optimo
 Mide la similitud entre tomas del mismo pez y de peces distintos
 para encontrar el threshold optimo de separacion.
 
-Estructura de datos esperada:
+Acepta IMAGENES y/o VIDEOS en cada carpeta de toma.
+Si hay un video (mp4, mov, avi, mkv...) se extraen frames automaticamente.
+
+Estructura de datos esperada (OPCION A - subcarpetas):
     calib_data/
-        pez_01_toma_a/ *.jpg   (frames del pez 1, primera toma)
-        pez_01_toma_b/ *.jpg   (frames del pez 1, segunda toma)
-        pez_02_toma_a/ *.jpg
-        pez_02_toma_b/ *.jpg
+        pez_01_toma_a/   <- carpeta con imagenes *.jpg o un video *.mp4
+        pez_01_toma_b/   <- segunda toma del mismo pez
+        pez_02_toma_a/
+        pez_02_toma_b/
         ...
 
-Los nombres de carpeta que empiezan con el mismo "pez_XX" se consideran
-el MISMO individuo. Ajusta get_fish_id() si usas otra convencion de nombres.
+ATAJO (OPCION B - archivos sueltos directamente en calib_data/):
+    calib_data/
+        pez_01_toma_a.mp4
+        pez_01_toma_b.mp4
+        pez_02_toma_a.mp4
+        pez_02_toma_b.mp4
+        ...
+
+Los nombres que empiezan con el mismo "pez_XX" se consideran
+el MISMO individuo. Ajusta get_fish_id() si usas otra convencion.
 
 Uso:
     cd ai-server
@@ -21,6 +32,9 @@ Uso:
 
     # Con carpeta personalizada:
     python scripts/calibrate_threshold.py --data mi_carpeta/
+
+    # Controlar cuantos frames se extraen de cada video:
+    python scripts/calibrate_threshold.py --max-frames 20
 """
 import argparse
 import sys
@@ -34,31 +48,93 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.reid_embedding_service import get_reid_embedding_service
 
+# Extensiones soportadas
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
+VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".3gp", ".temp"}
 
-def get_fish_id(folder_name: str) -> str:
+
+
+def get_fish_id(name: str) -> str:
     """
-    Extrae el ID del individuo a partir del nombre de carpeta.
+    Extrae el ID del individuo a partir del nombre de carpeta o archivo.
     Asume que el prefijo "pez_XX" identifica al individuo.
 
     Ejemplos:
-        "pez_01_toma_a" -> "pez_01"
+        "pez_01_toma_a"  -> "pez_01"
         "fish_05_catch_2" -> "fish_05"
     """
-    parts = folder_name.split("_")
+    parts = name.split("_")
     if len(parts) >= 2:
         return "_".join(parts[:2])
-    return folder_name
+    return name
 
 
-def load_frames(d: Path) -> list:
-    """Cargar todos los frames de una carpeta (jpg, png, bmp)."""
+def extract_frames_from_video(video_path: Path, max_frames: int = 15) -> list:
+    """
+    Extrae hasta max_frames frames distribuidos uniformemente de un video.
+    Igual que hace la app al grabar un pez.
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        print(f"    [WARN] No se pudo abrir el video: {video_path.name}")
+        return []
+
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total <= 0:
+        cap.release()
+        return []
+
+    # Seleccionar indices uniformemente distribuidos
+    n = min(max_frames, total)
+    indices = sorted(set(
+        int(round(i * (total - 1) / max(n - 1, 1)))
+        for i in range(n)
+    ))
+
     frames = []
-    for ext in ("*.jpg", "*.jpeg", "*.png", "*.bmp"):
-        for p in sorted(d.glob(ext)):
+    for idx in indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            frames.append(frame)
+
+    cap.release()
+    return frames
+
+
+def load_from_folder(d: Path, max_frames: int = 15) -> list:
+    """
+    Carga frames de una subcarpeta.
+    Prioriza videos; si no hay, carga imagenes.
+    """
+    frames = []
+
+    video_files = sorted(p for p in d.iterdir() if p.suffix.lower() in VIDEO_EXTS)
+    if video_files:
+        for vf in video_files:
+            vframes = extract_frames_from_video(vf, max_frames=max_frames)
+            frames.extend(vframes)
+            print(f"      video '{vf.name}' -> {len(vframes)} frames")
+        return frames
+
+    # Sin videos: buscar imagenes
+    for p in sorted(d.iterdir()):
+        if p.suffix.lower() in IMAGE_EXTS:
             img = cv2.imread(str(p))
             if img is not None:
                 frames.append(img)
     return frames
+
+
+def load_from_file(f: Path, max_frames: int = 15) -> list:
+    """Carga frames de un archivo suelto (video o imagen)."""
+    ext = f.suffix.lower()
+    if ext in VIDEO_EXTS:
+        return extract_frames_from_video(f, max_frames=max_frames)
+    elif ext in IMAGE_EXTS:
+        img = cv2.imread(str(f))
+        return [img] if img is not None else []
+    return []
 
 
 def main():
@@ -66,7 +142,13 @@ def main():
     parser.add_argument(
         "--data",
         default="calib_data",
-        help="Carpeta con subcarpetas pez_XX_toma_N/ (default: calib_data/)",
+        help="Carpeta con subcarpetas o archivos pez_XX_toma_N (default: calib_data/)",
+    )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=15,
+        help="Maximo de frames a extraer de cada video (default: 15)",
     )
     args = parser.parse_args()
 
@@ -75,15 +157,17 @@ def main():
         print(f"\nERROR: No existe la carpeta '{calib_dir.resolve()}'")
         print("Crea la carpeta con esta estructura:")
         print("  calib_data/")
-        print("    pez_01_toma_a/  *.jpg  (frames del pez 1, toma 1)")
-        print("    pez_01_toma_b/  *.jpg  (frames del pez 1, toma 2)")
-        print("    pez_02_toma_a/  *.jpg")
+        print("    pez_01_toma_a.mp4   <- video del pez 1, primera toma")
+        print("    pez_01_toma_b.mp4   <- video del pez 1, segunda toma")
+        print("    pez_02_toma_a.mp4")
         print("    ...")
         sys.exit(1)
 
     print("=" * 60)
     print("FishDex ReID -- Calibracion de Threshold")
     print("=" * 60)
+    print(f"Carpeta de datos : {calib_dir.resolve()}")
+    print(f"Max frames/video : {args.max_frames}")
     print("Cargando modelo ReID...")
 
     reid = get_reid_embedding_service()
@@ -93,26 +177,52 @@ def main():
         sys.exit(1)
 
     print("OK Modelo cargado\n")
-    print(f"Escaneando '{calib_dir}'...")
+    print(f"Escaneando '{calib_dir}'...\n")
 
+    # Recopilar entradas: (nombre_toma, frames)
+    entries: list[tuple[str, list]] = []
+
+    children = sorted(calib_dir.iterdir())
+
+    # A) Subcarpetas
+    for d in children:
+        if not d.is_dir():
+            continue
+        print(f"  [Carpeta] {d.name}")
+        frames = load_from_folder(d, max_frames=args.max_frames)
+        entries.append((d.name, frames))
+
+    # B) Archivos sueltos directamente en calib_data/
+    loose = [
+        f for f in children
+        if f.is_file() and f.suffix.lower() in (VIDEO_EXTS | IMAGE_EXTS)
+    ]
+    if loose:
+        print(f"\n  Archivos sueltos en '{calib_dir.name}/':")
+    for f in loose:
+        stem = f.stem  # "pez_01_toma_a"
+        print(f"  [Archivo] {f.name}")
+        frames = load_from_file(f, max_frames=args.max_frames)
+        entries.append((stem, frames))
+
+    print()
+
+    # Calcular prototipos
     protos: dict = {}
     folder_to_individual: dict = {}
 
-    for d in sorted(calib_dir.iterdir()):
-        if not d.is_dir():
-            continue
-        frames = load_frames(d)
+    for name, frames in entries:
         if not frames:
-            print(f"  [SKIP]  {d.name} -- sin frames validos")
+            print(f"  [SKIP]  {name} -- sin frames validos")
             continue
         proto = reid.extract_prototype(frames)
-        protos[d.name] = proto
-        individual_id = get_fish_id(d.name)
-        folder_to_individual[d.name] = individual_id
-        print(f"  [OK]    {d.name} ({len(frames)} frames) -> individuo '{individual_id}'")
+        protos[name] = proto
+        individual_id = get_fish_id(name)
+        folder_to_individual[name] = individual_id
+        print(f"  [OK]    {name} ({len(frames)} frames) -> individuo '{individual_id}'")
 
     if len(protos) < 2:
-        print("\nERROR: Necesitas al menos 2 carpetas con frames para comparar.")
+        print("\nERROR: Necesitas al menos 2 tomas para comparar.")
         sys.exit(1)
 
     names = list(protos.keys())
@@ -182,17 +292,20 @@ def main():
             print("AVISO: SOLAPAMIENTO DETECTADO")
             print(f"   mismo_min={lo:.4f} <= distinto_max={hi:.4f}  (gap={gap:.4f})")
             print()
-            print("   El modelo NO separa bien estos individuos con los parametros actuales.")
+            print("   El modelo NO separa bien estos individuos.")
             print("   Con solapamiento, ningun threshold garantiza resultados correctos.")
             print()
             print("   Causas mas probables (en orden):")
-            print("   1. El modelo ReID se cargo parcialmente (revisa el log del servidor).")
+            print("   1. Calidad insuficiente de los datos de calibracion.")
+            print("      -> Usa VIDEOS grabados con la app (15+ frames por toma).")
+            print("      -> Asegurate de que el cuerpo del pez se vea completo.")
+            print("   2. El modelo ReID se cargo parcialmente.")
             print("      Busca: 'FishEncoder loaded: X/Y keys | missing=Z shape_mismatch=W'")
-            print("   2. Los ROIs de calibracion son inconsistentes (angulos muy distintos).")
-            print("   3. FISHDEX_REID_MODEL_NAME no coincide con el backbone de entrenamiento.")
+            print("   3. Los peces son muy similares visualmente entre si.")
+            print("   4. FISHDEX_REID_MODEL_NAME no coincide con el backbone de entrenamiento.")
     elif same_scores:
         print("INFO: Solo tienes pares del MISMO individuo.")
-        print("   Anade carpetas de otros peces para ver la separacion.")
+        print("   Anade videos/carpetas de otros peces para ver la separacion.")
     elif diff_scores:
         print("INFO: Solo tienes pares de individuos DISTINTOS.")
         print("   Anade >=2 tomas del mismo pez para ver la cohesion intra-clase.")

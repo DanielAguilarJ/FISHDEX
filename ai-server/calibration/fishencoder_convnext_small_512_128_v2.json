@@ -1,0 +1,39 @@
+{
+  "_comment": "Calibration for fishencoder_convnext_small_512_128_v2. Generated from 10-fish dataset (oncorhynchus_mykiss). Same-fish min=0.9597 max=0.9820 | Different-fish min=0.9249 max=0.9972. Overlap detected — thresholds set conservatively: auto_match requires GPS + very high score. Most new captures will go to needs_manual_review until more training data is available.",
+  "schema_version": "1",
+  "model_version": "fishencoder_convnext_small_512_128_v2",
+  "dataset_version": "calib_v1_oncorhynchus_mykiss_10fish",
+  "generated_at": "2026-07-21T08:00:00Z",
+  "global": {
+    "review_threshold": 0.70,
+    "auto_match_threshold": 0.985,
+    "single_candidate_threshold": 0.995,
+    "min_margin": 0.03,
+    "min_agreement": 0.60
+  },
+  "species": {
+    "oncorhynchus_mykiss": {
+      "review_threshold": 0.70,
+      "auto_match_threshold": 0.990,
+      "single_candidate_threshold": 0.997,
+      "min_margin": 0.02,
+      "min_agreement": 0.55
+    }
+  },
+  "dataset_stats": {
+    "total_identities": 10,
+    "total_sessions": 19,
+    "total_pairs": 171,
+    "same_fish_pairs": 9,
+    "same_fish_min": 0.9597,
+    "same_fish_max": 0.9820,
+    "same_fish_mean": 0.9701,
+    "diff_fish_pairs": 162,
+    "diff_fish_min": 0.9249,
+    "diff_fish_max": 0.9972,
+    "diff_fish_mean": 0.9721,
+    "overlap_detected": true,
+    "gap": -0.0375,
+    "note": "Overlap due to high visual similarity between individual rainbow trout. auto_match threshold set high (0.985-0.990) so only very strong matches pass. GPS confirmation still required for auto_match."
+  }
+}

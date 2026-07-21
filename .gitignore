@@ -56,9 +56,11 @@ cultura\ climatica
 
 # Local database and media storage
 ai-server/data/
+ai-server/calib_data/
 ai-server/models/fish_obb_dataset/
 ai-server/models/images/
 ai-server/models/labels/
 ai-server/models/classifier/fish_species_v1.onnx
 ai-server/models/classifier/labels.json
 ai-server/models/detector/fish_detector_v1.onnx
+

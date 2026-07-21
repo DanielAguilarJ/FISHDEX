@@ -112,11 +112,13 @@ async def get_dashboard_status(
 
 @router.get("/jobs")
 async def get_dashboard_jobs(
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    status: Optional[str] = Query(default=None),
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ):
-    """List recent identification jobs from local SQLite, including preview thumbnails."""
+    """List identification jobs from local SQLite with pagination and status filtering."""
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     conn = None
@@ -124,16 +126,30 @@ async def get_dashboard_jobs(
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # Build WHERE clause for optional status filter
+        where_clause = "WHERE status = ?" if status else ""
+        count_params = (status,) if status else ()
+        query_params = (status, limit, offset) if status else (limit, offset)
+
+        # Get total count for pagination metadata
         cursor.execute(
-            """
+            f"SELECT COUNT(*) FROM identification_jobs {where_clause}",
+            count_params,
+        )
+        total_count = cursor.fetchone()[0]
+
+        cursor.execute(
+            f"""
             SELECT *
             FROM identification_jobs
+            {where_clause}
             ORDER BY created_at DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (limit,),
+            query_params,
         )
         rows = cursor.fetchall()
+
 
         jobs_list = []
 
@@ -181,7 +197,13 @@ async def get_dashboard_jobs(
 
             jobs_list.append(d)
 
-        return jobs_list
+        return {
+            "jobs": jobs_list,
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total_count,
+        }
 
     except Exception as e:
         logger.error(f"Failed to list jobs from SQLite: {e}")

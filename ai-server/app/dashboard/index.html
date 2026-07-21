@@ -462,8 +462,32 @@
         <!-- Tabla de Jobs -->
         <section class="card recent-jobs-card">
             <div class="card-header">
-                <h2 class="card-title" data-i18n="recentJobs">Jobs Recientes</h2>
-                <button class="action-btn" id="refresh-jobs-btn" data-i18n="refreshList">Refrescar Lista</button>
+                <h2 class="card-title" data-i18n="recentJobs">Historial de Jobs</h2>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <select id="jobs-status-filter" style="background:var(--surface);color:var(--text-primary);border:1px solid var(--surface-border);border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer;">
+                        <option value="">Todos los estados</option>
+                        <option value="completed">Completado</option>
+                        <option value="needs_manual_review">Revisión manual</option>
+                        <option value="failed">Fallido</option>
+                        <option value="processing">Procesando</option>
+                        <option value="uploaded">Subido</option>
+                    </select>
+                    <select id="jobs-page-size" style="background:var(--surface);color:var(--text-primary);border:1px solid var(--surface-border);border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer;">
+                        <option value="20">20 por página</option>
+                        <option value="50" selected>50 por página</option>
+                        <option value="100">100 por página</option>
+                        <option value="200">200 por página</option>
+                    </select>
+                    <button class="action-btn" id="refresh-jobs-btn" data-i18n="refreshList">Refrescar</button>
+                </div>
+            </div>
+            <div id="jobs-pagination-info" style="display:flex;justify-content:space-between;align-items:center;padding:8px 16px;font-size:13px;color:var(--text-secondary);border-bottom:1px solid var(--surface-border);">
+                <span id="jobs-count-label">Cargando...</span>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button id="jobs-prev-btn" class="action-btn" onclick="jobsGoToPage(jobsCurrentPage - 1)" disabled style="padding:4px 12px;">← Anterior</button>
+                    <span id="jobs-page-label" style="font-weight:700;">Página 1</span>
+                    <button id="jobs-next-btn" class="action-btn" onclick="jobsGoToPage(jobsCurrentPage + 1)" disabled style="padding:4px 12px;">Siguiente →</button>
+                </div>
             </div>
             <div class="table-container">
                 <table>
@@ -485,6 +509,9 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            <div id="jobs-pagination-bottom" style="display:flex;justify-content:center;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--surface-border);flex-wrap:wrap;">
+                <!-- page number buttons rendered here -->
             </div>
         </section>
 
@@ -899,10 +926,89 @@
                 .catch(err => console.error('Error fetching stats:', err));
         }
 
+        // ─── Jobs pagination state ────────────────────────────────────────────
+        let jobsCurrentPage = 1;
+        let jobsTotalCount  = 0;
+        let jobsPageSize    = 50;
+        let jobsStatusFilter = '';
+
+        window.jobsGoToPage = function(page) {
+            const totalPages = Math.ceil(jobsTotalCount / jobsPageSize) || 1;
+            if (page < 1 || page > totalPages) return;
+            jobsCurrentPage = page;
+            loadJobs();
+        };
+
         function loadJobs() {
-            fetch(`${API_BASE}/jobs?secret=${secret}&limit=20`)
+            const offset = (jobsCurrentPage - 1) * jobsPageSize;
+            let url = `${API_BASE}/jobs?secret=${secret}&limit=${jobsPageSize}&offset=${offset}`;
+            if (jobsStatusFilter) url += `&status=${encodeURIComponent(jobsStatusFilter)}`;
+
+            fetch(url)
                 .then(res => res.json())
-                .then(jobs => {
+                .then(data => {
+                    // Support both old (array) and new (paginated object) responses
+                    const jobs  = Array.isArray(data) ? data : (data.jobs || []);
+                    jobsTotalCount = Array.isArray(data) ? jobs.length : (data.total || jobs.length);
+                    const totalPages = Math.ceil(jobsTotalCount / jobsPageSize) || 1;
+
+                    // Update count label
+                    const start = jobsTotalCount === 0 ? 0 : offset + 1;
+                    const end   = Math.min(offset + jobsPageSize, jobsTotalCount);
+                    document.getElementById('jobs-count-label').textContent =
+                        jobsTotalCount === 0
+                            ? 'Sin resultados'
+                            : `Mostrando ${start}–${end} de ${jobsTotalCount} jobs`;
+
+                    // Update prev / next
+                    document.getElementById('jobs-prev-btn').disabled = jobsCurrentPage <= 1;
+                    document.getElementById('jobs-next-btn').disabled = jobsCurrentPage >= totalPages;
+                    document.getElementById('jobs-page-label').textContent = `Página ${jobsCurrentPage} / ${totalPages}`;
+
+                    // Render bottom page-number buttons (max 7 visible)
+                    const bottomPag = document.getElementById('jobs-pagination-bottom');
+                    bottomPag.innerHTML = '';
+                    const startPage = Math.max(1, jobsCurrentPage - 3);
+                    const endPage   = Math.min(totalPages, startPage + 6);
+                    if (startPage > 1) {
+                        const btn = document.createElement('button');
+                        btn.className = 'action-btn';
+                        btn.textContent = '1';
+                        btn.style.cssText = 'padding:4px 10px;';
+                        btn.onclick = () => jobsGoToPage(1);
+                        bottomPag.appendChild(btn);
+                        if (startPage > 2) {
+                            const dots = document.createElement('span');
+                            dots.textContent = '…';
+                            dots.style.cssText = 'color:var(--text-secondary);padding:0 4px;';
+                            bottomPag.appendChild(dots);
+                        }
+                    }
+                    for (let p = startPage; p <= endPage; p++) {
+                        const btn = document.createElement('button');
+                        btn.className = 'action-btn';
+                        btn.textContent = p;
+                        btn.style.cssText = `padding:4px 10px;${p === jobsCurrentPage ? 'background:var(--accent-blue);color:#fff;font-weight:700;' : ''}`;
+                        const pg = p;
+                        btn.onclick = () => jobsGoToPage(pg);
+                        bottomPag.appendChild(btn);
+                    }
+                    if (endPage < totalPages) {
+                        if (endPage < totalPages - 1) {
+                            const dots = document.createElement('span');
+                            dots.textContent = '…';
+                            dots.style.cssText = 'color:var(--text-secondary);padding:0 4px;';
+                            bottomPag.appendChild(dots);
+                        }
+                        const btn = document.createElement('button');
+                        btn.className = 'action-btn';
+                        btn.textContent = totalPages;
+                        btn.style.cssText = 'padding:4px 10px;';
+                        btn.onclick = () => jobsGoToPage(totalPages);
+                        bottomPag.appendChild(btn);
+                    }
+
+                    // Render rows
                     const tbody = document.getElementById('jobs-table-body');
                     tbody.innerHTML = '';
                     if (jobs.length === 0) {
@@ -914,17 +1020,17 @@
                         const createdDate = new Date(job.created_at).toLocaleString();
                         const confidence = job.confidence ? `${(job.confidence * 100).toFixed(1)}%` : '-';
                         const species = job.species_slug ? job.species_slug.replace('_', ' ') : '-';
-                        
+
                         let retryBtn = '';
                         if (job.status === 'failed') {
                             retryBtn = `<button class="action-btn" onclick="retryJob('${job.$id}')" data-i18n="retry">${t("retry")}</button>`;
                         }
-                        
+
                         const detailBtn = `<button class="action-btn" onclick="openJobDetail('${job.$id}')" data-i18n="viewDetail">${t("viewDetail")}</button>`;
 
-                        const imgUrl = job.preview_url ? job.preview_url : null;
-                        const imgHtml = imgUrl 
-                            ? `<img src="${imgUrl}" class="job-thumbnail">` 
+                        const imgUrl  = job.preview_url ? job.preview_url : null;
+                        const imgHtml = imgUrl
+                            ? `<img src="${imgUrl}" class="job-thumbnail">`
                             : `<span style="font-size: 12px; color: var(--text-secondary);">${t("noImage")}</span>`;
 
                         tr.innerHTML = `
@@ -1344,9 +1450,24 @@
         }
 
         refreshJobsBtn.addEventListener('click', () => {
+            jobsCurrentPage = 1;
             loadJobs();
             updateServerStatus();
             writeToTerminal('Lista de jobs refrescada manualmente', 'DEBUG');
+        });
+
+        // Page-size selector
+        document.getElementById('jobs-page-size').addEventListener('change', function() {
+            jobsPageSize = parseInt(this.value, 10);
+            jobsCurrentPage = 1;
+            loadJobs();
+        });
+
+        // Status filter selector
+        document.getElementById('jobs-status-filter').addEventListener('change', function() {
+            jobsStatusFilter = this.value;
+            jobsCurrentPage = 1;
+            loadJobs();
         });
 
         // Start
