@@ -183,11 +183,29 @@ def save_job_artifacts(
         selected_files.append(rel)
 
     crop_files = []
+    fingerprint_files = []
+    fingerprint_dir = base / "fingerprint"
+    fingerprint_dir.mkdir(parents=True, exist_ok=True)
+
     for i, crop in enumerate(cropped_frames):
         rel = f"jobs/{job_id}/crops/crop_{i:02d}.jpg"
         abs_path = Path(settings.server_data_dir) / "storage" / rel
         _write_jpg(abs_path, crop)
         crop_files.append(rel)
+
+        if crop is not None and crop.size > 0:
+            ch, cw = crop.shape[:2]
+            fx1 = max(0, int(cw * settings.reid_fingerprint_x_start))
+            fx2 = min(cw, int(cw * settings.reid_fingerprint_x_end))
+            fy1 = max(0, int(ch * settings.reid_fingerprint_y_start))
+            fy2 = min(ch, int(ch * settings.reid_fingerprint_y_end))
+
+            if fx2 > fx1 and fy2 > fy1:
+                fp_crop = crop[fy1:fy2, fx1:fx2]
+                rel_fp = f"jobs/{job_id}/fingerprint/crop_{i:02d}.jpg"
+                abs_fp = Path(settings.server_data_dir) / "storage" / rel_fp
+                _write_jpg(abs_fp, fp_crop)
+                fingerprint_files.append(rel_fp)
 
     preview_filename = crop_files[0] if crop_files else (selected_files[0] if selected_files else None)
 
@@ -207,6 +225,8 @@ def save_job_artifacts(
         "selected_frame_urls": [_storage_url(p) for p in selected_files],
         "crop_files": crop_files,
         "crop_urls": [_storage_url(p) for p in crop_files],
+        "fingerprint_files": fingerprint_files,
+        "fingerprint_urls": [_storage_url(p) for p in fingerprint_files],
     }
 
 
@@ -287,6 +307,25 @@ def save_fish_capture_artifacts(
             abs_path = Path(settings.server_data_dir) / "storage" / rel
             _write_jpg(abs_path, crop)
             image_bbox_files.append(rel)
+
+    # ── Fingerprint spot-region crops (yellow box region: x=15-50%, y=5-55%) ────
+    images_fingerprint_dir = abs_base / "images_fingerprint"
+    images_fingerprint_dir.mkdir(parents=True, exist_ok=True)
+    image_fingerprint_files: list[str] = []
+    for i, crop in enumerate(cropped_frames):
+        if crop is not None and crop.size > 0:
+            ch, cw = crop.shape[:2]
+            fx1 = max(0, int(cw * settings.reid_fingerprint_x_start))
+            fx2 = min(cw, int(cw * settings.reid_fingerprint_x_end))
+            fy1 = max(0, int(ch * settings.reid_fingerprint_y_start))
+            fy2 = min(ch, int(ch * settings.reid_fingerprint_y_end))
+
+            if fx2 > fx1 and fy2 > fy1:
+                fp_crop = crop[fy1:fy2, fx1:fx2]
+                rel_fp = f"{rel_base}/images_fingerprint/crop_{i:02d}.jpg"
+                abs_fp = Path(settings.server_data_dir) / "storage" / rel_fp
+                _write_jpg(abs_fp, fp_crop)
+                image_fingerprint_files.append(rel_fp)
 
     # ── Best-N selected frames ─────────────────────────────────────────────
     frame_files = []
