@@ -96,6 +96,12 @@ class MatchingService:
             if "longitude" not in cols:
                 logger.info("Adding column fish_embeddings.longitude REAL")
                 conn.execute("ALTER TABLE fish_embeddings ADD COLUMN longitude REAL")
+            if "dimensions" not in cols:
+                logger.info("Adding column fish_embeddings.dimensions INTEGER")
+                conn.execute("ALTER TABLE fish_embeddings ADD COLUMN dimensions INTEGER")
+            if "vector_type" not in cols:
+                logger.info("Adding column fish_embeddings.vector_type TEXT DEFAULT 'prototype'")
+                conn.execute("ALTER TABLE fish_embeddings ADD COLUMN vector_type TEXT DEFAULT 'prototype'")
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
