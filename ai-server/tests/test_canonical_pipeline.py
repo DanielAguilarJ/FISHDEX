@@ -150,9 +150,9 @@ def test_pipeline_dynamic_index_completeness(monkeypatch):
     query_emb /= np.linalg.norm(query_emb, axis=1, keepdims=True)
     meta = CaptureMetadata(species_slug="cyprinus_carpio", latitude=50.0, longitude=14.0)
 
-    # Candidate retrieval empty -> returns new_fish / review
+    # Candidate retrieval empty -> returns new_fish
     res = pipeline.run(query_embeddings=query_emb, metadata=meta)
-    assert res.decision in ["new_fish", "needs_manual_review"]
+    assert res.decision == "new_fish"
 
 
 def test_artifact_service_fingerprint_crops(tmp_path, monkeypatch):

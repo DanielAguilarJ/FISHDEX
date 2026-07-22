@@ -27,13 +27,15 @@ class TestDecisionLogicUnit:
             decision = "new_fish"
         elif score >= 0.85 and margin >= min_margin:
             decision = "auto_match"
+        elif score >= 0.70:
+            decision = "auto_match"
         else:
-            decision = "needs_manual_review"
+            decision = "new_fish"
 
         assert decision == "auto_match"
 
     def test_high_score_insufficient_margin_goes_to_review(self):
-        """Score >= 0.85 but margin < 0.05 -> needs_manual_review."""
+        """Score >= 0.85 but margin < 0.05 -> forced auto_match (score >= 0.70)."""
         score = 0.87
         margin = 0.03  # Too small
         min_margin = 0.05
@@ -43,27 +45,31 @@ class TestDecisionLogicUnit:
             decision = "new_fish"
         elif score >= 0.85 and margin >= min_margin:
             decision = "auto_match"
+        elif score >= 0.70:
+            decision = "auto_match"
         else:
-            decision = "needs_manual_review"
+            decision = "new_fish"
 
-        assert decision == "needs_manual_review"
+        assert decision == "auto_match"
 
     def test_gray_zone_score_goes_to_review(self):
-        """Score between threshold and auto_match (0.82-0.85) -> review."""
+        """Score between threshold and auto_match (0.70-0.85) -> forced auto_match."""
         score = 0.83
         margin = 0.10
         min_margin = 0.05
 
-        # Even with good margin, score below 0.85 is not auto_match
+        # Score >= 0.70 review threshold forces auto_match
         is_new_fish = False
         if is_new_fish:
             decision = "new_fish"
         elif score >= 0.85 and margin >= min_margin:
             decision = "auto_match"
+        elif score >= 0.70:
+            decision = "auto_match"
         else:
-            decision = "needs_manual_review"
+            decision = "new_fish"
 
-        assert decision == "needs_manual_review"
+        assert decision == "auto_match"
 
     def test_no_candidates_creates_new_fish(self):
         """No match found (score below threshold) -> new_fish."""
@@ -75,13 +81,15 @@ class TestDecisionLogicUnit:
             decision = "new_fish"
         elif score >= 0.85:
             decision = "auto_match"
+        elif score >= 0.70:
+            decision = "auto_match"
         else:
-            decision = "needs_manual_review"
+            decision = "new_fish"
 
         assert decision == "new_fish"
 
     def test_single_candidate_not_enough_goes_to_review(self):
-        """Single candidate with score 0.84 -> review, not auto_match."""
+        """Single candidate with score 0.84 -> forced auto_match (score >= 0.70)."""
         score = 0.84
         margin = 0.84  # Only one candidate so margin = score - 0
         min_margin = 0.05
@@ -91,10 +99,12 @@ class TestDecisionLogicUnit:
             decision = "new_fish"
         elif score >= 0.85 and margin >= min_margin:
             decision = "auto_match"
+        elif score >= 0.70:
+            decision = "auto_match"
         else:
-            decision = "needs_manual_review"
+            decision = "new_fish"
 
-        assert decision == "needs_manual_review"
+        assert decision == "auto_match"
 
 
 class TestAmbiguousDoesNotContaminate:

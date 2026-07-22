@@ -62,7 +62,7 @@ class CaptureMetadata:
 @dataclass
 class PipelineResult:
     """Output of the identification pipeline."""
-    decision: str  # auto_match, new_fish, needs_manual_review, repeat_capture
+    decision: str  # auto_match, new_fish, repeat_capture (never needs_manual_review)
     fish_id: Optional[str] = None
     proposed_fish_id: Optional[str] = None
     scoring: Optional[ScoringResult] = None
@@ -261,7 +261,7 @@ class IdentificationPipeline:
             thresholds=decision_thresholds,
         )
 
-        # Force to manual review if high similarity but outside auto-match radius
+        # Note if outside auto-match radius (keep auto_match, just log it)
         final_decision = decision.decision
         final_reasons = list(decision.reasons)
 
@@ -269,10 +269,10 @@ class IdentificationPipeline:
             outside_auto_match_radius
             and final_decision == "auto_match"
         ):
-            final_decision = "needs_manual_review"
             final_reasons.append(
-                f"high_similarity_outside_auto_match_radius "
-                f"(distance={min_distance_m:.0f}m > {self._auto_match_radius_m:.0f}m)"
+                f"Note: outside_auto_match_radius "
+                f"(distance={min_distance_m:.0f}m > {self._auto_match_radius_m:.0f}m) "
+                f"— match kept as auto_match per no-manual-review policy"
             )
 
         # --- Build result with reference evidence ---
@@ -281,7 +281,7 @@ class IdentificationPipeline:
         return PipelineResult(
             decision=final_decision,
             fish_id=scoring.top1_fish_id if final_decision == "auto_match" else None,
-            proposed_fish_id=scoring.top1_fish_id if final_decision == "needs_manual_review" else None,
+            proposed_fish_id=decision.proposed_fish_id if final_decision == "auto_match" and decision.confidence_band == "forced" else None,
             scoring=scoring,
             identity_decision=decision,
             candidates_evaluated=scoring.candidates_evaluated,
@@ -497,9 +497,9 @@ class IdentificationPipeline:
 
         # Quality OK, no candidates -> new fish
         if metadata.latitude is None or metadata.longitude is None:
-            reasons.append("No GPS — cannot confirm absence of candidates")
+            reasons.append("No GPS — treating as new fish (no candidates retrievable)")
             return PipelineResult(
-                decision="needs_manual_review",
+                decision="new_fish",
                 reasons=reasons,
                 model_version=self._model_version,
             )

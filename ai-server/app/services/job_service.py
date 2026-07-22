@@ -356,8 +356,6 @@ def _build_similarity_reference(
     # Determine status based on decision
     if pipeline_decision == "auto_match":
         status = "accepted"
-    elif pipeline_decision == "needs_manual_review":
-        status = "needs_manual_review"
     elif pipeline_decision == "new_fish":
         status = "rejected"
     else:
@@ -1125,14 +1123,15 @@ def process_identification_job(
             is_new_fish = pipeline_decision == "new_fish"
 
             # --- DECISION LOGIC (via unified pipeline) ---
-            # The pipeline has already made the decision: auto_match, new_fish,
-            # needs_manual_review, or repeat_capture
+            # The pipeline always gives a definitive decision: auto_match, new_fish,
+            # or repeat_capture. It NEVER returns needs_manual_review.
             min_margin = getattr(settings, "reid_min_margin", 0.05)
             min_agreement = getattr(settings, "reid_min_agreement", 0.75)
             detection_confidence = best_detection_confidence if best_detection else 0.0
 
             if pipeline_decision == "auto_match":
-                confidence_band = "high"
+                # Use the identity_decision confidence_band (could be "high" or "forced")
+                confidence_band = getattr(pipeline_result.identity_decision, 'confidence_band', 'high') if pipeline_result.identity_decision else "high"
                 linkage_decision = "auto_match"
                 requires_human_review = False
             elif pipeline_decision == "new_fish":
@@ -1144,15 +1143,16 @@ def process_identification_job(
                 linkage_decision = "repeat_capture"
                 requires_human_review = True
             else:
-                # needs_manual_review (gray zone, GPS uncertain, multiple fish, etc.)
-                confidence_band = "gray_zone"
-                linkage_decision = "needs_manual_review"
-                requires_human_review = True
+                # Unexpected decision — treat as new_fish to never block
+                logger.warning(f"[Job {job_id}] Unexpected pipeline_decision='{pipeline_decision}' — treating as new_fish")
+                confidence_band = "new_fish"
+                linkage_decision = "new_fish"
+                requires_human_review = False
 
             if requires_human_review:
-                # --- AMBIGUOUS PATH: Mark job as needs_manual_review ---
+                # --- REPEAT CAPTURE PATH: quality too low ---
                 # Do NOT create fish individual, sighting, or store embedding
-                final_status = "needs_manual_review"
+                final_status = "repeat_capture"
                 xp_earned = 0
 
                 linkage = {
@@ -1167,7 +1167,7 @@ def process_identification_job(
                     "margin": round(match_margin, 4),
                     "confidence_band": confidence_band,
                     "decision": linkage_decision,
-                    "requires_human_review": True,
+                    "requires_human_review": False,
                     "reasons": pipeline_result.reasons,
                     "area_code": area_code_clean,
                     "latitude": job_doc.get("latitude"),
@@ -1179,13 +1179,13 @@ def process_identification_job(
                     "multiple_fish_detected": multiple_fish_detected,
                 }
 
-                # Build similarity reference for the review case
+                # Build similarity reference for the repeat capture case
                 similarity_reference = _build_similarity_reference(
                     pipeline_result, scoring, cursor, pipeline_decision,
                 )
                 linkage["similarity_reference"] = similarity_reference
 
-                # Save complete ROI crops for review (the fish, not the fingerprint)
+                # Save complete ROI crops (the fish, not the fingerprint)
                 try:
                     review_artifacts = save_job_artifacts(
                         job_id=job_id,
@@ -1196,7 +1196,7 @@ def process_identification_job(
                     review_artifact_dir = review_artifacts.get("job_artifact_dir")
                     review_preview = review_artifacts.get("preview_filename")
                 except Exception as art_err:
-                    logger.warning(f"[Job {job_id}] Failed to save review artifacts: {art_err}")
+                    logger.warning(f"[Job {job_id}] Failed to save artifacts: {art_err}")
                     review_artifact_dir = None
                     review_preview = None
 
@@ -1213,7 +1213,7 @@ def process_identification_job(
                            preview_filename = ?
                        WHERE id = ?""",
                     (
-                        "needs_manual_review",
+                        "repeat_capture",
                         now_str,
                         json.dumps({"linkage": linkage, "species_slug": species_slug}, ensure_ascii=False),
                         scoring.top1_fish_id if scoring else None,
@@ -1229,15 +1229,15 @@ def process_identification_job(
                 conn.commit()
 
                 logger.info(
-                    f"[Job {job_id}] AMBIGUOUS result (score={match_confidence:.4f}, "
-                    f"margin={match_margin:.4f}) — marked needs_manual_review. "
+                    f"[Job {job_id}] REPEAT CAPTURE (score={match_confidence:.4f}, "
+                    f"margin={match_margin:.4f}) — quality too low. "
                     f"No individual or sighting created."
                 )
 
-                _emit_progress(job_id, "needs_manual_review", 100, "Requires human review")
+                _emit_progress(job_id, "repeat_capture", 100, "Repeat capture — quality too low")
 
                 return {
-                    "status": "needs_manual_review",
+                    "status": "repeat_capture",
                     "job_id": job_id,
                     "fish_id": None,
                     "sighting_id": None,
@@ -1248,7 +1248,7 @@ def process_identification_job(
                     "xp_earned": 0,
                     "detection_confidence": round(detection_confidence, 4),
                     "match_confidence": round(match_confidence, 4),
-                    "requires_human_review": True,
+                    "requires_human_review": False,
                     "linkage": linkage,
                 }
 

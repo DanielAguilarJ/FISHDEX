@@ -264,8 +264,9 @@ class TestSingleCandidateThreshold:
             calibration_available=True,
         )
         decision = decide_identity(ctx, "FISH-001", thresholds)
-        assert decision.decision != "auto_match"
-        assert decision.decision == "needs_manual_review"
+        # With no manual review, score 0.60 >= review_threshold 0.3 forces auto_match
+        assert decision.decision == "auto_match"
+        assert decision.confidence_band == "forced"
 
     def test_single_candidate_above_threshold_can_auto_match(self):
         """With 1 candidate, score >= single_candidate_threshold can auto_match."""
@@ -308,8 +309,8 @@ class TestSingleCandidateThreshold:
 
 class TestNoCalibrationBlocksAutoMatch:
 
-    def test_high_score_without_calibration_goes_to_review(self):
-        """Even with a perfect score, calibration_available=False → review."""
+    def test_high_score_without_calibration_forces_auto_match(self):
+        """Even without calibration, score >= review_threshold forces auto_match with forced band."""
         thresholds = {
             "auto_match_threshold": 0.85,
             "review_threshold": 0.70,
@@ -326,7 +327,8 @@ class TestNoCalibrationBlocksAutoMatch:
             calibration_available=False,
         )
         decision = decide_identity(ctx, "FISH-001", thresholds)
-        assert decision.decision == "needs_manual_review"
+        assert decision.decision == "auto_match"
+        assert decision.confidence_band == "forced"
         assert any("calibration" in r.lower() or "MODEL_VALIDATED" in r for r in decision.reasons)
 
     def test_uncalibrated_defaults_used_when_calibration_invalid(self, tmp_path, monkeypatch):

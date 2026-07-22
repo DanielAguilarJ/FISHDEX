@@ -9,7 +9,7 @@ Strategy:
   - Retry 1: threshold 0.20, 15 frames
   - Retry 2: threshold 0.15, 20 frames
   - Retry 3: threshold 0.15, 20 frames, relaxed area guard (0.75)
-  - If all 3 background retries fail: mark as 'needs_manual_review'
+  - If all 3 background retries fail: mark as 'failed' with error message
   - If any retry succeeds: inject the recovered detection into the complete
     identification pipeline so embeddings, matching, sightings and artifacts
     are generated normally
@@ -208,8 +208,8 @@ async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, ret
             # Failed this attempt
             new_count = retry_count + 1
             if new_count >= 3:
-                logger.warning(f"[Retry {job_id}] All 3 retries exhausted → needs_manual_review")
-                _mark_manual_review(job_id)
+                logger.warning(f"[Retry {job_id}] All 3 retries exhausted → marking as failed")
+                _mark_failed_retries(job_id)
             else:
                 _increment_retry(job_id, retry_count)
 
@@ -271,21 +271,21 @@ def _increment_retry(job_id: str, current_count: int):
         conn.close()
 
 
-def _mark_manual_review(job_id: str):
-    """Mark job as needing manual review."""
+def _mark_failed_retries(job_id: str):
+    """Mark job as failed after all retries exhausted."""
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
             """UPDATE identification_jobs
-               SET status = 'needs_manual_review', retry_count = 3,
-                   error_message = 'All automatic retries exhausted. Manual crop review required.'
+               SET status = 'failed', retry_count = 3,
+                   error_message = 'All automatic retries exhausted. Could not detect fish in any frame.'
                WHERE id = ?""",
             (job_id,),
         )
         conn.commit()
     except Exception as e:
-        logger.error(f"[Retry {job_id}] Failed to mark manual review: {e}")
+        logger.error(f"[Retry {job_id}] Failed to mark as failed: {e}")
     finally:
         conn.close()
 

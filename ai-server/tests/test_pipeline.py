@@ -189,23 +189,26 @@ class TestDecisionService:
         assert result.decision == "new_fish"
 
     def test_gray_zone_review(self):
-        """Score between review and auto thresholds -> needs_manual_review."""
+        """Score between review and auto thresholds -> forced auto_match."""
         ctx = self._make_context(top1_score=0.78, margin=0.10)
         result = decide_identity(ctx, top1_fish_id="FISH-001")
-        assert result.decision == "needs_manual_review"
-        assert result.review_required is True
+        assert result.decision == "auto_match"
+        assert result.confidence_band == "forced"
+        assert result.review_required is False
 
     def test_insufficient_margin_review(self):
-        """High score but tiny margin -> review."""
+        """High score but tiny margin -> forced auto_match."""
         ctx = self._make_context(top1_score=0.90, top2_score=0.88, margin=0.02)
         result = decide_identity(ctx, top1_fish_id="FISH-001")
-        assert result.decision == "needs_manual_review"
+        assert result.decision == "auto_match"
+        assert result.confidence_band == "forced"
 
     def test_low_agreement_review(self):
-        """High score but low agreement -> review."""
+        """High score but low agreement -> forced auto_match."""
         ctx = self._make_context(agreement_ratio=0.40, winning_votes=2, total_votes=5)
         result = decide_identity(ctx, top1_fish_id="FISH-001")
-        assert result.decision == "needs_manual_review"
+        assert result.decision == "auto_match"
+        assert result.confidence_band == "forced"
 
     def test_multiple_fish_repeat_capture(self):
         """Multiple fish detected -> repeat_capture."""
@@ -220,10 +223,11 @@ class TestDecisionService:
         assert result.decision == "repeat_capture"
 
     def test_gps_mismatch_blocks_auto_match(self):
-        """GPS outside radius should prevent auto_match."""
+        """GPS outside radius prevents strict auto_match, forcing auto_match."""
         ctx = self._make_context(gps_uncertainty_status="outside")
         result = decide_identity(ctx, top1_fish_id="FISH-001")
-        assert result.decision != "auto_match"
+        assert result.decision == "auto_match"
+        assert result.confidence_band == "forced"
 
     def test_no_fish_id_new_fish(self):
         """No top1_fish_id -> new_fish."""
@@ -351,8 +355,8 @@ class TestPipelineIntegration:
         result = pipeline.run(query, metadata)
         assert result.decision == "new_fish"
 
-    def test_no_gps_goes_to_review(self, pipeline):
-        """Missing GPS -> needs_manual_review (can't confirm new fish)."""
+    def test_no_gps_returns_new_fish(self, pipeline):
+        """Missing GPS -> new_fish."""
         query = _make_query_embeddings(n_frames=5, seed=42)
         metadata = CaptureMetadata(
             species_slug="cyprinus_carpio",
@@ -361,7 +365,7 @@ class TestPipelineIntegration:
         )
 
         result = pipeline.run(query, metadata)
-        assert result.decision == "needs_manual_review"
+        assert result.decision == "new_fish"
 
     def test_multiple_fish_repeat_capture(self, pipeline):
         """Multiple fish detected -> repeat_capture regardless of match."""

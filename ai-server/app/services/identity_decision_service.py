@@ -2,10 +2,12 @@
 Identity Decision Service for FishDex.
 
 Separates the decision logic from scoring:
-- auto_match: high confidence, margin, agreement
+- auto_match: high confidence match (or forced match when score >= review_threshold)
 - new_fish: no candidate above threshold with good quality
-- needs_manual_review: ambiguous zone
 - repeat_capture: quality too low to decide
+
+NOTE: This service NEVER returns needs_manual_review.
+The system always gives a definitive answer.
 """
 
 import logging
@@ -50,7 +52,7 @@ class DecisionContext:
 class IdentityDecision:
     """The final identity decision."""
 
-    decision: str  # "auto_match", "new_fish", "needs_manual_review", "repeat_capture"
+    decision: str  # "auto_match", "new_fish", "repeat_capture"
     confidence_band: str  # "high", "medium", "gray_zone", "low", "new_fish"
     reasons: list[str]  # Human-readable reasons
 
@@ -83,7 +85,7 @@ def decide_identity(
       1. repeat_capture - data quality too low to trust any result
       2. new_fish - no viable candidate exists
       3. auto_match - all conditions met for confident match
-      4. needs_manual_review - ambiguous, human must decide
+      4. FORCED auto_match or new_fish - no ambiguity, always decide
 
     Returns an IdentityDecision with all applicable reasons collected.
     """
@@ -139,23 +141,47 @@ def decide_identity(
         )
 
     # ──────────────────────────────────────────────────────────────────────
-    # 4. needs_manual_review — everything else
+    # 4. FORCED DECISION — no manual review, always give an answer
+    #    If score >= review_threshold: force auto_match (best available match)
+    #    If score < review_threshold: force new_fish (nothing good enough)
     # ──────────────────────────────────────────────────────────────────────
-    review_reasons = _build_review_reasons(context, auto_match_failures, t)
-    band = _classify_confidence_band(context, t)
-
-    logger.info(
-        "Decision: needs_manual_review for fish_id=%s — %s",
-        top1_fish_id,
-        "; ".join(review_reasons),
-    )
-    return IdentityDecision(
-        decision="needs_manual_review",
-        confidence_band=band,
-        reasons=review_reasons,
-        proposed_fish_id=top1_fish_id,
-        review_required=True,
-    )
+    if context.top1_score >= t["review_threshold"]:
+        # Score is in the gray zone but above review_threshold — force match
+        forced_reasons = list(auto_match_failures)
+        forced_reasons.append(
+            f"Forced auto_match: score {context.top1_score:.3f} >= "
+            f"review_threshold {t['review_threshold']:.2f} "
+            f"(bypassed: {', '.join(auto_match_failures)})"
+        )
+        logger.info(
+            "Decision: FORCED auto_match for fish_id=%s — %s",
+            top1_fish_id,
+            "; ".join(forced_reasons),
+        )
+        return IdentityDecision(
+            decision="auto_match",
+            confidence_band="forced",
+            reasons=forced_reasons,
+            proposed_fish_id=top1_fish_id,
+            review_required=False,
+        )
+    else:
+        # Score below review_threshold — not a match, treat as new fish
+        new_reasons = list(auto_match_failures)
+        new_reasons.append(
+            f"Forced new_fish: score {context.top1_score:.3f} < "
+            f"review_threshold {t['review_threshold']:.2f} — "
+            f"no candidate strong enough"
+        )
+        logger.info(
+            "Decision: FORCED new_fish (score too low for match) — %s",
+            "; ".join(new_reasons),
+        )
+        return IdentityDecision(
+            decision="new_fish",
+            confidence_band="low",
+            reasons=new_reasons,
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

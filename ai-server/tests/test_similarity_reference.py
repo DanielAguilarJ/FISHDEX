@@ -6,7 +6,7 @@ Covers:
 2. Recapture cross-area — same fish, different area
 3. Reference visual != previous chronological
 4. Rejected candidate (new fish, below threshold)
-5. Gray zone / needs_manual_review
+5. Gray zone / forced auto_match
 6. Privacy — fisherman doesn't get GPS
 7. Idempotency
 8. Rematch lock
@@ -219,13 +219,13 @@ class TestRejectedCandidate:
         assert result.reference.sighting_id == "sighting-old"
 
 
-# ─── Test 5: Gray zone / needs_manual_review ───────────────────────────────
+# ─── Test 5: Gray zone / forced auto_match ───────────────────────────────
 
 class TestGrayZone:
     def test_pipeline_result_marks_review_with_reference(self):
-        """Pipeline needs_manual_review still includes reference for admin."""
+        """Pipeline forced auto_match still includes reference for admin."""
         result = PipelineResult(
-            decision="needs_manual_review",
+            decision="auto_match",
             proposed_fish_id="CZ-471010-CYPR-0002",
             reference_sighting_id="sighting-ref",
             reference_embedding_id="emb-ref",
@@ -235,7 +235,7 @@ class TestGrayZone:
             model_version="fishencoder_convnext_small_512_128_v2",
             reasons=["Gray zone: margin too small"],
         )
-        assert result.decision == "needs_manual_review"
+        assert result.decision == "auto_match"
         assert result.reference_sighting_id == "sighting-ref"
         assert result.reference_score == 0.798
 
