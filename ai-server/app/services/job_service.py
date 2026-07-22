@@ -190,20 +190,67 @@ def _is_valid_tight_detection(detection, frame_shape, min_conf: float = 0.30) ->
     return True
 
 
-def _sharpness_score(frame: np.ndarray) -> float:
-    """Laplacian variance as sharpness metric."""
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+def _sharpness_score(image: np.ndarray) -> float:
+    """Laplacian variance as sharpness metric. Operates on the provided image
+    (should be the crop, not the full frame, for accuracy)."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def _candidate_score(frame: np.ndarray, detection) -> float:
-    """Combined quality score: 70% confidence + 20% sharpness + 10% tightness."""
+def _candidate_score(frame: np.ndarray, detection, crop: Optional[np.ndarray] = None) -> float:
+    """Combined quality score: 70% confidence + 20% sharpness + 10% tightness.
+    If crop is provided, sharpness is measured on the crop (more accurate).
+    Otherwise falls back to full frame."""
     conf = _get_detection_confidence(detection)
-    sharp = min(_sharpness_score(frame) / 500.0, 1.0)
+    sharpness_source = crop if (crop is not None and crop.size > 0) else frame
+    sharp = min(_sharpness_score(sharpness_source) / 500.0, 1.0)
     area_ratio = _detection_area_ratio(detection, frame.shape)
     # Penalize large boxes
     area_quality = 1.0 - min(max(area_ratio - 0.35, 0.0) / 0.30, 1.0)
     return (0.70 * conf) + (0.20 * sharp) + (0.10 * area_quality)
+
+
+def _select_with_temporal_diversity(
+    candidates: list["FrameCandidate"],
+    max_count: int = 5,
+    min_gap_seconds: float = 0.30,
+) -> list["FrameCandidate"]:
+    """
+    Select top candidates with temporal diversity (temporal NMS).
+
+    Sorts by quality (score descending), then greedily picks candidates
+    that are at least min_gap_seconds apart from all previously selected.
+    Falls back to best-available if fewer than max_count pass the gap filter.
+    """
+    if not candidates:
+        return []
+
+    # Sort by quality descending
+    sorted_cands = sorted(candidates, key=lambda c: -c.score)
+
+    selected: list["FrameCandidate"] = []
+    for cand in sorted_cands:
+        if len(selected) >= max_count:
+            break
+        # Check temporal distance from all already selected
+        too_close = False
+        for sel in selected:
+            gap = abs(cand.timestamp_seconds - sel.timestamp_seconds)
+            if gap < min_gap_seconds:
+                too_close = True
+                break
+        if not too_close:
+            selected.append(cand)
+
+    # If we couldn't fill max_count with diverse frames, add remaining best ones
+    if len(selected) < max_count:
+        remaining = [c for c in sorted_cands if c not in selected]
+        for cand in remaining:
+            if len(selected) >= max_count:
+                break
+            selected.append(cand)
+
+    return selected
 
 def _infer_media_type(filename: str | None, content_type: str | None = None) -> str:
     content_type = (content_type or "").lower()
@@ -525,6 +572,8 @@ def process_identification_job(
                 detector_call_count = 1
                 frames_with_valid_detection = 1
         else:
+            frames_rejected_multiple_detections = 0
+
             for decoded in frames_iter:
                 decoded_frame_count += 1
                 frame = decoded.frame
@@ -552,10 +601,10 @@ def process_identification_job(
                             conf_val = _get_detection_confidence(det)
                             valid_frame_dets.append({"bbox": xywh, "confidence": conf_val})
 
-                        score = _candidate_score(frame, det)
-                        if score > best_score_in_frame:
-                            crop = _crop_primary_reid_roi(frame, det)
-                            if crop is not None and crop.size > 0:
+                        crop = _crop_primary_reid_roi(frame, det)
+                        if crop is not None and crop.size > 0:
+                            score = _candidate_score(frame, det, crop=crop)
+                            if score > best_score_in_frame:
                                 best_score_in_frame = score
                                 best_cand_in_frame = FrameCandidate(
                                     frame_index=f_idx,
@@ -571,10 +620,13 @@ def process_identification_job(
                     frames_with_valid_detection += 1
                 frame_detections_for_tracking.append(valid_frame_dets)
 
+                # Reject frames with multiple valid detections when single-detection is required
+                if settings.roi_require_single_detection and len(valid_frame_dets) > 1:
+                    frames_rejected_multiple_detections += 1
+                    best_cand_in_frame = None  # Do not add to candidate pool
+
                 if best_cand_in_frame is not None:
                     top_candidates.append(best_cand_in_frame)
-                    top_candidates.sort(key=lambda c: (-c.score, c.frame_index))
-                    del top_candidates[5:]
 
             if media_type == "video" and decoded_frame_count > 0:
                 try:
@@ -593,27 +645,47 @@ def process_identification_job(
                     r_frames_iter = iter_frames_from_video(temp_video_path, max_side=settings.frame_max_side or 960)
                     for decoded in r_frames_iter:
                         frame = decoded.frame
+                        detector_call_count += 1
                         detections = detector.detect(frame, conf_threshold=retry_thresh)
-                        for det in detections:
-                            if _is_valid_tight_detection(det, frame.shape, min_conf=retry_thresh):
-                                score = _candidate_score(frame, det)
-                                crop = _crop_primary_reid_roi(frame, det)
-                                if crop is not None and crop.size > 0:
-                                    top_candidates.append(
-                                        FrameCandidate(
-                                            frame_index=decoded.frame_index,
-                                            timestamp_seconds=decoded.timestamp_seconds,
-                                            score=score,
-                                            frame=frame,
-                                            detection=det,
-                                            confidence=_get_detection_confidence(det),
-                                            crop=crop,
-                                        )
+                        valid_dets_in_frame = [
+                            det for det in detections
+                            if _is_valid_tight_detection(det, frame.shape, min_conf=retry_thresh)
+                        ]
+                        # Same single-detection policy in retry
+                        if settings.roi_require_single_detection and len(valid_dets_in_frame) > 1:
+                            frames_rejected_multiple_detections += 1
+                            continue
+                        for det in valid_dets_in_frame:
+                            crop = _crop_primary_reid_roi(frame, det)
+                            if crop is not None and crop.size > 0:
+                                score = _candidate_score(frame, det, crop=crop)
+                                top_candidates.append(
+                                    FrameCandidate(
+                                        frame_index=decoded.frame_index,
+                                        timestamp_seconds=decoded.timestamp_seconds,
+                                        score=score,
+                                        frame=frame,
+                                        detection=det,
+                                        confidence=_get_detection_confidence(det),
+                                        crop=crop,
                                     )
-                                    top_candidates.sort(key=lambda c: (-c.score, c.frame_index))
-                                    del top_candidates[5:]
+                                )
                     if top_candidates:
                         break
+
+            # Apply temporal diversity selection
+            max_selected = settings.reid_max_selected_candidates
+            min_gap = settings.reid_min_selected_frame_gap_seconds
+            temporal_diversity_applied = False
+
+            if len(top_candidates) > max_selected:
+                top_candidates = _select_with_temporal_diversity(
+                    top_candidates, max_count=max_selected, min_gap_seconds=min_gap,
+                )
+                temporal_diversity_applied = True
+            elif len(top_candidates) > 0:
+                # Even if we have ≤ max, sort by quality for best_candidate selection
+                top_candidates.sort(key=lambda c: -c.score)
 
         # If STILL no valid candidates → mark pending_crop
         if not top_candidates:
@@ -650,6 +722,7 @@ def process_identification_job(
         best_frames = [c.frame for c in selected_candidates]
         cropped_frames = [c.crop for c in selected_candidates]
 
+        # best_candidate is highest quality for preview/detection info
         best_candidate = selected_candidates[0]
         best_score = best_candidate.score
         best_detection_frame = best_candidate.frame
@@ -665,10 +738,14 @@ def process_identification_job(
             "decoded_frames": decoded_frame_count,
             "detector_calls": detector_call_count,
             "frames_with_valid_detection": frames_with_valid_detection,
+            "frames_rejected_multiple_detections": frames_rejected_multiple_detections if 'frames_rejected_multiple_detections' in dir() else 0,
             "selected_frame_count": len(selected_candidates),
             "selected_frame_indices": [c.frame_index for c in selected_candidates],
+            "selected_frame_timestamps": [round(c.timestamp_seconds, 4) for c in selected_candidates],
             "selected_frame_scores": [round(c.score, 6) for c in selected_candidates],
-            "selection_method": "global_top5_detection_quality",
+            "minimum_selected_frame_gap_seconds": min_gap if 'min_gap' in dir() else 0.0,
+            "temporal_diversity_applied": temporal_diversity_applied if 'temporal_diversity_applied' in dir() else False,
+            "selection_method": "temporal_diversity_top5" if (temporal_diversity_applied if 'temporal_diversity_applied' in dir() else False) else "global_top5_detection_quality",
         }
         logger.info(f"[Job {job_id}] Processing stats: {processing_stats}")
 
@@ -749,20 +826,24 @@ def process_identification_job(
                 }
                 detection_dicts_for_quality.append(det_dict)
 
-        # Run tracking over selected primary candidates to verify single fish
-        selected_frame_dets_for_tracking = []
-        for c in selected_candidates:
-            bbox = _get_detection_bbox(c.detection)
-            if bbox and len(bbox) >= 4:
-                x1, y1, x2, y2 = bbox
-                xywh = [float(x1), float(y1), float(max(0.0, x2 - x1)), float(max(0.0, y2 - y1))]
-                selected_frame_dets_for_tracking.append([{"bbox": xywh, "confidence": float(c.confidence)}])
-            else:
-                selected_frame_dets_for_tracking.append([])
-
-        tracking_result = validate_single_fish(selected_frame_dets_for_tracking)
+        # Run tracking over ALL frame detections in chronological order
+        # This gives the tracker full visibility into whether multiple fish
+        # were present across the video, not just the selected frames.
+        tracking_result = validate_single_fish(frame_detections_for_tracking)
         track_consistent = tracking_result.is_single_fish
         multiple_fish_detected = tracking_result.multiple_fish_detected
+
+        # Add tracking stats to processing_stats
+        processing_stats["tracking_total_detections"] = sum(
+            len(dets) for dets in frame_detections_for_tracking
+        )
+        processing_stats["tracking_dominant_track_length"] = getattr(
+            tracking_result, "dominant_track_length", 0
+        )
+        processing_stats["tracking_secondary_tracks"] = getattr(
+            tracking_result, "secondary_tracks", 0
+        )
+        processing_stats["multiple_fish_detected"] = multiple_fish_detected
 
         # Assess capture quality with real duration and timestamps
         quality_result = evaluate_capture(

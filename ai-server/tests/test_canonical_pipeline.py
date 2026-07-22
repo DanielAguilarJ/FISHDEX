@@ -159,6 +159,7 @@ def test_artifact_service_fingerprint_crops(tmp_path, monkeypatch):
     """Verify save_fish_capture_artifacts saves crops in images_fingerprint directory."""
     from app.config import settings
     monkeypatch.setattr(settings, "server_data_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "reid_fingerprint_crop_enabled", True)
 
     cropped_frames = [np.zeros((100, 200, 3), dtype=np.uint8)]
     res = save_fish_capture_artifacts(

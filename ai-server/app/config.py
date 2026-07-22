@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     reid_fingerprint_y_start: float = 0.05
     reid_fingerprint_y_end: float = 0.55
 
+    # ── Multiframe selection ─────────────────────────────────────────
+    reid_min_selected_frame_gap_seconds: float = 0.30  # Temporal NMS between top-N candidates
+    reid_max_selected_candidates: int = 5               # Max frames for multiframe voting
+
     # ── Auth settings ────────────────────────────────────────────────
     skip_auth: bool = False
     ai_server_secret: str = "change-me-in-production"

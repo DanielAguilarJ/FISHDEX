@@ -80,29 +80,40 @@ def _draw_annotated_frame(
         if x2 > x1 and y2 > y1:
             cv2.rectangle(img, (x1, y1), (x2, y2), box_color, 3)
 
-    # --- Draw inner FINGERPRINT SPOT-REGION box if enabled ---
-    if settings.reid_fingerprint_crop_enabled and bbox and len(bbox) >= 4:
-        bx1, by1, bx2, by2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-        bw_box = bx2 - bx1
-        bh_box = by2 - by1
-
-        fp_x1 = max(0, int(bx1 + bw_box * settings.reid_fingerprint_x_start))
-        fp_x2 = min(w, int(bx1 + bw_box * settings.reid_fingerprint_x_end))
-        fp_y1 = max(0, int(by1 + bh_box * settings.reid_fingerprint_y_start))
-        fp_y2 = min(h, int(by1 + bh_box * settings.reid_fingerprint_y_end))
-
+    # --- Draw inner FINGERPRINT SPOT-REGION polygon if enabled ---
+    if settings.reid_fingerprint_crop_enabled and detection is not None:
         fp_color = (0, 235, 255)  # BGR bright yellow
-        if fp_x2 > fp_x1 and fp_y2 > fp_y1:
-            cv2.rectangle(img, (fp_x1, fp_y1), (fp_x2, fp_y2), fp_color, 2)
+        fingerprint_polygon = project_fingerprint_polygon_to_frame(
+            detection,
+            pad_frac=settings.crop_padding_frac,
+            x_start=settings.reid_fingerprint_x_start,
+            x_end=settings.reid_fingerprint_x_end,
+            y_start=settings.reid_fingerprint_y_start,
+            y_end=settings.reid_fingerprint_y_end,
+        )
+        if fingerprint_polygon is not None:
+            fp_pts = np.round(fingerprint_polygon).astype(np.int32)
+            cv2.polylines(img, [fp_pts], True, fp_color, 2, cv2.LINE_AA)
+            # Label near the top-most point of the polygon
+            top_idx = fp_pts[:, 1].argmin()
+            label_x = int(fp_pts[top_idx, 0])
+            label_y = max(15, int(fp_pts[top_idx, 1]) - 4)
+            # Clamp label_x to stay within frame
+            label_x = max(4, min(label_x, w - 120))
             cv2.putText(
                 img,
                 "FINGERPRINT (SPOTS)",
-                (fp_x1 + 4, max(fp_y1 - 4, 15)),
+                (label_x, label_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.38,
                 fp_color,
                 1,
                 cv2.LINE_AA,
+            )
+        else:
+            logger.debug(
+                "Fingerprint polygon projection unavailable — "
+                "no valid OBB polygon for detection"
             )
 
     # --- Label block (top-left) ---
@@ -193,12 +204,15 @@ def save_job_artifacts(
         _write_jpg(abs_path, crop)
         crop_files.append(rel)
 
-        if crop is not None and crop.size > 0:
+        if settings.reid_fingerprint_crop_enabled and crop is not None and crop.size > 0:
             ch, cw = crop.shape[:2]
-            fx1 = max(0, int(cw * settings.reid_fingerprint_x_start))
-            fx2 = min(cw, int(cw * settings.reid_fingerprint_x_end))
-            fy1 = max(0, int(ch * settings.reid_fingerprint_y_start))
-            fy2 = min(ch, int(ch * settings.reid_fingerprint_y_end))
+            fx1, fy1, fx2, fy2 = compute_fingerprint_box(
+                cw, ch,
+                x_start=settings.reid_fingerprint_x_start,
+                x_end=settings.reid_fingerprint_x_end,
+                y_start=settings.reid_fingerprint_y_start,
+                y_end=settings.reid_fingerprint_y_end,
+            )
 
             if fx2 > fx1 and fy2 > fy1:
                 fp_crop = crop[fy1:fy2, fx1:fx2]
@@ -231,7 +245,13 @@ def save_job_artifacts(
 
 
 from app.utils.area_utils import normalize_area_code
-from app.utils.crop_utils import crop_obb_rotated, crop_bbox_aligned_strict, crop_fish_best
+from app.utils.crop_utils import (
+    crop_obb_rotated,
+    crop_bbox_aligned_strict,
+    crop_fish_best,
+    compute_fingerprint_box,
+    project_fingerprint_polygon_to_frame,
+)
 
 
 def save_fish_capture_artifacts(
@@ -308,24 +328,28 @@ def save_fish_capture_artifacts(
             _write_jpg(abs_path, crop)
             image_bbox_files.append(rel)
 
-    # ── Fingerprint spot-region crops (yellow box region: x=15-50%, y=5-55%) ────
+    # ── Fingerprint spot-region crops (x=20%-80%, y=5%-55%) ─────────────────
     images_fingerprint_dir = abs_base / "images_fingerprint"
     images_fingerprint_dir.mkdir(parents=True, exist_ok=True)
     image_fingerprint_files: list[str] = []
-    for i, crop in enumerate(cropped_frames):
-        if crop is not None and crop.size > 0:
-            ch, cw = crop.shape[:2]
-            fx1 = max(0, int(cw * settings.reid_fingerprint_x_start))
-            fx2 = min(cw, int(cw * settings.reid_fingerprint_x_end))
-            fy1 = max(0, int(ch * settings.reid_fingerprint_y_start))
-            fy2 = min(ch, int(ch * settings.reid_fingerprint_y_end))
+    if settings.reid_fingerprint_crop_enabled:
+        for i, crop in enumerate(cropped_frames):
+            if crop is not None and crop.size > 0:
+                ch, cw = crop.shape[:2]
+                fx1, fy1, fx2, fy2 = compute_fingerprint_box(
+                    cw, ch,
+                    x_start=settings.reid_fingerprint_x_start,
+                    x_end=settings.reid_fingerprint_x_end,
+                    y_start=settings.reid_fingerprint_y_start,
+                    y_end=settings.reid_fingerprint_y_end,
+                )
 
-            if fx2 > fx1 and fy2 > fy1:
-                fp_crop = crop[fy1:fy2, fx1:fx2]
-                rel_fp = f"{rel_base}/images_fingerprint/crop_{i:02d}.jpg"
-                abs_fp = Path(settings.server_data_dir) / "storage" / rel_fp
-                _write_jpg(abs_fp, fp_crop)
-                image_fingerprint_files.append(rel_fp)
+                if fx2 > fx1 and fy2 > fy1:
+                    fp_crop = crop[fy1:fy2, fx1:fx2]
+                    rel_fp = f"{rel_base}/images_fingerprint/crop_{i:02d}.jpg"
+                    abs_fp = Path(settings.server_data_dir) / "storage" / rel_fp
+                    _write_jpg(abs_fp, fp_crop)
+                    image_fingerprint_files.append(rel_fp)
 
     # ── Best-N selected frames ─────────────────────────────────────────────
     frame_files = []
@@ -491,6 +515,7 @@ def save_fish_capture_artifacts(
         "video": _storage_url(video_filename),
         "images": [_storage_url(p) for p in image_files],
         "images_bbox": [_storage_url(p) for p in image_bbox_files],
+        "images_fingerprint": [_storage_url(p) for p in image_fingerprint_files],
         "frames": [_storage_url(p) for p in frame_files],
         "dataset_crops": [_storage_url(p) for p in dataset_crop_files],
         "dataset_crops_bbox": [_storage_url(p) for p in dataset_bbox_files],
@@ -528,6 +553,7 @@ def save_fish_capture_artifacts(
             "video": video_filename,
             "images": image_files,
             "images_bbox": image_bbox_files,
+            "images_fingerprint": image_fingerprint_files,
             "frames": frame_files,
             "dataset_crops": dataset_crop_files,
             "dataset_crops_bbox": dataset_bbox_files,
@@ -568,6 +594,7 @@ def save_fish_capture_artifacts(
         "fish_index_filename": fish_index_filename,
         "image_files": image_files,
         "image_bbox_files": image_bbox_files,
+        "image_fingerprint_files": image_fingerprint_files,
         "frame_files": frame_files,
         "dataset_crop_files": dataset_crop_files,
         "dataset_bbox_files": dataset_bbox_files,
