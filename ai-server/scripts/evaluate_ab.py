@@ -401,7 +401,7 @@ def main():
     winner_far = config_scores.get(winner, {}).get("avg_far", 1.0) if winner else 1.0
     far_target = args.open_set_fraction  # Use open_set_fraction as proxy; ideally should be a separate arg
     # A/B selection is validated ONLY if measured FAR <= 0.001 on the open-set evaluation
-    is_validated = winner is not None and winner_far <= 0.001
+    is_validated = bool(winner is not None and winner_far <= 0.001)
     
     selection_path = os.path.join(args.output_dir, f"{timestamp}_selection.json")
     with open(selection_path, 'w') as f:
@@ -412,10 +412,10 @@ def main():
             "validated": is_validated,
             "validation_note": (
                 "validated=true requires avg_far <= 0.001 on open-set evaluation. "
-                f"Measured avg_far={winner_far:.6f}."
+                f"Measured avg_far={float(winner_far):.6f}."
             ),
             "metrics": config_scores.get(winner, {})
-        }, f, indent=2)
+        }, f, indent=2, default=lambda o: float(o) if hasattr(o, 'item') else str(o))
         
     print(f"Evaluation complete. Results saved to {args.output_dir}")
     print(f"Winner: {winner}")
