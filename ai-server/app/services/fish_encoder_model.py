@@ -95,16 +95,14 @@ class FishFingerprintCrop:
 
         length, height = image.size  # width=L, height=H
 
-        x1 = int(round(self.x_start * length))
-        x2 = int(round(self.x_end * length))
-        y1 = int(round(self.y_start * height))
-        y2 = int(round(self.y_end * height))
-
-        # Clamp to image bounds
-        x1 = max(0, min(x1, length - 1))
-        x2 = max(x1 + 1, min(x2, length))
-        y1 = max(0, min(y1, height - 1))
-        y2 = max(y1 + 1, min(y2, height))
+        from app.utils.crop_utils import compute_fingerprint_box
+        x1, y1, x2, y2 = compute_fingerprint_box(
+            length, height,
+            x_start=self.x_start,
+            x_end=self.x_end,
+            y_start=self.y_start,
+            y_end=self.y_end,
+        )
 
         return image.crop((x1, y1, x2, y2))
 

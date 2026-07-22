@@ -103,8 +103,8 @@ class Settings(BaseSettings):
     # Default False for safe backward-compatible deployment.
     # Activate ONLY after rebuilding the embedding index.
     reid_fingerprint_crop_enabled: bool = False
-    reid_fingerprint_x_start: float = 0.15
-    reid_fingerprint_x_end: float = 0.50
+    reid_fingerprint_x_start: float = 0.20
+    reid_fingerprint_x_end: float = 0.80
     reid_fingerprint_y_start: float = 0.05
     reid_fingerprint_y_end: float = 0.55
 

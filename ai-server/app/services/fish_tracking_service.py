@@ -23,6 +23,7 @@ class TrackingResult:
     is_single_fish: bool
     multiple_fish_detected: bool
     track_consistency: float  # 0.0-1.0 how consistent the dominant track is
+    track_ids_per_frame: list  # list[list[int]] — track ID for each detection in each frame
     rejection_reason: Optional[str] = None
 
 
@@ -158,6 +159,7 @@ def validate_single_fish(
             is_single_fish=True,
             multiple_fish_detected=False,
             track_consistency=0.0,
+            track_ids_per_frame=[],
             rejection_reason="No detections provided",
         )
 
@@ -174,11 +176,19 @@ def validate_single_fish(
             is_single_fish=True,
             multiple_fish_detected=False,
             track_consistency=0.0,
+            track_ids_per_frame=[[] for _ in detections_per_frame],
             rejection_reason="No detections in any frame",
         )
 
     # Single detection total — trivially single fish
     if total_detections == 1:
+        # Find the frame with the single detection
+        single_frame_tracks = []
+        for dets in detections_per_frame:
+            if dets:
+                single_frame_tracks.append([0])
+            else:
+                single_frame_tracks.append([])
         return TrackingResult(
             dominant_track_id=0,
             dominant_track_length=1,
@@ -187,6 +197,7 @@ def validate_single_fish(
             is_single_fish=True,
             multiple_fish_detected=False,
             track_consistency=1.0,
+            track_ids_per_frame=single_frame_tracks,
         )
 
     # --- Run IoU tracking ---
@@ -196,12 +207,15 @@ def validate_single_fish(
 
     # track_id -> list of frame indices where it appears
     track_frames: dict[int, list[int]] = {}
+    # Per-frame track ID assignments (parallel to detections_per_frame)
+    all_track_ids_per_frame: list[list[int]] = []
 
     for frame_idx, frame_dets in enumerate(detections_per_frame):
         if not frame_dets:
             # No detections in this frame; keep prev state
             prev_detections = []
             prev_track_ids = []
+            all_track_ids_per_frame.append([])
             continue
 
         curr_track_ids, next_track_id = _assign_detections_to_tracks(
@@ -214,6 +228,7 @@ def validate_single_fish(
                 track_frames[tid] = []
             track_frames[tid].append(frame_idx)
 
+        all_track_ids_per_frame.append(curr_track_ids)
         prev_detections = frame_dets
         prev_track_ids = curr_track_ids
 
@@ -227,6 +242,7 @@ def validate_single_fish(
             is_single_fish=True,
             multiple_fish_detected=False,
             track_consistency=0.0,
+            track_ids_per_frame=all_track_ids_per_frame,
             rejection_reason="Tracking produced no tracks",
         )
 
@@ -279,5 +295,6 @@ def validate_single_fish(
         is_single_fish=is_single_fish,
         multiple_fish_detected=multiple_fish_detected,
         track_consistency=float(np.clip(track_consistency, 0.0, 1.0)),
+        track_ids_per_frame=all_track_ids_per_frame,
         rejection_reason=rejection_reason,
     )

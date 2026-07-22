@@ -45,6 +45,18 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class FrameCandidateMetadata:
+    """Lightweight candidate metadata — does NOT hold frame/crop arrays."""
+    frame_index: int
+    timestamp_seconds: float
+    score: float
+    detection: Any
+    confidence: float
+    detection_index: int = 0   # index within frame's valid detections
+    track_id: Optional[int] = None
+
+
+@dataclass
 class FrameCandidate:
     frame_index: int
     timestamp_seconds: float
@@ -53,6 +65,7 @@ class FrameCandidate:
     detection: Any
     confidence: float
     crop: np.ndarray
+    track_id: Optional[int] = None
 
 XP_BASE_MAP = {
     "common": 10,
@@ -218,15 +231,22 @@ def _select_with_temporal_diversity(
     """
     Select top candidates with temporal diversity (temporal NMS).
 
-    Sorts by quality (score descending), then greedily picks candidates
-    that are at least min_gap_seconds apart from all previously selected.
-    Falls back to best-available if fewer than max_count pass the gap filter.
+    Sorts by quality (score descending, frame_index as tiebreaker), then
+    greedily picks candidates that are at least min_gap_seconds apart from
+    all previously selected.
+
+    Does NOT backfill with temporally-close frames. If only 2 diverse frames
+    exist, returns 2 — never pads with near-duplicates.
     """
     if not candidates:
         return []
+    if max_count < 1:
+        max_count = 1
+    if min_gap_seconds < 0:
+        min_gap_seconds = 0.0
 
-    # Sort by quality descending
-    sorted_cands = sorted(candidates, key=lambda c: -c.score)
+    # Sort by quality descending, frame_index as deterministic tiebreaker
+    sorted_cands = sorted(candidates, key=lambda c: (-c.score, c.frame_index))
 
     selected: list["FrameCandidate"] = []
     for cand in sorted_cands:
@@ -240,14 +260,6 @@ def _select_with_temporal_diversity(
                 too_close = True
                 break
         if not too_close:
-            selected.append(cand)
-
-    # If we couldn't fill max_count with diverse frames, add remaining best ones
-    if len(selected) < max_count:
-        remaining = [c for c in sorted_cands if c not in selected]
-        for cand in remaining:
-            if len(selected) >= max_count:
-                break
             selected.append(cand)
 
     return selected
@@ -527,7 +539,7 @@ def process_identification_job(
         if not os.path.exists(temp_video_path):
             raise FileNotFoundError(f"Raw media file not found on disk: {temp_video_path}")
 
-        # --- Step 5 & 6 & 7: Sequential frame decoding + single-pass detection + global top-5 selection ---
+        # --- Step 5 & 6 & 7: Sequential frame decoding + single-pass detection + global candidate collection ---
         _emit_progress(job_id, "detecting_fish", 50, f"Scanning {media_type} frames with YOLOv8 OBB detector")
         logger.info(f"[Job {job_id}] Decoding all frames and scoring candidates")
 
@@ -535,10 +547,14 @@ def process_identification_job(
 
         decoded_frame_count = 0
         detector_call_count = 0
+        retry_detector_calls = 0
         frames_with_valid_detection = 0
-        top_candidates: list[FrameCandidate] = []
+        frames_rejected_multiple_detections = 0
+        # Lightweight metadata — NO frame/crop arrays stored
+        candidate_metadata: list[FrameCandidateMetadata] = []
         frame_detections_for_tracking: list[list[dict]] = []
         video_duration_seconds = 0.0
+        top_candidates: list[FrameCandidate] = []
 
         if media_type == "image":
             img = cv2.imread(temp_video_path)
@@ -554,9 +570,9 @@ def process_identification_job(
             recovered_confidence = float(recovered_candidate.get("confidence", 0.0) or 0.0)
             if not isinstance(recovered_frame, np.ndarray) or recovered_frame.size == 0 or recovered_detection is None:
                 raise ValueError("Recovered candidate invalid")
-            recovered_score = _candidate_score(recovered_frame, recovered_detection)
             rec_crop = _crop_primary_reid_roi(recovered_frame, recovered_detection)
             if rec_crop is not None and rec_crop.size > 0:
+                recovered_score = _candidate_score(recovered_frame, recovered_detection, crop=rec_crop)
                 top_candidates.append(
                     FrameCandidate(
                         frame_index=0,
@@ -572,8 +588,7 @@ def process_identification_job(
                 detector_call_count = 1
                 frames_with_valid_detection = 1
         else:
-            frames_rejected_multiple_detections = 0
-
+            # --- First pass: collect lightweight metadata + tracking detections ---
             for decoded in frames_iter:
                 decoded_frame_count += 1
                 frame = decoded.frame
@@ -584,10 +599,11 @@ def process_identification_job(
                 detections = detector.detect(frame, conf_threshold=base_threshold)
 
                 valid_frame_dets: list[dict] = []
-                best_cand_in_frame: Optional[FrameCandidate] = None
+                best_meta_in_frame: Optional[FrameCandidateMetadata] = None
                 best_score_in_frame = -1.0
+                best_det_index = 0
 
-                for det in detections:
+                for det_idx, det in enumerate(detections):
                     if _is_valid_tight_detection(det, frame.shape, min_conf=base_threshold):
                         bbox = _get_detection_bbox(det)
                         if bbox and len(bbox) >= 4:
@@ -601,20 +617,20 @@ def process_identification_job(
                             conf_val = _get_detection_confidence(det)
                             valid_frame_dets.append({"bbox": xywh, "confidence": conf_val})
 
-                        crop = _crop_primary_reid_roi(frame, det)
-                        if crop is not None and crop.size > 0:
-                            score = _candidate_score(frame, det, crop=crop)
-                            if score > best_score_in_frame:
-                                best_score_in_frame = score
-                                best_cand_in_frame = FrameCandidate(
-                                    frame_index=f_idx,
-                                    timestamp_seconds=t_sec,
-                                    score=score,
-                                    frame=frame,
-                                    detection=det,
-                                    confidence=_get_detection_confidence(det),
-                                    crop=crop,
-                                )
+                        # Score using lightweight sharpness estimate from frame region
+                        # (full crop will be generated only for final candidates)
+                        score = _candidate_score(frame, det)
+                        if score > best_score_in_frame:
+                            best_score_in_frame = score
+                            best_det_index = len(valid_frame_dets) - 1 if valid_frame_dets else 0
+                            best_meta_in_frame = FrameCandidateMetadata(
+                                frame_index=f_idx,
+                                timestamp_seconds=t_sec,
+                                score=score,
+                                detection=det,
+                                confidence=_get_detection_confidence(det),
+                                detection_index=best_det_index,
+                            )
 
                 if valid_frame_dets:
                     frames_with_valid_detection += 1
@@ -623,10 +639,10 @@ def process_identification_job(
                 # Reject frames with multiple valid detections when single-detection is required
                 if settings.roi_require_single_detection and len(valid_frame_dets) > 1:
                     frames_rejected_multiple_detections += 1
-                    best_cand_in_frame = None  # Do not add to candidate pool
+                    best_meta_in_frame = None  # Do not add to candidate pool
 
-                if best_cand_in_frame is not None:
-                    top_candidates.append(best_cand_in_frame)
+                if best_meta_in_frame is not None:
+                    candidate_metadata.append(best_meta_in_frame)
 
             if media_type == "video" and decoded_frame_count > 0:
                 try:
@@ -638,54 +654,164 @@ def process_identification_job(
                     video_duration_seconds = 0.0
 
             # Retries if no valid candidates were found in primary pass
-            if not top_candidates and media_type == "video":
+            if not candidate_metadata and media_type == "video":
                 retry_thresholds = [0.25, 0.20]
                 for retry_idx, retry_thresh in enumerate(retry_thresholds, start=1):
                     logger.info(f"[Job {job_id}] Detection retry {retry_idx}: threshold={retry_thresh}")
+                    # Reset tracking for retry — use retry's own detections
+                    retry_frame_detections: list[list[dict]] = []
+                    retry_candidates: list[FrameCandidateMetadata] = []
                     r_frames_iter = iter_frames_from_video(temp_video_path, max_side=settings.frame_max_side or 960)
                     for decoded in r_frames_iter:
                         frame = decoded.frame
-                        detector_call_count += 1
+                        retry_detector_calls += 1
                         detections = detector.detect(frame, conf_threshold=retry_thresh)
-                        valid_dets_in_frame = [
-                            det for det in detections
-                            if _is_valid_tight_detection(det, frame.shape, min_conf=retry_thresh)
-                        ]
+                        valid_dets_in_frame: list[dict] = []
+                        for det in detections:
+                            if _is_valid_tight_detection(det, frame.shape, min_conf=retry_thresh):
+                                bbox = _get_detection_bbox(det)
+                                if bbox and len(bbox) >= 4:
+                                    x1, y1, x2, y2 = bbox
+                                    xywh = [float(x1), float(y1), float(max(0.0, x2-x1)), float(max(0.0, y2-y1))]
+                                    valid_dets_in_frame.append({"bbox": xywh, "confidence": _get_detection_confidence(det)})
+
+                        retry_frame_detections.append(valid_dets_in_frame)
+
                         # Same single-detection policy in retry
                         if settings.roi_require_single_detection and len(valid_dets_in_frame) > 1:
                             frames_rejected_multiple_detections += 1
                             continue
-                        for det in valid_dets_in_frame:
-                            crop = _crop_primary_reid_roi(frame, det)
-                            if crop is not None and crop.size > 0:
-                                score = _candidate_score(frame, det, crop=crop)
-                                top_candidates.append(
-                                    FrameCandidate(
+                        for det in detections:
+                            if _is_valid_tight_detection(det, frame.shape, min_conf=retry_thresh):
+                                score = _candidate_score(frame, det)
+                                retry_candidates.append(
+                                    FrameCandidateMetadata(
                                         frame_index=decoded.frame_index,
                                         timestamp_seconds=decoded.timestamp_seconds,
                                         score=score,
-                                        frame=frame,
                                         detection=det,
                                         confidence=_get_detection_confidence(det),
-                                        crop=crop,
+                                        detection_index=0,
                                     )
                                 )
-                    if top_candidates:
+                    if retry_candidates:
+                        # Use retry's candidates AND tracking detections coherently
+                        candidate_metadata = retry_candidates
+                        frame_detections_for_tracking = retry_frame_detections
                         break
 
-            # Apply temporal diversity selection
+            # --- Run tracking over ALL frame detections (chronological) ---
+            tracking_result = validate_single_fish(frame_detections_for_tracking)
+            track_consistent = tracking_result.is_single_fish
+            multiple_fish_detected = tracking_result.multiple_fish_detected
+
+            # --- Assign track IDs to candidates ---
+            for meta in candidate_metadata:
+                frame_tracks = tracking_result.track_ids_per_frame
+                if meta.frame_index < len(frame_tracks):
+                    frame_track_ids = frame_tracks[meta.frame_index]
+                    if meta.detection_index < len(frame_track_ids):
+                        meta.track_id = frame_track_ids[meta.detection_index]
+                    elif frame_track_ids:
+                        # Best detection might map to first valid detection
+                        meta.track_id = frame_track_ids[0]
+
+            # --- Filter by dominant track ---
+            dominant_track_id = tracking_result.dominant_track_id
+            dominant_candidates = [
+                m for m in candidate_metadata
+                if m.track_id == dominant_track_id or m.track_id is None
+            ]
+            # If filtering by track removes all candidates, keep all (single-fish case)
+            if dominant_candidates:
+                candidate_metadata = dominant_candidates
+
+            # --- Apply temporal diversity selection on metadata ---
             max_selected = settings.reid_max_selected_candidates
             min_gap = settings.reid_min_selected_frame_gap_seconds
-            temporal_diversity_applied = False
+            temporal_diversity_applied = len(candidate_metadata) > 0
 
-            if len(top_candidates) > max_selected:
-                top_candidates = _select_with_temporal_diversity(
-                    top_candidates, max_count=max_selected, min_gap_seconds=min_gap,
-                )
-                temporal_diversity_applied = True
-            elif len(top_candidates) > 0:
-                # Even if we have ≤ max, sort by quality for best_candidate selection
-                top_candidates.sort(key=lambda c: -c.score)
+            # Create temporary FrameCandidate-like objects for selection
+            # (reuse the same function signature by wrapping metadata)
+            class _MetaWrapper:
+                def __init__(self, m):
+                    self.frame_index = m.frame_index
+                    self.timestamp_seconds = m.timestamp_seconds
+                    self.score = m.score
+
+            meta_wrappers = [_MetaWrapper(m) for m in candidate_metadata]
+            # Sort by quality descending with temporal gap
+            selected_meta_indices: list[int] = []
+            meta_wrappers_sorted = sorted(
+                range(len(meta_wrappers)),
+                key=lambda i: (-meta_wrappers[i].score, meta_wrappers[i].frame_index),
+            )
+            for idx in meta_wrappers_sorted:
+                if len(selected_meta_indices) >= max_selected:
+                    break
+                too_close = False
+                for sel_idx in selected_meta_indices:
+                    gap = abs(meta_wrappers[idx].timestamp_seconds - meta_wrappers[sel_idx].timestamp_seconds)
+                    if gap < min_gap:
+                        too_close = True
+                        break
+                if not too_close:
+                    selected_meta_indices.append(idx)
+
+            selected_metadata = [candidate_metadata[i] for i in selected_meta_indices]
+
+            # --- Second pass: reconstruct only selected frames/crops ---
+            # Re-decode video to get only the frames we need (no re-detection)
+            if selected_metadata and media_type != "image":
+                needed_frame_indices = set(m.frame_index for m in selected_metadata)
+                meta_by_frame = {m.frame_index: m for m in selected_metadata}
+
+                r_frames_iter = iter_frames_from_video(temp_video_path, max_side=settings.frame_max_side or 960)
+                for decoded in r_frames_iter:
+                    if decoded.frame_index in needed_frame_indices:
+                        meta = meta_by_frame[decoded.frame_index]
+                        crop = _crop_primary_reid_roi(decoded.frame, meta.detection)
+                        if crop is not None and crop.size > 0:
+                            # Rescore with actual crop sharpness
+                            score = _candidate_score(decoded.frame, meta.detection, crop=crop)
+                            top_candidates.append(
+                                FrameCandidate(
+                                    frame_index=meta.frame_index,
+                                    timestamp_seconds=meta.timestamp_seconds,
+                                    score=score,
+                                    frame=decoded.frame,
+                                    detection=meta.detection,
+                                    confidence=meta.confidence,
+                                    crop=crop,
+                                    track_id=meta.track_id,
+                                )
+                            )
+                        needed_frame_indices.discard(decoded.frame_index)
+                    if not needed_frame_indices:
+                        break
+            elif selected_metadata and media_type == "image":
+                # For images, frame is already available
+                for meta in selected_metadata:
+                    frame = cv2.imread(temp_video_path)
+                    if frame is not None:
+                        crop = _crop_primary_reid_roi(frame, meta.detection)
+                        if crop is not None and crop.size > 0:
+                            score = _candidate_score(frame, meta.detection, crop=crop)
+                            top_candidates.append(
+                                FrameCandidate(
+                                    frame_index=meta.frame_index,
+                                    timestamp_seconds=meta.timestamp_seconds,
+                                    score=score,
+                                    frame=frame,
+                                    detection=meta.detection,
+                                    confidence=meta.confidence,
+                                    crop=crop,
+                                    track_id=meta.track_id,
+                                )
+                            )
+
+            # Sort final candidates by score
+            top_candidates.sort(key=lambda c: (-c.score, c.frame_index))
 
         # If STILL no valid candidates → mark pending_crop
         if not top_candidates:
@@ -737,15 +863,22 @@ def process_identification_job(
         processing_stats = {
             "decoded_frames": decoded_frame_count,
             "detector_calls": detector_call_count,
+            "retry_detector_calls": retry_detector_calls,
             "frames_with_valid_detection": frames_with_valid_detection,
-            "frames_rejected_multiple_detections": frames_rejected_multiple_detections if 'frames_rejected_multiple_detections' in dir() else 0,
+            "frames_rejected_multiple_detections": frames_rejected_multiple_detections,
             "selected_frame_count": len(selected_candidates),
             "selected_frame_indices": [c.frame_index for c in selected_candidates],
             "selected_frame_timestamps": [round(c.timestamp_seconds, 4) for c in selected_candidates],
             "selected_frame_scores": [round(c.score, 6) for c in selected_candidates],
+            "selected_track_ids": [c.track_id for c in selected_candidates],
+            "dominant_track_id": tracking_result.dominant_track_id if 'tracking_result' in dir() else None,
             "minimum_selected_frame_gap_seconds": min_gap if 'min_gap' in dir() else 0.0,
             "temporal_diversity_applied": temporal_diversity_applied if 'temporal_diversity_applied' in dir() else False,
-            "selection_method": "temporal_diversity_top5" if (temporal_diversity_applied if 'temporal_diversity_applied' in dir() else False) else "global_top5_detection_quality",
+            "tracking_total_detections": tracking_result.total_detections if 'tracking_result' in dir() else 0,
+            "tracking_dominant_track_length": tracking_result.dominant_track_length if 'tracking_result' in dir() else 0,
+            "tracking_secondary_tracks": tracking_result.secondary_tracks if 'tracking_result' in dir() else 0,
+            "multiple_fish_detected": tracking_result.multiple_fish_detected if 'tracking_result' in dir() else False,
+            "selection_method": "temporal_diversity_track_filtered",
         }
         logger.info(f"[Job {job_id}] Processing stats: {processing_stats}")
 
@@ -801,7 +934,7 @@ def process_identification_job(
             f"rarity={species_info.get('rarity')}"
         )
 
-        # --- Step 10: Tracking + Quality assessment ---
+        # --- Step 10: Quality assessment (tracking already done in selection phase) ---
         _emit_progress(job_id, "analyzing_quality", 75, "Assessing capture quality and tracking")
 
         detection_dicts_for_quality: list[dict] = []
@@ -826,24 +959,11 @@ def process_identification_job(
                 }
                 detection_dicts_for_quality.append(det_dict)
 
-        # Run tracking over ALL frame detections in chronological order
-        # This gives the tracker full visibility into whether multiple fish
-        # were present across the video, not just the selected frames.
-        tracking_result = validate_single_fish(frame_detections_for_tracking)
+        # Use tracking result from selection phase (already computed)
+        if 'tracking_result' not in dir():
+            tracking_result = validate_single_fish(frame_detections_for_tracking)
         track_consistent = tracking_result.is_single_fish
         multiple_fish_detected = tracking_result.multiple_fish_detected
-
-        # Add tracking stats to processing_stats
-        processing_stats["tracking_total_detections"] = sum(
-            len(dets) for dets in frame_detections_for_tracking
-        )
-        processing_stats["tracking_dominant_track_length"] = getattr(
-            tracking_result, "dominant_track_length", 0
-        )
-        processing_stats["tracking_secondary_tracks"] = getattr(
-            tracking_result, "secondary_tracks", 0
-        )
-        processing_stats["multiple_fish_detected"] = multiple_fish_detected
 
         # Assess capture quality with real duration and timestamps
         quality_result = evaluate_capture(
@@ -1268,6 +1388,7 @@ def process_identification_job(
                 "gamification": {
                     "xp_earned": xp_earned,
                 },
+                "processing_stats": processing_stats,
             }
 
             model_outputs = {
@@ -1279,6 +1400,7 @@ def process_identification_job(
                 "detector_type": settings.detector_type,
                 "detector_model_path": settings.detector_model_path,
                 "classifier_model_path": settings.classifier_model_path,
+                "processing_stats": processing_stats,
             }
 
             # Save final persistent folders (catch_{catch_number}_{job_id})

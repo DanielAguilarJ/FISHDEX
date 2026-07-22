@@ -94,15 +94,18 @@ def _draw_annotated_frame(
         if fingerprint_polygon is not None:
             fp_pts = np.round(fingerprint_polygon).astype(np.int32)
             cv2.polylines(img, [fp_pts], True, fp_color, 2, cv2.LINE_AA)
-            # Label near the top-most point of the polygon
+            # Label near the top-most point of the polygon, within frame bounds
+            label_text = "FINGERPRINT (SPOTS)"
+            (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
             top_idx = fp_pts[:, 1].argmin()
             label_x = int(fp_pts[top_idx, 0])
-            label_y = max(15, int(fp_pts[top_idx, 1]) - 4)
-            # Clamp label_x to stay within frame
-            label_x = max(4, min(label_x, w - 120))
+            label_y = int(fp_pts[top_idx, 1]) - 4
+            # Clamp within frame
+            label_x = max(4, min(label_x, w - tw - 4))
+            label_y = max(th + 4, min(label_y, h - 4))
             cv2.putText(
                 img,
-                "FINGERPRINT (SPOTS)",
+                label_text,
                 (label_x, label_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.38,
