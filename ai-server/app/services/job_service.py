@@ -492,7 +492,15 @@ def process_identification_job(
             if current_status == "completed":
                 raise ValueError(f"Job {job_id} already completed. Use force=True to reprocess.")
             elif current_status == "processing":
-                raise ValueError(f"Job {job_id} is already being processed.")
+                logger.info(
+                    f"[Job {job_id}] Already in 'processing' status. "
+                    "Exiting gracefully to avoid race condition."
+                )
+                return {
+                    "status": "already_processing",
+                    "job_id": job_id,
+                    "message": "Job is being processed by another instance",
+                }
             elif current_status == "failed" and not force:
                 raise ValueError(f"Job {job_id} previously failed. Use force=True to retry.")
 
