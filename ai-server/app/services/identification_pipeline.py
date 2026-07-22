@@ -487,7 +487,7 @@ class IdentificationPipeline:
                 model_version=self._model_version,
             )
 
-        min_frames = DEFAULT_THRESHOLDS.get("min_query_frames", 3)
+        min_frames = DEFAULT_THRESHOLDS.get("min_query_frames", 1)
         if valid_crop_count < min_frames:
             return PipelineResult(
                 decision="repeat_capture",

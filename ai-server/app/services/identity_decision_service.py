@@ -68,7 +68,7 @@ DEFAULT_THRESHOLDS = {
     "single_candidate_threshold": 0.88,
     "min_margin": 0.05,
     "min_agreement": 0.70,
-    "min_query_frames": 3,
+    "min_query_frames": 1,
     "min_quality_score": 0.4,
 }
 

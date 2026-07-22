@@ -212,9 +212,8 @@ def validate_single_fish(
 
     for frame_idx, frame_dets in enumerate(detections_per_frame):
         if not frame_dets:
-            # No detections in this frame; keep prev state
-            prev_detections = []
-            prev_track_ids = []
+            # No detections in this frame; do NOT reset prev state.
+            # Keep last known detections for IoU matching across gaps.
             all_track_ids_per_frame.append([])
             continue
 

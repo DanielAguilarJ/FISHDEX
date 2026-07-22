@@ -47,15 +47,14 @@ class TestCaptureQuality:
         assert not result.is_acceptable
         assert result.valid_crop_count == 0
 
-    def test_single_frame_below_minimum(self):
-        """Single frame is below min crop count."""
+    def test_single_frame_is_acceptable(self):
+        """Single high-quality frame should be acceptable (min_query_frames=1)."""
         frames = [self._make_frame()]
         detections = [{"bbox": [10, 10, 100, 100], "confidence": 0.9}]
 
         result = evaluate_capture(frames, detections)
-        assert not result.is_acceptable
+        assert result.is_acceptable
         assert result.valid_crop_count == 1
-        assert any("crops" in r.lower() or "insufficient" in r.lower() for r in result.rejection_reasons)
 
     def test_border_clipping_detected(self):
         """Detection touching frame border should be flagged."""

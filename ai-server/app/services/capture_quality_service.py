@@ -277,9 +277,9 @@ def evaluate_capture(
     overall_score = float(np.clip(overall_score, 0.0, 1.0))
 
     # --- Acceptability check ---
-    if valid_crop_count < 3:
+    if valid_crop_count < 1:
         rejection_reasons.append(
-            f"Insufficient crops: {valid_crop_count} < 3 required"
+            f"Insufficient crops: {valid_crop_count} < 1 required"
         )
     if overall_score < MIN_QUALITY_FOR_NEW_FISH:
         rejection_reasons.append(
@@ -294,7 +294,7 @@ def evaluate_capture(
             f"Too many duplicate frames: {duplicate_frame_ratio:.1%}"
         )
 
-    is_acceptable = overall_score >= MIN_QUALITY_FOR_NEW_FISH and valid_crop_count >= 3
+    is_acceptable = overall_score >= MIN_QUALITY_FOR_NEW_FISH and valid_crop_count >= 1
 
     return CaptureQuality(
         overall_score=overall_score,
