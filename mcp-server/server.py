@@ -157,8 +157,8 @@ def query_graph(question: str) -> str:
                 f"{len(data.get('communities', []))} communities.\n"
                 "Try a simpler query or use search_code."
             )
-        except Exception:
-            pass
+        except (ValueError, OSError) as exc:
+            logger.warning("Could not read graph database %s: %s", GRAPH_DB, exc)
     return "graphify not available. Use search_code or read_file instead."
 
 
@@ -213,25 +213,136 @@ def get_file_info(path: str) -> str:
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def _resolve(path: str) -> Optional[Path]:
+    """
+    Resolve a repository-relative path, refusing traversal and secret files.
+
+    Args:
+        path: Path relative to the project root.
+
+    Returns:
+        The absolute path, or None when it escapes the project root or names a
+        file that may hold credentials.
+    """
     try:
         full = (BASE_DIR / path).resolve()
         full.relative_to(BASE_DIR.resolve())
-        return full
     except (ValueError, OSError):
         return None
 
+    if _is_sensitive(full):
+        logger.warning("Refused MCP read of sensitive path: %s", path)
+        return None
+    return full
+
+
+# Filenames and directories that may contain credentials. Path traversal is
+# already blocked, but that only stops reads *outside* the repository — the
+# repository itself contains .env files and key material.
+_SENSITIVE_NAMES = frozenset(
+    {
+        "credentials.json",
+        "id_rsa",
+        "id_ed25519",
+        "service-account.json",
+        "secrets.yaml",
+        "secrets.yml",
+    }
+)
+_SENSITIVE_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".keystore", ".jks")
+_SENSITIVE_DIRS = frozenset({".git", "node_modules", ".venv", "venv"})
+
+
+def _is_sensitive(full: Path) -> bool:
+    """
+    Report whether a path should never be served to an MCP client.
+
+    Args:
+        full: Absolute, already-resolved path.
+
+    Returns:
+        True when the path looks like credential material or private plumbing.
+        ``.env.example`` is allowed because it holds only placeholders.
+    """
+    name = full.name.lower()
+
+    if name.startswith(".env") and not name.endswith((".example", ".sample", ".template")):
+        return True
+    if name in _SENSITIVE_NAMES:
+        return True
+    if name.endswith(_SENSITIVE_SUFFIXES):
+        return True
+    return any(part in _SENSITIVE_DIRS for part in full.parts)
+
 
 def _run(cmd: list[str], cwd: Path, timeout: int) -> str:
+    """
+    Run a helper command and return its stdout.
+
+    Args:
+        cmd: Argument vector. Passed as a list, never through a shell, so a
+            hostile pattern cannot inject additional commands.
+        cwd: Working directory.
+        timeout: Seconds before the command is killed.
+
+    Returns:
+        Trimmed stdout, or an empty string when the command failed or is absent.
+    """
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout)
-        return r.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        result = subprocess.run(  # noqa: S603 — argument vector, shell=False
+            cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout, check=False
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("Command timed out after %ds: %s", timeout, cmd[0])
         return ""
+    except FileNotFoundError:
+        logger.info("Command not installed, skipping: %s", cmd[0])
+        return ""
+    except OSError as exc:
+        logger.warning("Command %s failed: %s", cmd[0], exc)
+        return ""
+
+    if result.returncode != 0 and result.stderr:
+        logger.debug("%s exited %d: %s", cmd[0], result.returncode, result.stderr[:200])
+    return result.stdout.strip()
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("Starting FishDex MCP Server on http://0.0.0.0:8001 ...")
-    print("Make.com MCP Client URL → http://<your-ip>:8001")
-    mcp.run(transport="sse", host="0.0.0.0", port=8001)
+    import argparse
+    import os
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    )
+
+    parser = argparse.ArgumentParser(description="FishDex MCP codebase server")
+    parser.add_argument(
+        "--host",
+        # SECURITY: bind to loopback by default. This server grants read access to
+        # every file in the repository and has no authentication of its own, so it
+        # must not listen on all interfaces. Expose it through an authenticated
+        # tunnel (e.g. `cloudflared tunnel --url http://localhost:8001`) instead.
+        default=os.environ.get("FISHDEX_MCP_HOST", "127.0.0.1"),
+        help="Interface to bind (default: 127.0.0.1; set 0.0.0.0 only behind a "
+        "trusted, authenticated proxy)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("FISHDEX_MCP_PORT", "8001")),
+        help="Port to listen on (default: 8001)",
+    )
+    args = parser.parse_args()
+
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        logger.warning(
+            "MCP server is binding to %s. It exposes the whole repository with no "
+            "authentication — make sure an authenticated proxy sits in front of it.",
+            args.host,
+        )
+
+    logger.info("Starting FishDex MCP Server on http://%s:%d", args.host, args.port)
+    logger.info("Tunnel it with: cloudflared tunnel --url http://localhost:%d", args.port)
+    mcp.run(transport="sse", host=args.host, port=args.port)
