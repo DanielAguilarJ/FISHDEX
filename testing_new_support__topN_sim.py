@@ -14,6 +14,7 @@ or inside nested folders.
 
 from __future__ import annotations
 
+import argparse
 import math
 import os
 import random
@@ -522,8 +523,13 @@ def load_model_for_proto_infer(
             map_location=device,
             weights_only=True,
         )
-    except TypeError:
-        checkpoint = torch.load(model_path, map_location=device)
+    except TypeError as exc:
+        # Do NOT silently fall back to an unsafe load: torch.load without
+        # weights_only unpickles the file and can execute arbitrary code.
+        raise RuntimeError(
+            "This PyTorch build does not support torch.load(weights_only=True). "
+            "Upgrade to torch>=2.4 rather than loading checkpoints unsafely."
+        ) from exc
 
     state = checkpoint.get("state_dict", checkpoint)
     if not isinstance(state, dict):
@@ -778,31 +784,120 @@ def identify_query_identity(
     )
 
 
+def _parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+
+    Returns:
+        Namespace with ``model_path``, ``support_dir``, ``query_dir`` and the
+        sampling/threshold knobs.
+
+    Raises:
+        SystemExit: A required path is missing or does not exist.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            "Identify a query fish against a support gallery using FishEncoder "
+            "prototypes and top-N majority voting."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--model-path",
+        default=os.environ.get("FISHDEX_REID_MODEL_PATH"),
+        help="FishEncoder checkpoint (.pt) (env: FISHDEX_REID_MODEL_PATH)",
+    )
+    parser.add_argument(
+        "--support-dir",
+        default=os.environ.get("FISHDEX_REID_SUPPORT_DIR"),
+        help=(
+            "Gallery directory with one subdirectory per known identity "
+            "(env: FISHDEX_REID_SUPPORT_DIR)"
+        ),
+    )
+    parser.add_argument(
+        "--query-dir",
+        default=os.environ.get("FISHDEX_REID_QUERY_DIR"),
+        help=(
+            "Directory holding images of the single identity to identify "
+            "(env: FISHDEX_REID_QUERY_DIR)"
+        ),
+    )
+    parser.add_argument(
+        "--max-support-images",
+        type=int,
+        default=int(os.environ.get("FISHDEX_REID_MAX_SUPPORT_IMAGES", "5")),
+        help="Maximum support images used to build each identity prototype",
+    )
+    parser.add_argument(
+        "--max-query-images",
+        type=int,
+        default=int(os.environ.get("FISHDEX_REID_MAX_QUERY_IMAGES", "5")),
+        help="Maximum query images sampled for majority voting",
+    )
+    parser.add_argument(
+        "--img-size",
+        type=int,
+        default=int(os.environ.get("FISHDEX_REID_IMG_SIZE", "128")),
+        help="Model input resolution; must match the value used at training time",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=int(os.environ.get("FISHDEX_REID_RANDOM_SEED", "1234")),
+        help="Random seed for support/query sampling (reproducibility)",
+    )
+    args = parser.parse_args()
+
+    missing = [
+        flag
+        for flag, value in (
+            ("--model-path", args.model_path),
+            ("--support-dir", args.support_dir),
+            ("--query-dir", args.query_dir),
+        )
+        if not value
+    ]
+    if missing:
+        parser.error(f"missing required argument(s): {', '.join(missing)}")
+
+    if not Path(args.model_path).is_file():
+        parser.error(f"model checkpoint not found: {args.model_path}")
+    for flag, directory in (
+        ("--support-dir", args.support_dir),
+        ("--query-dir", args.query_dir),
+    ):
+        if not Path(directory).is_dir():
+            parser.error(f"{flag} directory not found: {directory}")
+
+    return args
+
+
 def main() -> None:
     # ---------------- REQUIRED INPUTS ----------------
-    MODEL_PATH = (
-        "/home/dev/PycharmProjects/fish_reid_V02/"
-        "outputs/multisession_proto_April_GE/models/final.pt"
-    )
+    # Paths were hardcoded to /home/dev/... and made this script unrunnable
+    # elsewhere. They are now CLI arguments with environment-variable fallbacks.
+    args = _parse_args()
+    MODEL_PATH = args.model_path
 
     # Contains one subdirectory per known identity.
-    SUPPORT_DIR = "/home/dev/Desktop/Madi/identification_summer2026_ROIS/S01"
+    SUPPORT_DIR = args.support_dir
 
     # Contains images of ONE identity to identify. It may be a direct image
     # directory or a directory containing nested image folders.
-    QUERY_DIR = "/home/dev/Desktop/Madi/identification_summer2026_ROIS/S01/005/"
+    QUERY_DIR = args.query_dir
 
     # Maximum number of support images used to build EACH identity prototype.
-    MAX_SUPPORT_IMAGES_PER_IDENTITY = 5
+    MAX_SUPPORT_IMAGES_PER_IDENTITY = args.max_support_images
 
     # Maximum number of query images sampled and used in majority voting.
-    MAX_QUERY_IMAGES_FOR_VOTE = 5
+    MAX_QUERY_IMAGES_FOR_VOTE = args.max_query_images
 
     # ---------------- MODEL SETTINGS ----------------
-    IMG_SIZE = 128
+    IMG_SIZE = args.img_size
     BATCH_SIZE = 128
     NUM_WORKERS = 4
-    RANDOM_SEED = 1234
+    RANDOM_SEED = args.seed
     MODEL_NAME = "convnext_small.fb_in22k_ft_in1k"
     EMBEDDING_DIM = 512
 

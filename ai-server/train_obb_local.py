@@ -1,11 +1,17 @@
 import os
+from pathlib import Path
+import os
 import shutil
 import random
 import yaml
 from ultralytics import YOLO
 
 def main():
-    dataset_dir = r"C:\Users\Student\Documents\MODEL"
+    # Was hardcoded to a Windows path. Override with FISHDEX_OBB_DATASET_DIR.
+    dataset_dir = os.environ.get(
+        "FISHDEX_OBB_DATASET_DIR",
+        str(Path(__file__).resolve().parent / "models" / "fish_obb_source"),
+    )
     images_dir = os.path.join(dataset_dir, "images")
     labels_dir = os.path.join(dataset_dir, "labels")
 

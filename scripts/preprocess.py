@@ -190,26 +190,102 @@ def apply_augmentations(img: np.ndarray, num_augmented: int = 3) -> List[np.ndar
     return augmented_images
 
 
+def group_key_for(path: Path) -> str:
+    """
+    Derive the identity group a source image belongs to.
+
+    Images of the same physical fish must never be split across train/val/test:
+    the model would then be evaluated on an individual it memorised, inflating
+    accuracy. Filenames in this dataset follow ``<clip>_kf_<frame>.<ext>`` (key
+    frames extracted from one recording), so the portion before ``_kf_`` — or the
+    stem when that marker is absent — identifies the source clip.
+
+    Args:
+        path: Source image path.
+
+    Returns:
+        A stable grouping key.
+    """
+    stem = path.stem
+    marker = "_kf_"
+    if marker in stem:
+        return stem.split(marker, 1)[0]
+    # Fall back to stripping a trailing frame index, e.g. "fish12_003" → "fish12".
+    parts = stem.rsplit("_", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return parts[0]
+    return stem
+
+
 def split_dataset(
     files: List[Path],
     train_ratio: float = TRAIN_RATIO,
     val_ratio: float = VAL_RATIO,
+    group_by_identity: bool = True,
 ) -> Tuple[List[Path], List[Path], List[Path]]:
     """
-    Divide una lista de archivos en conjuntos train/val/test.
-    Mezcla aleatoriamente antes de dividir para evitar sesgos.
+    Split files into train/val/test sets.
+
+    By default the split is **grouped**: every image sharing a
+    :func:`group_key_for` key lands in the same set. A plain per-image shuffle
+    leaks identity between splits, and the augmentation step amplifies it by
+    placing derived copies of a validation image into training.
+
+    Args:
+        files: Source images for one class.
+        train_ratio: Fraction of groups assigned to train.
+        val_ratio: Fraction of groups assigned to validation.
+        group_by_identity: Set False only for object-detection datasets, where
+            the label is a box rather than an individual.
+
+    Returns:
+        Tuple of (train, val, test) file lists.
     """
-    shuffled = files.copy()
-    random.shuffle(shuffled)
+    if not files:
+        return [], [], []
 
-    n = len(shuffled)
-    train_end = int(n * train_ratio)
-    val_end = int(n * (train_ratio + val_ratio))
+    if not group_by_identity:
+        shuffled = list(files)
+        random.shuffle(shuffled)
+        n = len(shuffled)
+        train_end = int(n * train_ratio)
+        val_end = int(n * (train_ratio + val_ratio))
+        return shuffled[:train_end], shuffled[train_end:val_end], shuffled[val_end:]
 
-    train_files = shuffled[:train_end]
-    val_files = shuffled[train_end:val_end]
-    test_files = shuffled[val_end:]
+    groups: dict[str, List[Path]] = {}
+    for path in files:
+        groups.setdefault(group_key_for(path), []).append(path)
 
+    # Sort first so the shuffle is reproducible for a given seed regardless of
+    # the order the filesystem returned the entries in.
+    group_keys = sorted(groups)
+    random.shuffle(group_keys)
+
+    n_groups = len(group_keys)
+    train_end = int(n_groups * train_ratio)
+    val_end = int(n_groups * (train_ratio + val_ratio))
+
+    # With very few groups, guarantee train is non-empty rather than silently
+    # producing an empty training set.
+    if n_groups >= 3:
+        train_end = max(1, train_end)
+        val_end = max(train_end + 1, val_end)
+
+    def collect(keys: List[str]) -> List[Path]:
+        return [path for key in keys for path in groups[key]]
+
+    train_files = collect(group_keys[:train_end])
+    val_files = collect(group_keys[train_end:val_end])
+    test_files = collect(group_keys[val_end:])
+
+    logger.info(
+        "Grouped split: %d groups → train=%d val=%d test=%d images "
+        "(no identity appears in more than one set)",
+        n_groups,
+        len(train_files),
+        len(val_files),
+        len(test_files),
+    )
     return train_files, val_files, test_files
 
 

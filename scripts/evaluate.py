@@ -124,7 +124,10 @@ def load_model(model_path: Path, device: torch.device) -> Tuple[nn.Module, dict]
         sys.exit(1)
 
     logger.info("Cargando modelo desde: %s", model_path)
-    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    # SECURITY: weights_only=True prevents arbitrary code execution when the
+    # checkpoint is unpickled. It was explicitly disabled here, which turns any
+    # tampered .pt file into remote code execution.
+    checkpoint = torch.load(model_path, map_location=device, weights_only=True)
 
     num_classes = checkpoint["num_classes"]
     model = FishClassifier(num_classes=num_classes)

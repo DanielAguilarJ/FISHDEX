@@ -25,7 +25,14 @@ TRAIN_RATIO = 0.8
 # Paths
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-SOURCE_DIR = Path("C:/Users/Student/Documents/MODEL")
+# Source dataset root. Was hardcoded to a Windows path, making the script
+# unusable on any other machine. Override with FISHDEX_OBB_DATASET_DIR or --source.
+SOURCE_DIR = Path(
+    os.environ.get(
+        "FISHDEX_OBB_DATASET_DIR",
+        str(PROJECT_ROOT / "ai-server" / "models" / "fish_obb_source"),
+    )
+)
 OUTPUT_DIR = PROJECT_ROOT / "ai-server" / "models" / "fish_obb_dataset"
 
 def main():

@@ -37,7 +37,9 @@ def main():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
     print(f"Loading checkpoint: {checkpoint_path}")
-    ckpt = torch.load(checkpoint_path, map_location="cpu")
+    # SECURITY: weights_only=True avoids unpickling arbitrary objects from the
+    # checkpoint, which would allow code execution from a tampered .pt file.
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     required_keys = ["model_state_dict", "num_classes", "class_to_idx"]
     for key in required_keys:
