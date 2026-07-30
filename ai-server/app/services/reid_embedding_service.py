@@ -18,6 +18,8 @@ Métodos públicos:
 
 from __future__ import annotations
 
+import threading
+
 import logging
 from typing import Optional
 
@@ -229,11 +231,36 @@ class ReIDEmbeddingService:
 # Singleton
 # ---------------------------------------------------------------------------
 _reid_embedding_service: Optional[ReIDEmbeddingService] = None
+_reid_embedding_service_lock = threading.Lock()
 
 
 def get_reid_embedding_service() -> ReIDEmbeddingService:
-    """Get or create the singleton ReIDEmbeddingService instance."""
+    """
+    Return the process-wide ReIDEmbeddingService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared ReIDEmbeddingService instance.
+    """
     global _reid_embedding_service
     if _reid_embedding_service is None:
-        _reid_embedding_service = ReIDEmbeddingService()
+        with _reid_embedding_service_lock:
+            if _reid_embedding_service is None:
+                _reid_embedding_service = ReIDEmbeddingService()
+    return _reid_embedding_service
+
+
+def get_loaded_reid_embedding_service() -> Optional[ReIDEmbeddingService]:
+    """
+    Return the singleton only if it has already been constructed.
+
+    Lets health and diagnostic endpoints report model status without triggering a
+    heavyweight model load on the first probe.
+
+    Returns:
+        The existing instance, or None when it was never created.
+    """
     return _reid_embedding_service

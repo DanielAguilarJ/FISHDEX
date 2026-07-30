@@ -19,6 +19,7 @@ Pipeline steps:
 """
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -541,11 +542,22 @@ class IdentificationPipeline:
 
 # Singleton
 _pipeline_instance: Optional[IdentificationPipeline] = None
+_pipeline_instance_lock = threading.Lock()
 
 
 def get_identification_pipeline() -> IdentificationPipeline:
-    """Return the singleton IdentificationPipeline instance."""
+    """
+    Return the process-wide IdentificationPipeline singleton.
+
+    Uses double-checked locking so concurrent first-callers cannot each build a
+    pipeline (and therefore each resolve its own model/service handles).
+
+    Returns:
+        The shared IdentificationPipeline instance.
+    """
     global _pipeline_instance
     if _pipeline_instance is None:
-        _pipeline_instance = IdentificationPipeline()
+        with _pipeline_instance_lock:
+            if _pipeline_instance is None:
+                _pipeline_instance = IdentificationPipeline()
     return _pipeline_instance

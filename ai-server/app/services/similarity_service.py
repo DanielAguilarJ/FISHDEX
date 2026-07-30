@@ -19,6 +19,8 @@ interno del servicio.
 
 from __future__ import annotations
 
+import threading
+
 import logging
 import random
 from collections import Counter
@@ -395,11 +397,23 @@ class SimilarityService:
 # Singleton
 # ---------------------------------------------------------------------------
 _similarity_service: Optional[SimilarityService] = None
+_similarity_service_lock = threading.Lock()
 
 
 def get_similarity_service() -> SimilarityService:
-    """Get or create the singleton SimilarityService instance."""
+    """
+    Return the process-wide SimilarityService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared SimilarityService instance.
+    """
     global _similarity_service
     if _similarity_service is None:
-        _similarity_service = SimilarityService()
+        with _similarity_service_lock:
+            if _similarity_service is None:
+                _similarity_service = SimilarityService()
     return _similarity_service

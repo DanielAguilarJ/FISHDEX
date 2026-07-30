@@ -4,6 +4,7 @@ Handles fish detection with rotated bounding boxes from ONNX inference.
 Uses letterbox preprocessing (aspect-ratio-preserving resize + padding).
 """
 
+import threading
 import logging
 import math
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _instance: Optional["DetectorService"] = None
+_detector_service_lock = threading.Lock()
 
 INPUT_SIZE = 640
 
@@ -356,8 +358,32 @@ class DetectorService:
 
 
 def get_detector_service() -> DetectorService:
-    """Return the singleton DetectorService instance."""
+    """
+    Return the process-wide DetectorService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared DetectorService instance.
+    """
     global _instance
     if _instance is None:
-        _instance = DetectorService()
+        with _detector_service_lock:
+            if _instance is None:
+                _instance = DetectorService()
+    return _instance
+
+
+def get_loaded_detector_service() -> Optional[DetectorService]:
+    """
+    Return the singleton only if it has already been constructed.
+
+    Lets health and diagnostic endpoints report model status without triggering a
+    heavyweight model load on the first probe.
+
+    Returns:
+        The existing instance, or None when it was never created.
+    """
     return _instance

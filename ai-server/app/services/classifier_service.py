@@ -3,6 +3,7 @@ Fish species classifier service for FishDex AI Server.
 Runs ONNX classification model or gracefully falls back when model is unavailable.
 """
 
+import threading
 import json
 import logging
 from pathlib import Path
@@ -16,6 +17,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _instance: Optional["ClassifierService"] = None
+_classifier_service_lock = threading.Lock()
 
 # ImageNet normalization constants
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -184,8 +186,32 @@ class ClassifierService:
 
 
 def get_classifier_service() -> ClassifierService:
-    """Return the singleton ClassifierService instance."""
+    """
+    Return the process-wide ClassifierService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared ClassifierService instance.
+    """
     global _instance
     if _instance is None:
-        _instance = ClassifierService()
+        with _classifier_service_lock:
+            if _instance is None:
+                _instance = ClassifierService()
+    return _instance
+
+
+def get_loaded_classifier_service() -> Optional[ClassifierService]:
+    """
+    Return the singleton only if it has already been constructed.
+
+    Lets health and diagnostic endpoints report model status without triggering a
+    heavyweight model load on the first probe.
+
+    Returns:
+        The existing instance, or None when it was never created.
+    """
     return _instance

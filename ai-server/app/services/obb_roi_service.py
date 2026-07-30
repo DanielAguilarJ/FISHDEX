@@ -20,6 +20,8 @@ Diferencias respecto al script offline:
 
 from __future__ import annotations
 
+import threading
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -267,11 +269,36 @@ class OBBRoiService:
 # Singleton
 # ---------------------------------------------------------------------------
 _obb_roi_service: Optional[OBBRoiService] = None
+_obb_roi_service_lock = threading.Lock()
 
 
 def get_obb_roi_service() -> OBBRoiService:
-    """Get or create the singleton OBBRoiService instance."""
+    """
+    Return the process-wide OBBRoiService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared OBBRoiService instance.
+    """
     global _obb_roi_service
     if _obb_roi_service is None:
-        _obb_roi_service = OBBRoiService()
+        with _obb_roi_service_lock:
+            if _obb_roi_service is None:
+                _obb_roi_service = OBBRoiService()
+    return _obb_roi_service
+
+
+def get_loaded_obb_roi_service() -> Optional[OBBRoiService]:
+    """
+    Return the singleton only if it has already been constructed.
+
+    Lets health and diagnostic endpoints report model status without triggering a
+    heavyweight model load on the first probe.
+
+    Returns:
+        The existing instance, or None when it was never created.
+    """
     return _obb_roi_service

@@ -5,6 +5,7 @@ Integrates the ONNX fin_detector_best.onnx model for fish body detection and cro
 Falls back to center-crop if ONNX runtime is unavailable or detection fails.
 """
 
+import threading
 import numpy as np
 import cv2
 from pathlib import Path
@@ -107,11 +108,23 @@ class FishCropService:
 
 # Singleton instance
 _crop_service: Optional[FishCropService] = None
+_crop_service_lock = threading.Lock()
 
 
 def get_crop_service() -> FishCropService:
-    """Get or create the singleton FishCropService instance."""
+    """
+    Return the process-wide FishCropService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared FishCropService instance.
+    """
     global _crop_service
     if _crop_service is None:
-        _crop_service = FishCropService()
+        with _crop_service_lock:
+            if _crop_service is None:
+                _crop_service = FishCropService()
     return _crop_service

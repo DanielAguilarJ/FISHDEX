@@ -16,6 +16,7 @@ function is the authoritative confirmation step.  The local disk storage
 is a cache for the similarity pipeline, NOT the source of truth.
 """
 
+import threading
 import logging
 import random
 import time
@@ -341,11 +342,23 @@ class InferenceService:
 
 # Singleton
 _inference_service: Optional[InferenceService] = None
+_inference_service_lock = threading.Lock()
 
 
 def get_inference_service() -> InferenceService:
-    """Get or create the singleton InferenceService instance."""
+    """
+    Return the process-wide InferenceService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared InferenceService instance.
+    """
     global _inference_service
     if _inference_service is None:
-        _inference_service = InferenceService()
+        with _inference_service_lock:
+            if _inference_service is None:
+                _inference_service = InferenceService()
     return _inference_service
