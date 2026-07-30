@@ -1,37 +1,56 @@
 # =============================================================================
-# FishDex AI Server - Dependencies
+# FishDex AI Server - Runtime dependencies
+# =============================================================================
+# Every version is pinned exactly. Unpinned ranges on torch/torchvision/timm
+# meant a rebuild could silently swap the inference stack under a model that was
+# calibrated against a specific version, changing embeddings and therefore
+# re-identification decisions.
+#
+# Verified working set: Python 3.11 / macOS arm64 and linux/amd64.
+# Install:  pip install -r requirements.txt
+# Tests:    pip install -r requirements-dev.txt
 # =============================================================================
 
-# Framework web
+# ── Web framework ───────────────────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
+# Rate limiting on auth and identification endpoints.
+slowapi==0.1.10
+# Required by pydantic's EmailStr, used to validate registration input.
+email-validator==2.2.0
 
-# Procesamiento de video/imagen
-opencv-python-headless==4.10.0.84
-numpy==1.26.4
-Pillow==10.4.0
-
-# PyTorch (use CUDA-enabled version if already installed, or let pip install default)
-torch>=2.4.1
-torchvision>=0.19.1
-
-# Fish Re-ID model dependencies
-# timm: ConvNeXt backbone for FishEncoder
-# ultralytics: YOLO OBB .pt detector
-# torchvision.ops.DeformConv2d is included in torchvision>=0.19.1 (no extra install)
-timm>=1.0.7
-ultralytics>=8.3.0
-
-# ONNX Runtime for detection/classification models
-onnxruntime==1.19.2
-
-# Scientific computing (Haversine, similarity)
-scipy==1.13.1
-
-# Utilities
+# ── Configuration ───────────────────────────────────────────────────────────
 python-dotenv==1.0.1
 pydantic==2.9.1
 pydantic-settings==2.5.2
+
+# ── Image and video processing ──────────────────────────────────────────────
+opencv-python-headless==4.10.0.84
+# numpy is held below 2.0: torch 2.4.1 and onnxruntime 1.19.2 are built against
+# the 1.x ABI, and mixing them produces import-time crashes.
+numpy==1.26.4
+Pillow==10.4.0
+
+# ── Deep learning ───────────────────────────────────────────────────────────
+# torch/torchvision must stay in lockstep; torchvision 0.19.1 pairs with 2.4.1.
+# torch>=2.4 is also required for torch.load(weights_only=True), which the
+# checkpoint loader now depends on for safe deserialisation.
+torch==2.4.1
+torchvision==0.19.1
+# ConvNeXt backbone for FishEncoder. A minor bump can change default weights.
+timm==1.0.28
+# YOLO OBB detector runtime.
+ultralytics==8.4.112
+
+# ── ONNX inference (legacy detector/classifier) ──────────────────────────────
+onnxruntime==1.19.2
+
+# ── Scientific computing (Haversine, similarity) ────────────────────────────
+scipy==1.13.1
+
+# ── System metrics for the dashboard ────────────────────────────────────────
+psutil==7.2.2
+
+# ── HTTP client ─────────────────────────────────────────────────────────────
 httpx==0.27.2
-slowapi>=0.1.9

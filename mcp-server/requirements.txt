@@ -1,3 +1,10 @@
-mcp>=1.0.0
-starlette>=0.37.0
-uvicorn[standard]>=0.30.0
+# =============================================================================
+# FishDex MCP Server - Dependencies
+# =============================================================================
+# Pinned exactly: the MCP protocol surface still changes between minor releases,
+# so an unpinned `mcp>=1.0.0` could break tool registration on any rebuild.
+# =============================================================================
+
+mcp==1.2.0
+starlette==0.41.3
+uvicorn[standard]==0.30.6

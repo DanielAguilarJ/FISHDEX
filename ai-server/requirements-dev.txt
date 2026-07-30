@@ -1,0 +1,25 @@
+# =============================================================================
+# FishDex AI Server - Development and test dependencies
+# =============================================================================
+# The repository shipped 20 test files but pytest was never declared anywhere,
+# so a fresh checkout could not run the suite.
+#
+# Install:  pip install -r requirements.txt -r requirements-dev.txt
+# Run:      pytest
+# =============================================================================
+
+-r requirements.txt
+
+# ── Test runner ─────────────────────────────────────────────────────────────
+pytest==8.3.3
+pytest-cov==5.0.0
+# Needed by fastapi.testclient (TestClient wraps httpx + starlette).
+httpx==0.27.2
+
+# ── Linting, formatting and typing ──────────────────────────────────────────
+ruff==0.8.4
+mypy==1.13.0
+
+# ── Supply-chain and security scanning ──────────────────────────────────────
+pip-audit==2.7.3
+bandit==1.8.0
