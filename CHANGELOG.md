@@ -1,0 +1,329 @@
+# Changelog
+
+All notable changes to FishDex are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [2.2.0] — 2026-07-31
+
+Security and reliability hardening pass across the backend, the mobile client,
+the container infrastructure and the offline ML tooling.
+
+### ⚠️ Breaking changes
+
+Read this section before deploying.
+
+1. **Existing session tokens are invalidated.** Tokens were previously
+   `base64(user_id)` with no signature. They are now HMAC-signed, so every client
+   must log in again. Old tokens are rejected with `401`.
+
+2. **Per-user endpoints now require a session token.** The shared client secret is
+   no longer sufficient for:
+   - `GET /api/v1/jobs/{id}`
+   - `GET /api/v1/jobs/{id}/result`
+   - `POST /api/v1/jobs/{id}/process`
+   - `GET /api/v1/sightings/individuals`
+   - `GET /api/v1/sightings/stats/{user_id}`
+   - `GET /api/v1/fish/{id}/history`
+   - `GET /api/v1/health/detailed`
+
+   The Flutter client already sends both credentials when signed in, so it is
+   unaffected. Any other integration must authenticate via
+   `POST /api/v1/auth/login`.
+
+3. **`POST /api/v1/auth/register` no longer accepts a `role` field.** All new
+   accounts are created as `fisherman`. Use
+   `PATCH /api/v1/auth/users/{user_id}/role` (admin only) to elevate.
+
+4. **`GET /api/v1/identify/test` was removed.** It ran the full model pipeline on
+   random noise with no authentication.
+
+5. **`GET /api/v1/fish/{id}/history` no longer takes a `user_role` query
+   parameter.** The role is read from the database.
+
+6. **CORS is no longer a wildcard.** Set `FISHDEX_CORS_ALLOWED_ORIGINS` to the
+   dashboard origin. A wildcard is refused in production.
+
+7. **The `ai-server` container no longer publishes port 8000 to the host.** Reach
+   the API through Caddy. For direct debugging access, add
+   `127.0.0.1:8000:8000` to the compose file yourself.
+
+8. **Passwords must be at least 10 characters** and combine letters and digits.
+   Existing accounts are unaffected; their hashes are transparently upgraded from
+   100 000 to 600 000 PBKDF2 iterations on next login.
+
+9. **Android release builds require HTTPS.** `AI_SERVER_URL` must use `https://`;
+   cleartext is permitted only for loopback, only in debug builds.
+
+10. **Release builds of the app now require `--dart-define` flags.** Production
+    defaults were removed from the binary; a release build without them throws at
+    startup rather than silently using the wrong host.
+
+### Security
+
+- **Forgeable session tokens (critical).** `generate_token()` returned
+  `base64(user_id)` and `get_user_id_from_token()` simply decoded it — no
+  signature, no expiry. Anyone could mint a token for any account, including
+  `admin`, by base64-encoding a user id. Replaced with HMAC-SHA256 signed tokens
+  carrying `iat`/`exp` in the new `app/security.py`.
+- **Privilege escalation at registration (critical).** `RegisterRequest` accepted
+  a client-supplied `role`, so `{"role": "admin"}` created an administrator.
+- **Broken access control on job reads (critical).** `GET /jobs/{id}` and
+  `GET /jobs/{id}/result` authorised with only the shared client secret, letting
+  anyone who extracted it from the APK enumerate every job and its GPS data.
+  Ownership is now enforced.
+- **Capture attribution spoofing (critical).** `POST /jobs/upload` trusted the
+  `user_id` form field. A session token is now authoritative; a machine caller
+  must reference a user that exists.
+- **Unauthenticated GPS disclosure (critical).** `GET /fish/{id}/history` had no
+  authentication and took the caller's role from a query parameter, so
+  `?user_role=researcher` returned the recapture coordinates of any fish.
+- **Fish location leak (high).** `GET /sightings/individuals` returned
+  `first_seen_lat/lng` and `last_seen_lat/lng` for every catalogued fish to any
+  caller. Location columns are now redacted for non-elevated roles.
+- **Remote code execution via checkpoints (critical).** `torch.load` ran without
+  `weights_only=True` in four places — explicitly disabled in
+  `scripts/evaluate.py`, omitted in `scripts/export_classifier_onnx.py`, and used
+  as a silent fallback in `fish_encoder_model.py` and
+  `testing_new_support__topN_sim.py`. An unrestricted load unpickles the file and
+  executes any embedded code. All four now require `weights_only=True`.
+- **Unauthenticated repository exposure (critical).** The MCP server listened on
+  `0.0.0.0:8001` with no authentication, serving any file in the project.
+  Now binds loopback by default and refuses `.env`, `*.pem`, `*.key`, `*.p12`,
+  `*.jks`, known credential filenames and `.git`/`.venv` internals.
+- **Extractable app secrets (critical).** `env_config.dart` shipped the production
+  server IP, the Appwrite project id and `AI_SERVER_SECRET='change-me'`. Removed.
+- **Cleartext traffic (critical).** `usesCleartextTraffic="true"` was set
+  application-wide and the default server URL was `http://`. Replaced with
+  `network_security_config.xml` permitting plain HTTP for loopback only.
+- **Plain-text token storage (high).** The session token lived in
+  `SharedPreferences` — plain XML on Android, an unencrypted plist on iOS. Moved
+  to the Android Keystore / iOS Keychain via `SecureTokenStore`, which migrates
+  and then deletes any legacy copy.
+- **Unbounded certificate issuance (high).** The Caddyfile enabled `on_demand`
+  TLS with no `on_demand_tls { ask }` endpoint, so Caddy would issue a
+  certificate for any hostname pointed at the server — an abuse vector and a
+  direct path to a Let's Encrypt rate-limit ban. Confirmed present in the adapted
+  JSON config; removed.
+- **Container ran as root (high).** No `USER` directive, so a dependency RCE or
+  container escape held uid 0 on the mounted data volume. Now uid 10001, with
+  `no-new-privileges`.
+- **Timing-attack-prone comparisons (medium).** Every shared-secret and password
+  check used `==`. All now use `hmac.compare_digest`.
+- **Weak password hashing (medium).** PBKDF2 at 100 000 iterations, below the
+  OWASP 2023 recommendation. Raised to 600 000 with transparent upgrade on login.
+- **User enumeration (medium).** Login distinguished "unknown email" from "wrong
+  password". Both now return an identical message, and the endpoint is
+  rate-limited.
+- **Information disclosure (medium).** `/health/ready` echoed raw database error
+  strings, and `/health/detailed` exposed model paths, thresholds and gallery
+  size without authentication. Errors are now logged rather than returned, and
+  `/health/detailed` requires an elevated role.
+- **Stored XSS via upload filename (medium).** The stored file extension came
+  from the client filename, so `payload.html` could be written into the
+  statically served storage directory and executed same-origin. Extensions are
+  now allow-listed and the name is server-generated, with a magic-byte check.
+- **Open CORS with credentials (medium).** `allow_origins=["*"]` combined with
+  `allow_credentials=True` let any web page make authenticated requests.
+- **Missing brute-force protection (medium).** No rate limit on `/login` or
+  `/register`. Now 10/min and 5/min.
+- **Deprecated security header (low).** Removed `X-XSS-Protection`, which modern
+  browsers ignore and whose legacy filter introduced vulnerabilities of its own.
+- Added `Permissions-Policy`, `Cross-Origin-Opener-Policy`,
+  `Cross-Origin-Resource-Policy`, `base-uri`, `form-action`, `object-src` and
+  `frame-ancestors`.
+- `android:allowBackup="false"` — `adb backup` could otherwise exfiltrate app data.
+
+### Fixed
+
+- **`NameError` orphaned jobs (critical).** `retry_service._retry_single_job`
+  called an undefined `_mark_manual_review()` when the raw media file was
+  missing, raising `NameError` and leaving the job stuck in `pending_crop`
+  forever. Added `_mark_missing_media()`.
+- **SQLite pragmas silently dropped (high).** `busy_timeout` and `foreign_keys`
+  are per-connection settings but were only applied inside `init_db()` on a
+  connection that was then closed. Every connection ran with `busy_timeout=0` and
+  `foreign_keys=OFF`, so any write contention between background job processing
+  and API requests raised `SQLITE_BUSY` immediately instead of waiting.
+  `MatchingService._connect()` had the same defect on the embeddings database.
+- **Correlation IDs never worked (high).** `CorrelationFilter` was attached to the
+  root *logger*. Python only applies a logger's filters to records emitted through
+  that logger; records propagated from child loggers reach ancestor *handlers* but
+  skip ancestor *filters*. Every log line showed the placeholder `-`. The filter
+  now sits on the handlers.
+- **Progress updates and dashboard logs silently discarded (high).**
+  `_emit_progress` and `EventBusLogHandler.emit` called
+  `asyncio.get_running_loop()` from background worker threads, where it always
+  raises `RuntimeError`, and swallowed it with `pass`. The main loop is now bound
+  at startup and reached via `call_soon_threadsafe`.
+- **Dashboard retry froze the server (high).** `POST /dashboard/jobs/{id}/retry`
+  called the synchronous `process_identification_job()` directly from an async
+  handler, blocking the event loop for the entire inference. Now dispatched with
+  `asyncio.to_thread`.
+- **Race in lazy model singletons (high).** All nine `get_*_service()` accessors
+  used a bare `if _instance is None` check, so two concurrent first-callers could
+  each load the model weights. Added double-checked locking.
+- **Race in the event bus (high).** `emit()` iterated the listener set while
+  WebSocket handlers could register concurrently, risking
+  `RuntimeError: Set changed size during iteration`. The set is now snapshotted
+  under a lock.
+- **Identity leakage in the dataset split (high).** `scripts/preprocess.py` split
+  per image, so multiple key frames of the same physical fish could land in train
+  *and* validation, and augmentation then wrote derived copies of validation
+  images into training. Both inflate reported accuracy without improving the
+  model. `split_dataset()` now groups by identity and keeps each group in a
+  single split.
+- **Crash on a malformed detector result (medium).** `OBBRoiService.extract_roi`
+  accessed `results.obb.xyxyxyxy` unguarded, so an unexpected result object raised
+  `AttributeError` and aborted the whole job instead of reporting "no detection".
+- **`except Exception` masked schema errors (medium).**
+  `identification_pipeline` treated *any* exception as "the `verification_status`
+  column does not exist", hiding disk and connection failures. Narrowed to
+  `sqlite3.OperationalError`.
+- **Connection leaks (medium).** `register`, `login` and `get_me` left the SQLite
+  connection open on every error path. Replaced with the `db_session()` context
+  manager.
+- **Inconsistent version reporting (low).** Three endpoints reported `2.0.0`,
+  `2.1.0` and `3.0.0`. Now a single `SERVICE_VERSION`.
+- **`request_count` was meaningless (low).** The counter only advanced inside
+  `/health`. Now a middleware.
+- **CSP broke the dashboard (medium).** `default-src 'self'` blocked Leaflet,
+  Google Fonts and CARTO tiles, which the dashboard requires. Replaced with a
+  policy that permits exactly those origins.
+- **File descriptor leak (medium).** `obb_roi_extractor` opened its CSV log in
+  `__init__` and closed it only on the success path. Now scoped to a `with` block.
+- **Silent data loss in image discovery (medium).** The same extractor matched
+  only `*.png` and `*.JPG`, skipping lowercase `.jpg` and every other format.
+- **Non-portable scripts (high).** Absolute paths (`/home/dev/...`,
+  `C:/Users/Student/...`) made four scripts unrunnable elsewhere. Now CLI
+  arguments with environment-variable fallbacks and clear error messages.
+- **Unreachable code (medium).** `identify.py` carried ~180 lines after an
+  unconditional `raise HTTPException(410)`. Removed.
+- **Broken "integration" tests (high).** `test_integration.py` required a manually
+  started server on `127.0.0.1:8000` and failed with `ConnectError` on every run.
+  Rewritten against `TestClient`.
+
+### Added
+
+- `app/security.py` — signed session tokens, constant-time comparison, PBKDF2
+  hashing with legacy support, password policy.
+- `app/utils/media_validation.py` — media type resolution, extension allow-list,
+  magic-byte sniffing.
+- `app/services/result_cache.py` — bounded, thread-safe TTL cache with LRU
+  eviction for completed identification results. The client polls every two
+  seconds while the result screen is open; authorisation is still re-evaluated on
+  every request, and entries are invalidated on reprocess.
+- `app/database.py::db_session()` — transactional context manager.
+- `PATCH /api/v1/auth/users/{user_id}/role` — admin-only role management.
+- `tests/test_image_processing.py` — 47 tests covering OBB rectification
+  (long side becomes width, matrices are mutual inverses, degenerate polygons
+  rejected), bbox clamping at frame edges, aspect-preserving padding, fingerprint
+  box rounding, frame selection, upload validation, and the no-detection /
+  missing-model / malformed-result paths.
+- `scripts/tests/test_preprocess_split.py` — 13 tests proving the dataset split no
+  longer leaks identities.
+- `fishdex/test/env_config_test.dart` — 8 tests asserting no production values
+  remain compiled into the app.
+- `ai-server/pyproject.toml` — pytest, coverage, ruff and mypy configuration.
+- `ai-server/tests/conftest.py` — deterministic test environment and cache
+  isolation.
+- `ai-server/requirements-dev.txt` — pytest, ruff, mypy, pip-audit, bandit.
+- `fishdex/lib/core/storage/secure_token_store.dart` — encrypted token storage.
+- `fishdex/android/app/src/main/res/xml/network_security_config.xml`
+- Root `README.md`, `CHANGELOG.md` and `.env.example`.
+- Healthcheck for the `caddy` service; container-level `HEALTHCHECK` in the image.
+- Indexes on `users(email)`, `identification_jobs(created_at)` and
+  `identification_jobs(user_id)`.
+
+### Changed
+
+- **Dependencies are pinned exactly.** `torch`, `torchvision`, `timm`,
+  `ultralytics` and `slowapi` used `>=` ranges, so a rebuild could swap the
+  inference stack under a model calibrated against a specific version — changing
+  embeddings, and therefore re-identification decisions, with no code change.
+- **`pytest` is now declared.** The repository shipped 20 test files but pytest
+  appeared in no requirements file, so a fresh checkout could not run the suite.
+  Also adds the previously undeclared `psutil` and `email-validator`.
+- **Dockerfile is multi-stage** — `build-essential` and the pip cache no longer
+  ship in the runtime image. `libgl1-mesa-glx` replaced with `libgl1` (renamed in
+  Debian 12).
+- **`--reload` removed from the production command.** The reloader watches the
+  filesystem, keeps a supervisor process alive, and restarts on any volume write.
+- **Resource limits added.** Neither service had any, so one CPU-bound inference
+  could starve the proxy.
+- **Healthcheck `start_period` raised to 180 s** — 30 s was far below the
+  cold-start time of ConvNeXt plus YOLO, so the container was marked unhealthy
+  during normal startup.
+- **Secrets are required in compose** (`${VAR:?}`) instead of silently defaulting.
+- **Configuration is range-validated.** Every probability-like setting is checked
+  against `[0.0, 1.0]` at startup, so `THRESHOLD=82` fails loudly instead of
+  silently disabling matching. `environment` and `device` are validated against
+  allow-lists, and fingerprint crop bounds must describe a positive area.
+- **`/docs` and `/redoc` are disabled in production.**
+- **Models are pre-loaded once at startup**, so the first request does not pay the
+  load cost and a missing checkpoint surfaces in the logs immediately.
+- **The dashboard HTML is memoised** instead of re-read from disk per request.
+- **`init_db()` split** from a single 200-line function into per-table helpers;
+  `/health/ready` split from ~110 lines into focused sub-checks.
+- **18 exception handlers now log.** Silent handlers dropped from 37 to 19 in
+  `ai-server/app`; the remainder are narrow, intentional parse fallbacks.
+- **Flutter linter rules added** for the defect classes found:
+  `use_build_context_synchronously`, `cancel_subscriptions`, `close_sinks`,
+  `unawaited_futures`, `avoid_print`, `avoid_dynamic_calls`.
+- **`print()` replaced with `logging`** in the MCP server and the OBB extractor.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `pytest` (ai-server) | 336 passed, 0 failed (was 257 passed, 5 failed) |
+| `pytest` (scripts) | 13 passed |
+| `flutter analyze` | 0 errors, 0 warnings |
+| `flutter build bundle` | succeeds |
+| `flutter test` | 9 passed |
+| `caddy validate` | valid, no warnings |
+| Coverage of hardened modules | `security` 97%, `media_validation` 97%, `crop_utils` 90%, `matching_service` 83%, `result_cache` 82% |
+
+### Known gaps
+
+Deliberately out of scope; each is a separate, larger piece of work.
+
+- **The Appwrite migration is unfinished.** `lib/core/providers/appwrite_providers.dart`
+  returns null stubs, so `fishing_spots_repository`, `sightings_repository`,
+  `media_upload_service` and `realtime_service` throw at runtime. Enabling
+  `strict-casts` surfaces 30 type errors, all in these files. The admin panel also
+  depends on a null provider and will throw on interaction. Completing the
+  migration to the REST API — or removing the dead paths — is the prerequisite for
+  turning `strict-casts` on.
+- **`job_service.process_identification_job` is ~1 400 lines** and runs the
+  identification pipeline twice per job (once before the write lock, once inside
+  it). Splitting it is a refactor with real regression risk and needs its own test
+  scaffold first; test coverage of that module is 11%.
+- **The dashboard needs `'unsafe-inline'` in its CSP** because of 17 inline
+  `onclick` handlers and 3 inline `<script>` blocks. Moving them to
+  `addEventListener` would allow a nonce-based policy.
+- **`inference.py`, `similarity_service.py` and `crop_service.py` are legacy**,
+  reachable only from the retired `/identify` path. They are still imported and
+  therefore kept, but should be deleted once nothing references them.
+- **`MatchingService.find_match` loads every embedding for a species into memory**
+  and filters by GPS in Python. Fine at current gallery size; needs an index
+  (FAISS, sqlite-vec, or a spatial pre-filter) before it grows.
+- **Overall backend coverage is 46%.** The security-critical and image-processing
+  paths are well covered; the large service modules are not.
+
+---
+
+## [2.1.0] and earlier
+
+See `git log` for the history preceding this audit. Notable prior work:
+
+- Fingerprint spot-region crop for re-identification, with calibration and
+  A/B evaluation tooling.
+- Multiframe temporal diversity selection with track filtering.
+- Verification status provenance (`anchor_new`, `human_confirmed`,
+  `legacy_untrusted`) for gallery entries.
+- Two-level geographic candidate search.
+- Versioned SQLite migration runner.

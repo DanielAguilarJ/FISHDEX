@@ -67,3 +67,10 @@ ai-server/models/classifier/fish_species_v1.onnx
 ai-server/models/classifier/labels.json
 ai-server/models/detector/fish_detector_v1.onnx
 
+
+# Python venv (auditoría)
+ai-server/.venv/
+
+# Flutter build output
+fishdex/build/
+fishdex/.dart_tool/
