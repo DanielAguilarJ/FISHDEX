@@ -1,3 +1,10 @@
+"""
+Role-based visibility of sightings.
+
+Covers the location-privacy rules: a fisherman may only see their own
+geolocated captures, while researchers and admins see everything.
+"""
+
 import sqlite3
 from pathlib import Path
 
@@ -5,17 +12,21 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app import database
 from app.routers import sightings
-from app.routers.auth import generate_token
+from app.security import create_session_token
 
 
 def _create_test_database(path: Path) -> None:
+    """Populate a throwaway SQLite file with users and sightings fixtures."""
     conn = sqlite3.connect(path)
     try:
         conn.executescript(
             """
             CREATE TABLE users (
                 id TEXT PRIMARY KEY,
+                email TEXT,
+                name TEXT,
                 role TEXT NOT NULL
             );
 
@@ -31,15 +42,37 @@ def _create_test_database(path: Path) -> None:
                 location_lng REAL,
                 catch_number INTEGER
             );
+
+            CREATE TABLE fish_individuals (
+                id TEXT PRIMARY KEY,
+                fish_id TEXT NOT NULL,
+                species_english TEXT,
+                last_seen_at TEXT,
+                first_seen_lat REAL,
+                first_seen_lng REAL,
+                last_seen_lat REAL,
+                last_seen_lng REAL,
+                first_seen_by TEXT,
+                last_seen_by TEXT
+            );
+
+            CREATE TABLE user_stats (
+                id TEXT PRIMARY KEY,
+                user_id TEXT UNIQUE NOT NULL,
+                total_xp INTEGER DEFAULT 0,
+                total_sightings INTEGER DEFAULT 0,
+                total_species INTEGER DEFAULT 0,
+                updated_at TEXT
+            );
             """
         )
         conn.executemany(
-            "INSERT INTO users (id, role) VALUES (?, ?)",
+            "INSERT INTO users (id, email, name, role) VALUES (?, ?, ?, ?)",
             [
-                ("fisher-1", "fisherman"),
-                ("fisher-2", "fisherman"),
-                ("researcher-1", "researcher"),
-                ("admin-1", "admin"),
+                ("fisher-1", "f1@example.com", "Fisher One", "fisherman"),
+                ("fisher-2", "f2@example.com", "Fisher Two", "fisherman"),
+                ("researcher-1", "r1@example.com", "Researcher", "researcher"),
+                ("admin-1", "a1@example.com", "Admin", "admin"),
             ],
         )
         conn.executemany(
@@ -88,6 +121,32 @@ def _create_test_database(path: Path) -> None:
                 ),
             ],
         )
+        conn.execute(
+            """
+            INSERT INTO fish_individuals (
+                id, fish_id, species_english, last_seen_at,
+                first_seen_lat, first_seen_lng, last_seen_lat, last_seen_lng,
+                first_seen_by, last_seen_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "individual-1",
+                "fish-a",
+                "Common carp",
+                "2026-02-01T10:00:00+00:00",
+                50.100001,
+                14.400001,
+                50.200002,
+                14.500002,
+                "fisher-1",
+                "fisher-2",
+            ),
+        )
+        conn.execute(
+            "INSERT INTO user_stats (id, user_id, total_xp, total_sightings, "
+            "total_species, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            ("stats-1", "fisher-1", 250, 3, 2, "2026-03-01T10:00:00+00:00"),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -95,6 +154,7 @@ def _create_test_database(path: Path) -> None:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """Build a TestClient wired to an isolated on-disk database."""
     database_path = tmp_path / "fishdex_test.sqlite"
     _create_test_database(database_path)
 
@@ -103,7 +163,9 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         conn.row_factory = sqlite3.Row
         return conn
 
-    monkeypatch.setattr(sightings, "get_db_connection", get_test_connection)
+    # sightings.py and auth.py both reach the database through
+    # app.database.db_session(), which resolves get_db_connection at call time.
+    monkeypatch.setattr(database, "get_db_connection", get_test_connection)
 
     app = FastAPI()
     app.include_router(sightings.router)
@@ -111,16 +173,14 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def _headers(user_id: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {generate_token(user_id)}"}
+    """Build an Authorization header holding a validly signed session token."""
+    return {"Authorization": f"Bearer {create_session_token(user_id)}"}
 
 
 def test_fisherman_map_contains_only_own_geolocated_captures(
     client: TestClient,
 ) -> None:
-    response = client.get(
-        "/api/v1/sightings/map",
-        headers=_headers("fisher-1"),
-    )
+    response = client.get("/api/v1/sightings/map", headers=_headers("fisher-1"))
 
     assert response.status_code == 200
     payload = response.json()
@@ -132,24 +192,17 @@ def test_fisherman_map_contains_only_own_geolocated_captures(
 def test_researcher_map_contains_all_geolocated_captures(
     client: TestClient,
 ) -> None:
-    response = client.get(
-        "/api/v1/sightings/map",
-        headers=_headers("researcher-1"),
-    )
+    response = client.get("/api/v1/sightings/map", headers=_headers("researcher-1"))
 
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [
-        "sighting-2",
-        "sighting-1",
-    ]
+    assert [item["id"] for item in response.json()] == ["sighting-2", "sighting-1"]
 
 
 def test_researcher_receives_chronological_history_for_same_fish(
     client: TestClient,
 ) -> None:
     response = client.get(
-        "/api/v1/sightings/fish/fish-a/history",
-        headers=_headers("researcher-1"),
+        "/api/v1/sightings/fish/fish-a/history", headers=_headers("researcher-1")
     )
 
     assert response.status_code == 200
@@ -160,19 +213,96 @@ def test_researcher_receives_chronological_history_for_same_fish(
 
 def test_fisherman_cannot_open_full_fish_history(client: TestClient) -> None:
     response = client.get(
-        "/api/v1/sightings/fish/fish-a/history",
-        headers=_headers("fisher-1"),
+        "/api/v1/sightings/fish/fish-a/history", headers=_headers("fisher-1")
     )
 
     assert response.status_code == 403
 
 
-def test_fisherman_cannot_list_another_users_captures(
-    client: TestClient,
-) -> None:
+def test_fisherman_cannot_list_another_users_captures(client: TestClient) -> None:
     response = client.get(
-        "/api/v1/sightings/user/fisher-2",
-        headers=_headers("fisher-1"),
+        "/api/v1/sightings/user/fisher-2", headers=_headers("fisher-1")
     )
 
     assert response.status_code == 403
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regressions for the authorisation holes found during the audit
+# ─────────────────────────────────────────────────────────────────────────────
+def test_unauthenticated_request_is_rejected(client: TestClient) -> None:
+    """Every per-user endpoint must require a token, not just the app secret."""
+    for path in (
+        "/api/v1/sightings/map",
+        "/api/v1/sightings/individuals",
+        "/api/v1/sightings/stats/fisher-1",
+        "/api/v1/sightings/user/fisher-1",
+    ):
+        assert client.get(path).status_code == 401, path
+
+
+def test_forged_legacy_token_is_rejected(client: TestClient) -> None:
+    """
+    The previous token was base64(user_id) with no signature.
+
+    Such a value must no longer authenticate anybody.
+    """
+    import base64
+
+    forged = base64.b64encode(b"admin-1").decode()
+    response = client.get(
+        "/api/v1/sightings/map", headers={"Authorization": f"Bearer {forged}"}
+    )
+    assert response.status_code == 401
+
+
+def test_fisherman_cannot_read_another_users_stats(client: TestClient) -> None:
+    """Stats used to be readable with only the shared client secret."""
+    response = client.get(
+        "/api/v1/sightings/stats/fisher-2", headers=_headers("fisher-1")
+    )
+    assert response.status_code == 403
+
+
+def test_fisherman_stats_are_readable_by_owner(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/sightings/stats/fisher-1", headers=_headers("fisher-1")
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_xp"] == 250
+    # 250 XP → level 3 (100 XP per level, 1-based)
+    assert payload["level"] == 3
+
+
+def test_individuals_hide_gps_from_fisherman(client: TestClient) -> None:
+    """
+    Fish individuals used to leak first/last GPS to any caller.
+
+    Non-elevated roles must receive the record without location columns.
+    """
+    response = client.get("/api/v1/sightings/individuals", headers=_headers("fisher-1"))
+
+    assert response.status_code == 200
+    record = response.json()[0]
+    for key in (
+        "first_seen_lat",
+        "first_seen_lng",
+        "last_seen_lat",
+        "last_seen_lng",
+        "first_seen_by",
+        "last_seen_by",
+    ):
+        assert key not in record, f"{key} must be redacted for fishermen"
+    assert record["fish_id"] == "fish-a"
+
+
+def test_individuals_expose_gps_to_researcher(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/sightings/individuals", headers=_headers("researcher-1")
+    )
+
+    assert response.status_code == 200
+    record = response.json()[0]
+    assert record["last_seen_lat"] == pytest.approx(50.200002)
+    assert record["first_seen_by"] == "fisher-1"
