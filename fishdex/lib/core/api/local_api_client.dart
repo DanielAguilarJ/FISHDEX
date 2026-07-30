@@ -2,41 +2,53 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 
+import '../storage/secure_token_store.dart';
+
+/// HTTP client for the FishDex AI server.
+///
+/// Sends both credentials the server understands:
+/// * `X-FishDex-Client-Secret` — identifies the application build.
+/// * `Authorization: Bearer <token>` — identifies the signed-in user.
+///
+/// The client secret alone is not sufficient for per-user endpoints; the server
+/// requires the session token for anything that reads or writes user data.
 class LocalApiClient {
   final String baseUrl;
   final String clientSecret;
+  final SecureTokenStore _tokenStore;
+
   String? _token;
 
   LocalApiClient({
     required this.baseUrl,
     required this.clientSecret,
-  });
+    SecureTokenStore? tokenStore,
+  }) : _tokenStore = tokenStore ?? SecureTokenStore();
 
-  /// Initialize the client by loading the saved auth token from SharedPreferences.
+  /// Loads the persisted session token from encrypted storage.
+  ///
+  /// Migrates a token left in `SharedPreferences` by an earlier build.
   Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString('local_auth_token');
-    debugPrint('🔑 LocalApiClient initialized with token: ${_token != null ? "exists" : "none"}');
+    _token = await _tokenStore.read();
+    debugPrint('LocalApiClient initialised (session ${_token != null ? "restored" : "absent"})');
   }
 
   bool get isAuthenticated => _token != null;
   String? get token => _token;
 
-  /// Save token to memory and SharedPreferences.
+  /// Persists [token] to encrypted storage, or clears it when `null`.
   Future<void> setToken(String? token) async {
     _token = token;
-    final prefs = await SharedPreferences.getInstance();
-    if (token != null) {
-      await prefs.setString('local_auth_token', token);
+    if (token == null) {
+      await _tokenStore.clear();
     } else {
-      await prefs.remove('local_auth_token');
+      await _tokenStore.write(token);
     }
   }
 
-  /// Get headers for request.
+  /// Builds request headers, including both credentials when available.
   Map<String, String> _getHeaders({bool isJson = true}) {
     final headers = <String, String>{
       'X-FishDex-Client-Secret': clientSecret,

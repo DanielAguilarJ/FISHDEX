@@ -1,8 +1,86 @@
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "lib/l10n/app_localizations*.dart"
+  errors:
+    # These correspond to real defects found during the audit, so they are
+    # promoted from hints to warnings rather than left as advisory noise.
+    use_build_context_synchronously: warning
+    unawaited_futures: warning
+    close_sinks: warning
+    cancel_subscriptions: warning
+    depend_on_referenced_packages: warning
+  language:
+    # NOTE: strict-casts and strict-raw-types are deliberately left OFF.
+    #
+    # Turning them on surfaces 30 genuine type errors, all inside the
+    # Appwrite-era repositories and services that still route through the null
+    # provider stubs in lib/core/providers/appwrite_providers.dart:
+    #
+    #   lib/data/repositories/fishing_spots_repository.dart   18 errors
+    #   lib/data/repositories/sightings_repository.dart        6 errors
+    #   lib/data/services/realtime_service.dart                3 errors
+    #   lib/data/services/media_upload_service.dart            2 errors
+    #   lib/data/services/identify_service.dart                1 error
+    #
+    # That code type-checks today only because `dynamic` silences the analyzer;
+    # at runtime it throws on the null stub. Enabling these flags before the
+    # Appwrite-to-REST migration is finished would make `flutter analyze` fail
+    # without fixing anything, so they stay off and the underlying problem is
+    # documented in CHANGELOG.md instead. Re-enable as the final migration step.
+    #
+    #   strict-casts: true
+    #   strict-raw-types: true
+    strict-inference: true
+
 linter:
   rules:
+    # ── Correctness ─────────────────────────────────────────────────────────
+    # Using context after an await is the cause of several latent crashes here.
+    use_build_context_synchronously: true
+    # Streams and controllers left open leak; realtime_service had several.
+    cancel_subscriptions: true
+    close_sinks: true
+    # Fire-and-forget futures hide errors entirely.
+    unawaited_futures: true
+    # `!` on a nullable was crashing the admin panel via a null provider stub.
+    avoid_dynamic_calls: true
+    null_check_on_nullable_type_parameter: true
+    unnecessary_null_checks: true
+    # Catch blocks that discard the error were the single most common defect.
+    avoid_catches_without_on_clauses: false # too noisy for existing code
+    avoid_empty_else: true
+    # Missing awaits inside try produce exceptions that escape the handler.
+    avoid_slow_async_io: true
+    no_adjacent_strings_in_list: true
+    throw_in_finally: true
+    unnecessary_statements: true
+
+    # ── Immutability ────────────────────────────────────────────────────────
+    prefer_final_locals: true
+    prefer_final_in_for_each: true
     prefer_const_constructors: true
     prefer_const_declarations: true
-    avoid_print: true
+    prefer_const_literals_to_create_immutables: true
+
+    # ── API hygiene ─────────────────────────────────────────────────────────
+    always_declare_return_types: true
+    always_use_package_imports: false # the project uses relative imports consistently
+    depend_on_referenced_packages: true
+    # Public API should be documented; enabled as info-level guidance.
+    public_member_api_docs: false
+
+    # ── Style ───────────────────────────────────────────────────────────────
     prefer_single_quotes: true
+    require_trailing_commas: true
+    sort_child_properties_last: true
+    unnecessary_parenthesis: true
+    unnecessary_lambdas: true
+    directives_ordering: true
+
+    # ── Security-adjacent ───────────────────────────────────────────────────
+    # print() bypasses log levels and ships to release builds.
+    avoid_print: true

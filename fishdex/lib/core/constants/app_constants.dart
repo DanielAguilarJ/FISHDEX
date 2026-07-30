@@ -76,7 +76,11 @@ class AppConstants {
   // ===========================================================================
   
   /// URL del servidor AI, configurable vía --dart-define=AI_SERVER_URL=...
-  static const String aiServerUrl = EnvConfig.aiServerUrl;
+  ///
+  /// Uses [EnvConfig.resolvedAiServerUrl] so that debug builds fall back to
+  /// loopback while release builds require the flag to be supplied. This is no
+  /// longer `const` because the fallback depends on the build mode.
+  static String get aiServerUrl => EnvConfig.resolvedAiServerUrl;
 
   /// Secreto de cliente para el servidor AI, configurable vía --dart-define=AI_SERVER_SECRET=...
   static const String aiServerSecret = EnvConfig.aiServerSecret;
