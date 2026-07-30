@@ -19,6 +19,7 @@ Pipeline steps:
 """
 
 import logging
+import sqlite3
 import threading
 from dataclasses import dataclass, field
 from typing import Optional
@@ -336,8 +337,14 @@ class IdentificationPipeline:
                     """,
                     (metadata.species_slug, self._model_version),
                 ).fetchall()
-            except Exception:
-                # Fallback: verification_status column doesn't exist yet (pre-migration)
+            except sqlite3.OperationalError as exc:
+                # Only a missing column should reach the fallback; a connection or
+                # disk error must not be mistaken for a pre-migration schema.
+                logger.warning(
+                    "verification_status query failed (%s); using pre-migration "
+                    "fallback query",
+                    exc,
+                )
                 rows = conn.execute(
                     """
                     SELECT id, fish_id, sighting_id, embedding, area_code,

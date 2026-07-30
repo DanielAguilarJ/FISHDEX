@@ -57,8 +57,10 @@ def iter_frames_from_video(
     try:
         try:
             cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 0)
-        except Exception:
-            pass
+        except (AttributeError, cv2.error) as exc:
+            # The constant is missing on older OpenCV builds; rotation is then
+            # handled by _probe_video_rotation instead.
+            logger.debug("CAP_PROP_ORIENTATION_AUTO unsupported: %s", exc)
 
         fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
         frame_idx = 0
@@ -210,8 +212,8 @@ def extract_frames_from_video(
     # La constante puede no existir en versiones antiguas → ignorar excepción.
     try:
         cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 0)
-    except Exception:
-        pass
+    except (AttributeError, cv2.error) as exc:
+        logger.debug("CAP_PROP_ORIENTATION_AUTO unsupported: %s", exc)
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -345,8 +347,10 @@ def cleanup_temp_file(file_path: str):
     try:
         if os.path.exists(file_path):
             os.unlink(file_path)
-    except Exception:
-        pass  # No fallar si no se puede eliminar
+    except OSError as exc:
+        # Never fail the request because a temp file lingered, but do record it:
+        # repeated failures mean the temp directory is filling up.
+        logger.warning("Could not remove temp file %s: %s", file_path, exc)
 
 
 def get_video_info(video_path: str) -> dict:

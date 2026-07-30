@@ -619,7 +619,10 @@ def update_fish_index_file(index_path: Path, entry: dict) -> None:
     if index_path.exists():
         try:
             existing = json.loads(index_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(
+                "Fish index %s is unreadable, rebuilding it: %s", index_path, exc
+            )
             existing = {}
     else:
         existing = {}

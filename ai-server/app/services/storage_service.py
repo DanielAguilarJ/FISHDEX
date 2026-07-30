@@ -78,8 +78,8 @@ def save_catch(
             for d in existing_catches:
                 try:
                     nums.append(int(d.name.split("_")[1]))
-                except (IndexError, ValueError):
-                    pass
+                except (IndexError, ValueError) as exc:
+                    logger.debug("Skipping unparsable catch dir %s: %s", d.name, exc)
             if nums:
                 catch_num = max(nums) + 1
 
@@ -184,7 +184,8 @@ def get_fish_history(area_code: str, species_slug: str, fish_id: str) -> list[di
                     else:
                         data["images_count"] = 0
                 history.append(data)
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning("Skipping unreadable catch record %s: %s", data_path, exc)
                 continue
 
     return history
@@ -307,8 +308,10 @@ def generate_fish_id(area_code: str, species_slug: str) -> str:
                 if match:
                     try:
                         existing_nums.append(int(match.group(1)))
-                    except ValueError:
-                        pass
+                    except ValueError as exc:
+                        logger.debug(
+                            "Skipping unparsable fish dir %s: %s", fish_dir.name, exc
+                        )
         if existing_nums:
             next_num = max(existing_nums) + 1
 
@@ -443,8 +446,10 @@ def get_area_stats(area_code: str) -> dict:
                         dt = data.get("saved_at") or data.get("datetime")
                         if dt and (latest_datetime is None or dt > latest_datetime):
                             latest_datetime = dt
-                    except (json.JSONDecodeError, OSError):
-                        pass
+                    except (json.JSONDecodeError, OSError) as exc:
+                        logger.warning(
+                            "Skipping unreadable catch record %s: %s", data_path, exc
+                        )
 
         stats["species_breakdown"][species_slug] = fish_count
         stats["total_fish"] += fish_count
@@ -527,7 +532,8 @@ def get_disk_usage_mb() -> float:
         for f in files:
             try:
                 total_bytes += os.path.getsize(os.path.join(root, f))
-            except OSError:
-                pass
+            except OSError as exc:
+                # A file removed mid-walk is normal; log at debug to avoid noise.
+                logger.debug("Skipping %s while sizing storage: %s", f, exc)
 
     return round(total_bytes / (1024 * 1024), 2)

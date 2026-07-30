@@ -5,11 +5,14 @@ Integrates the ONNX fin_detector_best.onnx model for fish body detection and cro
 Falls back to center-crop if ONNX runtime is unavailable or detection fails.
 """
 
+import logging
 import threading
 import numpy as np
 import cv2
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class FishCropService:
@@ -22,7 +25,12 @@ class FishCropService:
             import onnxruntime as ort
             self.session = ort.InferenceSession(str(model_path))
             self.available = True
-        except Exception:
+        except Exception as exc:
+            # ImportError (onnxruntime absent) is expected; anything else means a
+            # corrupt model or an OOM and must be visible in the logs.
+            logger.warning(
+                "Legacy ONNX crop model unavailable (%s): %s", type(exc).__name__, exc
+            )
             self.available = False
 
     def crop_fish(self, frame: np.ndarray) -> np.ndarray:
@@ -88,7 +96,12 @@ class FishCropService:
             if x2 > x1 and y2 > y1:
                 return frame[y1:y2, x1:x2]
             return self._center_crop(frame)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "ONNX crop failed (%s: %s); falling back to centre crop",
+                type(exc).__name__,
+                exc,
+            )
             return self._center_crop(frame)
 
     def _center_crop(self, frame: np.ndarray) -> np.ndarray:

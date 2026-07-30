@@ -1,4 +1,5 @@
 import logging
+import sqlite3
 import uuid
 import os
 import io
@@ -332,8 +333,13 @@ def _generate_fish_id(cursor, area_code: str, species_slug: str) -> str:
         try:
             last_num = int(last_id.split("-")[-1])
             next_num = last_num + 1
-        except Exception:
-            pass
+        except (IndexError, ValueError) as exc:
+            logger.warning(
+                "Could not parse sequence from fish_id %r, restarting at %d: %s",
+                last_id,
+                next_num,
+                exc,
+            )
 
     return f"CZ-{area_code_clean}-{abbrev}-{next_num:04d}"
 
@@ -675,7 +681,10 @@ def process_identification_job(
                     fps_val = cap_info.get(cv2.CAP_PROP_FPS) or 0.0
                     cap_info.release()
                     video_duration_seconds = (decoded_frame_count / fps_val) if fps_val > 0 else 0.0
-                except Exception:
+                except Exception as exc:
+                    logger.warning(
+                        "[Job %s] Could not read video FPS: %s", job_id, exc
+                    )
                     video_duration_seconds = 0.0
 
             # Retries if no valid candidates were found in primary pass
@@ -1663,8 +1672,12 @@ def process_identification_job(
         except Exception as tx_err:
             try:
                 conn.rollback()
-            except Exception:
-                pass
+            except sqlite3.Error as rollback_err:
+                logger.error(
+                    "[Job %s] Rollback failed after transaction error: %s",
+                    job_id,
+                    rollback_err,
+                )
             # Cleanup filesystem directories to prevent orphans
             if created_artifact_dir:
                 shutil.rmtree(created_artifact_dir, ignore_errors=True)

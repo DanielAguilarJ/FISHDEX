@@ -109,8 +109,8 @@ class InferenceService:
             try:
                 from app.data.czech_species import find_species_by_name
                 species_info = find_species_by_name(species)
-            except Exception:
-                pass
+            except (ImportError, KeyError, ValueError) as exc:
+                logger.warning("Species lookup failed for %r: %s", species, exc)
 
         if species_info:
             species_name = species_info["english_name"]
@@ -133,8 +133,8 @@ class InferenceService:
             try:
                 from app.data.czech_areas import find_area_by_code
                 area_info = find_area_by_code(area_code)
-            except Exception:
-                pass
+            except (ImportError, KeyError, ValueError) as exc:
+                logger.warning("Area lookup failed for %r: %s", area_code, exc)
 
         # ─── Step 3: Build comparison subset ─────────────────────────
         t3 = time.perf_counter()
@@ -288,7 +288,10 @@ class InferenceService:
             try:
                 from app.services.storage_service import get_restricted_history
                 full_history = get_restricted_history(history)
-            except Exception:
+            except Exception as exc:
+                # Fail closed: withhold the history rather than risk leaking
+                # unredacted GPS to a fisherman.
+                logger.error("Could not redact history, withholding it: %s", exc)
                 full_history = None
 
         # Message

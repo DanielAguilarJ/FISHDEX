@@ -130,16 +130,30 @@ class OBBRoiService:
             return RoiResult(qualified=False, roi=None, confidence=0.0, reason=f"inference error: {exc}")
 
         # ── Validate detections ──────────────────────────────────────
-        if (
-            not hasattr(results, "obb")
-            or results.obb is None
-            or len(results.obb.xyxyxyxy) == 0
-        ):
-            return RoiResult(qualified=False, roi=None, confidence=0.0, reason="no detection")
+        # Guard every attribute access: a malformed or unexpected result object
+        # must degrade to "no detection" rather than raise AttributeError and
+        # abort the whole identification job.
+        obb = getattr(results, "obb", None)
+        polygons_tensor = getattr(obb, "xyxyxyxy", None) if obb is not None else None
+        confidences_tensor = getattr(obb, "conf", None) if obb is not None else None
 
-        polys = results.obb.xyxyxyxy.cpu().numpy()
-        confs = results.obb.conf.cpu().numpy()
+        if polygons_tensor is None or confidences_tensor is None:
+            return RoiResult(
+                qualified=False, roi=None, confidence=0.0, reason="no detection"
+            )
+        if len(polygons_tensor) == 0:
+            return RoiResult(
+                qualified=False, roi=None, confidence=0.0, reason="no detection"
+            )
+
+        polys = polygons_tensor.cpu().numpy()
+        confs = confidences_tensor.cpu().numpy()
         n_detections = len(polys)
+
+        if n_detections == 0 or len(confs) == 0:
+            return RoiResult(
+                qualified=False, roi=None, confidence=0.0, reason="no detection"
+            )
 
         if n_detections > 1 and settings.roi_require_single_detection:
             return RoiResult(
