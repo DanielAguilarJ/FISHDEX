@@ -1,63 +1,119 @@
 # =============================================================================
-# FishDex - Caddy HTTPS Reverse Proxy
+# FishDex - Caddy HTTPS reverse proxy
 # =============================================================================
-# Reverse-proxies to the FastAPI AI server with automatic TLS,
-# security headers, and a 50 MB request body limit.
+# Terminates TLS, applies security headers, limits the request body and proxies
+# to the FastAPI AI server.
+#
+# Required environment (supplied by docker-compose):
+#   AI_DOMAIN  — the FQDN to serve, or `localhost` for local development
+#   TLS_EMAIL  — ACME account email for Let's Encrypt
 # =============================================================================
-
 {
-	# Global options
+	# ACME account for automatic certificates.
 	email {$TLS_EMAIL:admin@fishdex.app}
 
-	# JSON structured logging
+	# Structured logs to stdout so the container runtime collects them.
 	log {
 		output stdout
 		format json
 	}
+
+	# Do not advertise the Caddy version in responses.
+	servers {
+		protocols h1 h2
+	}
 }
 
-{$AI_DOMAIN::443} {
+# ─────────────────────────────────────────────────────────────────────────────
+# Main site
+# ─────────────────────────────────────────────────────────────────────────────
+# `localhost` makes Caddy use its internal CA (self-signed) automatically; a real
+# FQDN triggers Let's Encrypt. The previous `{$AI_DOMAIN::443}` form embedded the
+# port in the default value, which broke as soon as AI_DOMAIN was set.
+{$AI_DOMAIN:localhost} {
 	# -------------------------------------------------------------------------
-	# TLS – use internal (self-signed) CA for local/dev,
-	# automatic Let's Encrypt when AI_DOMAIN is a real FQDN.
+	# TLS
 	# -------------------------------------------------------------------------
-	tls {$TLS_EMAIL:admin@fishdex.app} {
-		on_demand
+	# NOTE: on-demand TLS was removed. Without a matching global
+	# `on_demand_tls { ask ... }` endpoint, Caddy will issue a certificate for
+	# *any* hostname pointed at this server, which is both an abuse vector and a
+	# fast route to a Let's Encrypt rate-limit ban.
+	tls {
+		protocols tls1.2 tls1.3
 	}
 
 	# -------------------------------------------------------------------------
 	# Security headers
 	# -------------------------------------------------------------------------
 	header {
-		Strict-Transport-Security  "max-age=63072000; includeSubDomains; preload"
-		X-Content-Type-Options     "nosniff"
-		X-Frame-Options            "DENY"
-		X-XSS-Protection           "1; mode=block"
-		Referrer-Policy            "strict-origin-when-cross-origin"
-		Content-Security-Policy    "default-src 'self'"
+		# Two years, preload-eligible.
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Modern replacement for X-Frame-Options; both are sent because some
+		# corporate proxies still only understand the legacy header.
+		X-Frame-Options "DENY"
+
+		# Deny device capabilities the dashboard never uses.
+		Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+
+		# Isolate the browsing context.
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+
+		# Content-Security-Policy tailored to the operator dashboard, which loads
+		# Leaflet from unpkg, Google Fonts, and CARTO basemap tiles.
+		#
+		# 'unsafe-inline' in script-src is required only because the dashboard
+		# still uses 17 inline onclick handlers and 3 inline <script> blocks.
+		# Moving those to addEventListener would let this drop to a nonce; see
+		# the follow-up note in CHANGELOG.md.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://unpkg.com; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+
+		# Remove headers that identify the stack.
 		-Server
+		-X-Powered-By
+
+		# X-XSS-Protection is deliberately NOT set: it is deprecated, ignored by
+		# every current browser, and its legacy filter introduced vulnerabilities
+		# of its own. CSP is the replacement.
 	}
 
 	# -------------------------------------------------------------------------
-	# Request body limit – 50 MB (for video uploads)
+	# Request body limit
 	# -------------------------------------------------------------------------
+	# Slightly above the app's 50 MB cap so the application returns a clean 413
+	# with a JSON body instead of Caddy severing the connection at the boundary.
 	request_body {
-		max_size 50MB
+		max_size 55MB
 	}
 
 	# -------------------------------------------------------------------------
-	# Reverse proxy to AI server
+	# Reverse proxy to the AI server
 	# -------------------------------------------------------------------------
 	reverse_proxy ai-server:8000 {
-		# Health-check the upstream
-		health_uri    /health
+		# Liveness only. /health/ready runs database and model checks, which are
+		# far too heavy to execute on a 30-second proxy probe.
+		health_uri /health/live
 		health_interval 30s
-		health_timeout  10s
+		health_timeout 5s
 
-		# Pass original client info
-		header_up X-Real-IP         {remote_host}
-		header_up X-Forwarded-For   {remote_host}
-		header_up X-Forwarded-Proto {scheme}
+		# Model inference on a cold CPU can exceed the 30s default.
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+			dial_timeout 10s
+		}
+
+		# Preserve the original client context for logging and rate limiting.
+		# X-Forwarded-For and X-Forwarded-Proto are set by Caddy automatically.
+		header_up X-Real-IP {remote_host}
+		header_up Host {host}
+
+		# Never let a client spoof its own identity headers.
+		header_up -X-Forwarded-Host
 	}
 
 	# -------------------------------------------------------------------------

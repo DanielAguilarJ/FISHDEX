@@ -1,28 +1,45 @@
 # =============================================================================
 # FishDex - Docker Compose
-# AI Server with HTTPS reverse proxy (Caddy)
+# AI Server behind Caddy (automatic HTTPS)
+# =============================================================================
+# Required variables (see .env.example):
+#   FISHDEX_AI_SERVER_SECRET, FISHDEX_CLIENT_SECRET, FISHDEX_DASHBOARD_SECRET
+#   AI_DOMAIN, TLS_EMAIL
+# Start with:  docker compose --env-file .env up -d --build
 # =============================================================================
 
-x-logging: &x-logging
+x-logging: &default-logging
   logging:
     driver: json-file
     options:
       max-file: "5"
       max-size: "10m"
 
+# Applied to every service: no new privileges, and a writable /tmp that is not
+# part of the (otherwise read-only) image layers.
+x-hardening: &default-hardening
+  security_opt:
+    - no-new-privileges:true
+
 services:
   # ===========================================================================
-  # CADDY - HTTPS Reverse Proxy
+  # CADDY - HTTPS reverse proxy and TLS terminator
   # ===========================================================================
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.8-alpine
     container_name: fishdex-caddy
+    # `unless-stopped` keeps the proxy up across daemon restarts but still
+    # respects an explicit `docker compose stop`.
     restart: unless-stopped
     ports:
       - "${AI_SERVER_HTTPS_PORT:-8443}:443"
       - "${AI_SERVER_HTTP_PORT:-8080}:80"
+    environment:
+      # Consumed by the Caddyfile via {$VAR} placeholders.
+      AI_DOMAIN: ${AI_DOMAIN:-localhost}
+      TLS_EMAIL: ${TLS_EMAIL:-admin@fishdex.app}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     networks:
@@ -30,49 +47,118 @@ services:
     depends_on:
       ai-server:
         condition: service_healthy
-    <<: *x-logging
+    healthcheck:
+      # `caddy validate` proves the running config is loadable without needing
+      # curl or wget in the image.
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          memory: 64M
+    <<: [*default-logging, *default-hardening]
 
   # ===========================================================================
-  # SERVIDOR DE IA - FastAPI
+  # AI SERVER - FastAPI + PyTorch inference
   # ===========================================================================
   ai-server:
     build:
       context: ./ai-server
       dockerfile: Dockerfile
+      target: runtime
+    image: fishdex/ai-server:${FISHDEX_IMAGE_TAG:-2.2.0}
     container_name: fishdex-ai-server
     restart: unless-stopped
-    ports:
-      - "${AI_SERVER_PORT:-8000}:8000"
+    # NOTE: no host port mapping. The API is reachable only through Caddy, so
+    # plaintext HTTP on :8000 is never exposed. Bind it explicitly to localhost
+    # (127.0.0.1:8000:8000) if you need direct access while debugging.
+    expose:
+      - "8000"
     environment:
-      - MODEL_PATH=/app/model/fish_model.pt
-      - MAX_VIDEO_SIZE_MB=${MAX_VIDEO_SIZE_MB:-50}
-      - FISHDEX_ENVIRONMENT=${FISHDEX_ENVIRONMENT:-production}
-      - FISHDEX_SKIP_AUTH=false
-      - FISHDEX_AI_SERVER_SECRET=${FISHDEX_AI_SERVER_SECRET}
-      - FISHDEX_CLIENT_SECRET=${FISHDEX_CLIENT_SECRET}
-      - FISHDEX_DASHBOARD_SECRET=${FISHDEX_DASHBOARD_SECRET}
-      - FISHDEX_SERVER_DATA_DIR=/app/data
-      - FISHDEX_PRIVATE_DATA_DIR=/app/data/private
-      - FISHDEX_FISH_DOCUMENTS_DIR=/app/data/private/fish_documents
-      - FISHDEX_FISH_MEDIA_DIR=/app/data/storage/fish_media
-      - FISHDEX_JOB_ARTIFACTS_DIR=/app/data/storage/jobs
-      - FISHDEX_EMBEDDINGS_DB_PATH=/app/data/embeddings/fishdex_embeddings.sqlite
-      - FISHDEX_REID_SIMILARITY_THRESHOLD=${FISHDEX_REID_SIMILARITY_THRESHOLD:-0.82}
-      - FISHDEX_NEARBY_AREA_RADIUS_KM=5.0
+      # ── Environment / security ──────────────────────────────────────────
+      FISHDEX_ENVIRONMENT: ${FISHDEX_ENVIRONMENT:-production}
+      FISHDEX_SKIP_AUTH: "false"
+      # Required: startup aborts if any of these is left at its placeholder.
+      FISHDEX_AI_SERVER_SECRET: ${FISHDEX_AI_SERVER_SECRET:?set FISHDEX_AI_SERVER_SECRET}
+      FISHDEX_CLIENT_SECRET: ${FISHDEX_CLIENT_SECRET:?set FISHDEX_CLIENT_SECRET}
+      FISHDEX_DASHBOARD_SECRET: ${FISHDEX_DASHBOARD_SECRET:?set FISHDEX_DASHBOARD_SECRET}
+      # Browser origins allowed to call the API. A wildcard is refused in
+      # production; native mobile clients do not need an entry here.
+      FISHDEX_CORS_ALLOWED_ORIGINS: ${FISHDEX_CORS_ALLOWED_ORIGINS:-https://${AI_DOMAIN:-localhost}}
+
+      # ── Models ──────────────────────────────────────────────────────────
+      FISHDEX_OBB_MODEL_PATH: /app/models/detector/obb_best.pt
+      FISHDEX_REID_MODEL_PATH: /app/models/reid/reid_best.pt
+      FISHDEX_DEVICE: ${FISHDEX_DEVICE:-cpu}
+
+      # ── Storage ─────────────────────────────────────────────────────────
+      FISHDEX_SERVER_DATA_DIR: /app/data
+      FISHDEX_TEMP_DIR: /app/data/temp
+      FISHDEX_CACHE_DIR: /app/data/cache
+      FISHDEX_PRIVATE_DATA_DIR: /app/data/private
+      FISHDEX_FISH_DOCUMENTS_DIR: /app/data/private/fish_documents
+      FISHDEX_FISH_MEDIA_DIR: /app/data/storage/fish_media
+      FISHDEX_JOB_ARTIFACTS_DIR: /app/data/storage/jobs
+      FISHDEX_EMBEDDINGS_DB_PATH: /app/data/embeddings/fishdex_embeddings.sqlite
+
+      # ── Matching thresholds ─────────────────────────────────────────────
+      FISHDEX_REID_SIMILARITY_THRESHOLD: ${FISHDEX_REID_SIMILARITY_THRESHOLD:-0.82}
+      FISHDEX_REID_MIN_MARGIN: ${FISHDEX_REID_MIN_MARGIN:-0.05}
+      FISHDEX_NEARBY_AREA_RADIUS_KM: ${FISHDEX_NEARBY_AREA_RADIUS_KM:-5.0}
+      FISHDEX_MAX_VIDEO_SIZE_MB: ${FISHDEX_MAX_VIDEO_SIZE_MB:-50}
     volumes:
-      - ./ai-server/app:/app/app
-      - ./ai-server/model:/app/model
-      - ./ai-server/models:/app/models
-      - ./ai-server/data:/app/data
+      # Model weights are read-only at runtime.
+      - ./ai-server/model:/app/model:ro
+      - ./ai-server/models:/app/models:ro
+      # Only the data directory needs to be writable.
+      - ai-server-data:/app/data
+    tmpfs:
+      # Frame extraction writes short-lived files; keep them off the disk layer.
+      - /tmp:size=512m,mode=1777
     networks:
       - fishdex-network
-    <<: *x-logging
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      # /health/ready verifies the DB, both models, the embedding index and the
+      # area catalog — Caddy will not route traffic here until it passes.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          try:
+              with urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=8) as r:
+                  sys.exit(0 if r.status == 200 else 1)
+          except Exception:
+              sys.exit(1)
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      # Model loading (ConvNeXt + YOLO) takes well over 30s on a cold CPU start.
+      start_period: 180s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          # Inference is CPU-bound; without a ceiling one job can starve Caddy.
+          cpus: "${FISHDEX_CPU_LIMIT:-2.0}"
+          # ConvNeXt-small + YOLOv8 OBB + OpenCV buffers. Raise before enabling
+          # a second worker.
+          memory: ${FISHDEX_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "0.50"
+          memory: 1G
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 16384
+    <<: [*default-logging, *default-hardening]
 
 # =============================================================================
 # VOLUMES AND NETWORKS
@@ -80,6 +166,9 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+  # Named volume rather than a bind mount: the container runs as uid 10001 and
+  # a host bind mount would need matching ownership.
+  ai-server-data:
 
 networks:
   fishdex-network:
