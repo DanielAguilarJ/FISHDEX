@@ -74,3 +74,6 @@ ai-server/.venv/
 # Flutter build output
 fishdex/build/
 fishdex/.dart_tool/
+
+# Coverage
+ai-server/.coverage
