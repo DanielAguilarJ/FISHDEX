@@ -75,7 +75,22 @@ XP_BASE_MAP = {
 }
 NEW_FISH_BONUS_XP = 50
 
-def _emit_progress(job_id: str, status: str, progress: int, message: str):
+def _emit_progress(job_id: str, status: str, progress: int, message: str) -> None:
+    """
+    Publish a job progress update to the dashboard event stream.
+
+    Identification runs in a background worker thread, which has no running event
+    loop. The previous implementation called ``asyncio.get_running_loop()`` and
+    swallowed the resulting ``RuntimeError``, so *every* progress update from the
+    main processing path was silently discarded. It now falls back to the loop
+    bound at application startup.
+
+    Args:
+        job_id: Job being processed.
+        status: Coarse job state, e.g. ``"processing"``.
+        progress: Completion percentage, 0-100.
+        message: Human-readable step description.
+    """
     payload = {
         "job_id": job_id,
         "status": status,
@@ -85,11 +100,15 @@ def _emit_progress(job_id: str, status: str, progress: int, message: str):
     }
     try:
         loop = asyncio.get_running_loop()
-        loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(event_bus.emit("job_progress", payload))
-        )
     except RuntimeError:
-        pass
+        # Worker thread: hand off to the loop captured during startup.
+        if not event_bus.emit_threadsafe("job_progress", payload):
+            logger.debug("No event loop bound; dropping progress for job %s", job_id)
+        return
+
+    loop.call_soon_threadsafe(
+        lambda: asyncio.ensure_future(event_bus.emit("job_progress", payload))
+    )
 
 def _get_detection_confidence(detection) -> float:
     if detection is None:

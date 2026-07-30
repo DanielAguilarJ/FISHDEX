@@ -131,8 +131,12 @@ async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, ret
 
     raw_path = str(Path(settings.server_data_dir) / "storage" / raw_filename)
     if not Path(raw_path).exists():
-        logger.error(f"[Retry {job_id}] Raw file not found: {raw_path}")
-        _mark_manual_review(job_id)
+        # Previously called an undefined `_mark_manual_review`, which raised
+        # NameError and left the job stuck in `pending_crop` forever.
+        logger.error(
+            "[Retry %s] Raw file not found: %s — marking job as failed", job_id, raw_path
+        )
+        _mark_missing_media(job_id)
         return
 
     try:
@@ -271,8 +275,13 @@ def _increment_retry(job_id: str, current_count: int):
         conn.close()
 
 
-def _mark_failed_retries(job_id: str):
-    """Mark job as failed after all retries exhausted."""
+def _mark_failed_retries(job_id: str) -> None:
+    """
+    Mark a job as failed after all automatic retries are exhausted.
+
+    Args:
+        job_id: Job to update.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -284,8 +293,34 @@ def _mark_failed_retries(job_id: str):
             (job_id,),
         )
         conn.commit()
-    except Exception as e:
-        logger.error(f"[Retry {job_id}] Failed to mark as failed: {e}")
+    except sqlite3.Error as exc:
+        logger.error("[Retry %s] Failed to mark as failed: %s", job_id, exc)
+    finally:
+        conn.close()
+
+
+def _mark_missing_media(job_id: str) -> None:
+    """
+    Mark a job as failed because its raw media file is gone from disk.
+
+    Retrying is pointless without the source file, so the job is terminated
+    rather than left in ``pending_crop``.
+
+    Args:
+        job_id: Job to update.
+    """
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            """UPDATE identification_jobs
+               SET status = 'failed', retry_count = 3,
+                   error_message = 'Raw media file is missing on the server; cannot retry detection.'
+               WHERE id = ?""",
+            (job_id,),
+        )
+        conn.commit()
+    except sqlite3.Error as exc:
+        logger.error("[Retry %s] Failed to mark missing media: %s", job_id, exc)
     finally:
         conn.close()
 

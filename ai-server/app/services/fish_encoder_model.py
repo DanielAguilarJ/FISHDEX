@@ -601,10 +601,19 @@ def load_model_for_infer(
 
     logger.info("Loading FishEncoder checkpoint: %s  device=%s", path, device)
 
+    # SECURITY: always load with weights_only=True. torch.load() otherwise
+    # unpickles the file, which executes arbitrary code embedded in a malicious
+    # checkpoint. The previous `except TypeError` fallback silently dropped this
+    # protection on older PyTorch builds; we now require torch>=2.4, where
+    # weights_only is supported, and fail loudly instead.
     try:
         checkpoint = torch.load(str(path), map_location=device, weights_only=True)
-    except TypeError:
-        checkpoint = torch.load(str(path), map_location=device)
+    except TypeError as exc:
+        raise RuntimeError(
+            "This PyTorch build does not support torch.load(weights_only=True). "
+            "Upgrade to torch>=2.4 — loading checkpoints without it allows "
+            "arbitrary code execution."
+        ) from exc
 
     state = checkpoint.get("state_dict", checkpoint)
     if not isinstance(state, dict):
