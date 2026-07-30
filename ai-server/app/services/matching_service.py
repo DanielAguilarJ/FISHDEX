@@ -3,6 +3,7 @@ Fish matching service for FishDex AI Server.
 Uses SQLite for embedding storage and cosine similarity for re-identification.
 """
 
+import threading
 import logging
 import sqlite3
 from datetime import datetime, timezone
@@ -16,6 +17,11 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _instance: Optional["MatchingService"] = None
+_matching_service_lock = threading.Lock()
+
+# Background job processing writes to the embeddings DB while API requests read
+# from it, so connections must be willing to wait for a competing writer.
+_BUSY_TIMEOUT_MS = 30_000
 
 from app.utils.area_utils import normalize_area_code
 from app.utils.geo import is_within_radius
@@ -78,10 +84,17 @@ class MatchingService:
         self._ensure_db()
         logger.info("MatchingService initialized (db=%s)", self.db_path)
 
-    def _ensure_db(self):
-        """Create database directory and tables if they don't exist."""
+    def _ensure_db(self) -> None:
+        """
+        Create the database directory, tables and indexes if absent.
+
+        Also enables WAL journalling, which lets readers proceed while a writer
+        holds the write lock. WAL is a persistent database property, so setting
+        it once here is sufficient.
+        """
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(SCHEMA_SQL)
         self._ensure_columns()
 
@@ -109,8 +122,22 @@ class MatchingService:
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
-        """Open a SQLite connection."""
-        return sqlite3.connect(str(self.db_path))
+        """
+        Open a SQLite connection to the embeddings database.
+
+        Applies the per-connection pragmas SQLite does not persist. Without
+        ``busy_timeout`` a concurrent writer causes an immediate
+        ``SQLITE_BUSY`` error instead of waiting, which surfaced as intermittent
+        ``OperationalError`` during parallel job processing.
+
+        Returns:
+            An open connection with a 30 s busy timeout.
+        """
+        conn = sqlite3.connect(
+            str(self.db_path), timeout=_BUSY_TIMEOUT_MS / 1000
+        )
+        conn.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
+        return conn
 
     def find_match(
         self,
@@ -434,8 +461,19 @@ class MatchingService:
 
 
 def get_matching_service() -> MatchingService:
-    """Return the singleton MatchingService instance."""
+    """
+    Return the process-wide MatchingService singleton, creating it on first use.
+
+    Uses double-checked locking: without it two concurrent first-callers can each
+    construct the service, loading the model weights twice (wasted memory) or
+    publishing a partially initialised instance.
+
+    Returns:
+        The shared MatchingService instance.
+    """
     global _instance
     if _instance is None:
-        _instance = MatchingService()
+        with _matching_service_lock:
+            if _instance is None:
+                _instance = MatchingService()
     return _instance
