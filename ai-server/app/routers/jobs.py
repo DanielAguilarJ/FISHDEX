@@ -42,11 +42,12 @@ from fastapi import (
 
 from app.config import settings
 from app.data.czech_species import CZECH_SPECIES
-from app.database import db_session, get_db_connection
+from app.database import db_session
 from app.middleware.auth import AuthenticatedUser, verify_auth
 from app.routers.auth import ELEVATED_ROLES
 from app.services.czech_area_service import validate_area_code
 from app.services.job_service import process_identification_job
+from app.services.result_cache import get_result_cache, invalidate_job_result
 from app.utils.area_utils import normalize_area_code
 from app.utils.media_validation import (
     MediaValidationError,
@@ -705,6 +706,8 @@ async def process_job(
         }
 
     logger.info("Scheduling job %s for background processing (force=%s)", job_id, force)
+    # Drop any cached document so a forced rerun cannot serve the previous result.
+    invalidate_job_result(job_id)
     background_tasks.add_task(process_identification_job, job_id, force=force)
     return {"job_id": job_id, "status": "processing_started"}
 
@@ -749,6 +752,11 @@ async def get_job_result(job_id: str, principal: Principal) -> dict[str, Any]:
     """
     Retrieve the sighting document produced by a completed job.
 
+    Completed results are cached briefly (see ``FISHDEX_RESULT_CACHE_TTL_SECONDS``)
+    because the mobile client polls this endpoint every two seconds while the
+    result screen is open. Only terminal results are cached, and the entry is
+    invalidated whenever the job is re-processed.
+
     Args:
         job_id: Job to read.
         principal: Authenticated caller; must own the job or be elevated.
@@ -762,8 +770,29 @@ async def get_job_result(job_id: str, principal: Principal) -> dict[str, Any]:
         HTTPException 404: Job, result id or sighting row missing.
     """
     requester_id = _require_session_user(principal)
-    conn = get_db_connection()
-    try:
+    cache = get_result_cache()
+    cache_key = f"job_result:{job_id}"
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        # Authorisation is re-evaluated on every request; only the document body
+        # is cached, never the decision about who may see it.
+        with db_session() as conn:
+            job_row = conn.execute(
+                "SELECT id, user_id FROM identification_jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+            if job_row is None:
+                cache.invalidate(cache_key)
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Job {job_id} not found",
+                )
+            requester_role = _authorize_job_access(conn, job_row, requester_id)
+        if requester_role in ELEVATED_ROLES:
+            return cached
+        return _strip_sensitive_for_fisherman(cached)
+
+    with db_session() as conn:
         job_row = conn.execute(
             "SELECT * FROM identification_jobs WHERE id = ?", (job_id,)
         ).fetchone()
@@ -774,7 +803,9 @@ async def get_job_result(job_id: str, principal: Principal) -> dict[str, Any]:
         requester_role = _authorize_job_access(conn, job_row, requester_id)
 
         job_data = dict(job_row)
-        if job_data.get("status") == "needs_manual_review":
+        job_status = job_data.get("status")
+
+        if job_status == "needs_manual_review":
             return _build_manual_review_payload(job_id, job_data)
 
         result_sighting_id = job_data.get("result_sighting_id")
@@ -793,8 +824,10 @@ async def get_job_result(job_id: str, principal: Principal) -> dict[str, Any]:
             )
 
         sighting_data = _assemble_sighting_result(conn, dict(sighting_row))
-    finally:
-        conn.close()
+
+    # Only cache terminal states; an in-flight job's document still changes.
+    if job_status == "completed":
+        cache.set(cache_key, sighting_data)
 
     if requester_role in ELEVATED_ROLES:
         return sighting_data

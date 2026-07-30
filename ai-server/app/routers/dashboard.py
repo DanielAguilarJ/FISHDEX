@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import time
@@ -8,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Header, Query
 
 from app.config import settings
 from app.database import get_db_connection
+from app.security import constant_time_compare
 from app.services.system_monitor import get_system_stats
 from app.services.job_service import process_identification_job
 from app.services.detector_service import get_detector_service
@@ -19,18 +21,35 @@ def _validate_dashboard_auth(
     x_fishdex_dashboard_secret: Optional[str] = None,
     secret: Optional[str] = None,
 ) -> None:
-    """Validate request authentication for dashboard endpoints."""
+    """
+    Validate authentication for dashboard endpoints.
+
+    Comparisons are constant-time so the secret cannot be recovered by measuring
+    response latency.
+
+    Args:
+        x_fishdex_dashboard_secret: Value of the ``X-FishDex-Dashboard-Secret``
+            header. This is the preferred transport.
+        secret: Same secret supplied as a query parameter. Supported for the
+            existing dashboard, but discouraged: query strings end up in proxy
+            access logs and browser history.
+
+    Raises:
+        HTTPException 401: Neither credential matched.
+    """
     if settings.skip_auth:
         return
 
     expected_secret = settings.dashboard_secret
 
-    # Check header
-    if x_fishdex_dashboard_secret and x_fishdex_dashboard_secret == expected_secret:
+    if constant_time_compare(x_fishdex_dashboard_secret, expected_secret):
         return
 
-    # Check query param
-    if secret and secret == expected_secret:
+    if constant_time_compare(secret, expected_secret):
+        logger.info(
+            "Dashboard authenticated via query parameter; prefer the "
+            "X-FishDex-Dashboard-Secret header."
+        )
         return
 
     raise HTTPException(status_code=401, detail="Unauthorized: invalid or missing dashboard secret")
@@ -219,15 +238,36 @@ async def retry_dashboard_job(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ):
-    """Force reprocessing of a failed job."""
+    """
+    Force reprocessing of a failed job.
+
+    ``process_identification_job`` is synchronous and runs model inference for
+    seconds to minutes. Calling it directly from this async handler blocked the
+    event loop and froze every other request, so it is dispatched to a worker
+    thread instead.
+
+    Args:
+        job_id: Job to reprocess.
+        x_fishdex_dashboard_secret: Dashboard secret header.
+        secret: Dashboard secret as a query parameter (legacy).
+
+    Returns:
+        Dict with the processing outcome.
+
+    Raises:
+        HTTPException 401: Invalid dashboard secret.
+        HTTPException 500: Processing failed.
+    """
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     try:
-        result = process_identification_job(job_id, force=True)
-        return {"status": "success", "result": result}
-    except Exception as e:
-        logger.error(f"Failed to retry job {job_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        result = await asyncio.to_thread(process_identification_job, job_id, force=True)
+    except Exception as exc:
+        logger.error("Failed to retry job %s: %s", job_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail="No se pudo reprocesar el trabajo"
+        )
+    return {"status": "success", "result": result}
 
 def _read_private_json(relative_filename: Optional[str]) -> Optional[dict]:
     if not relative_filename:
