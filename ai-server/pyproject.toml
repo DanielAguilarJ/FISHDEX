@@ -1,0 +1,118 @@
+[project]
+name = "fishdex-ai-server"
+version = "2.2.0"
+description = "FishDex fish identification API: YOLOv8 OBB detection + FishEncoder re-identification"
+requires-python = ">=3.11,<3.13"
+readme = "../README.md"
+
+# Runtime dependencies are pinned in requirements.txt, which is what the
+# Dockerfile installs. This section exists for tooling discovery only.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# pytest
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "slow: tests that load real model weights or decode real video",
+    "integration: tests that exercise the API through TestClient",
+]
+filterwarnings = [
+    "error::DeprecationWarning:app.*",
+    "ignore::DeprecationWarning",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# coverage
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = [
+    # Generated reference data: 15k lines of coordinates, no logic.
+    "app/data/czech_areas.py",
+    "app/data/czech_species.py",
+    # One-off operational commands, exercised manually.
+    "app/commands/*",
+]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ruff — linting and formatting
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [".venv", "app/data/czech_areas.py"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (undefined names, unused imports)
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit (security)
+    "BLE",  # blind except
+    "T20",  # print found
+    "RET",  # return simplification
+    "SIM",  # simplify
+]
+ignore = [
+    "E501",   # line length handled by the formatter
+    "B008",   # FastAPI depends/query defaults are called in argument position
+    "S101",   # assert is expected in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use asserts, hardcoded fixture credentials and private access.
+"tests/*" = ["S105", "S106", "S311", "SLF001"]
+# Operational scripts intentionally print to the console.
+"scripts/*" = ["T20"]
+"app/commands/*" = ["T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mypy
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+# The codebase is being annotated incrementally; these stay off until the
+# remaining service modules are fully typed.
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+ignore_missing_imports = true
+exclude = ["\\.venv", "app/data/czech_areas\\.py"]
+
+[[tool.mypy.overrides]]
+module = ["app.config", "app.security", "app.database", "app.utils.media_validation"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
