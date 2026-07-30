@@ -1,73 +1,110 @@
-import logging
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Header, Query
+"""
+FishDex AI Server - Sighting queries
+====================================
+Read-only endpoints for the mobile app and the research dashboard.
 
-from app.config import settings
-from app.database import get_db_connection
+Authorisation model
+-------------------
+Every endpoint that returns per-user or per-fish data requires a **signed
+session token** and resolves the caller's role from the database. The shared
+client secret is never sufficient on its own, because it identifies the
+application (every install ships the same value), not a user.
+
+Location privacy: precise GPS coordinates of individual fish are only exposed to
+``researcher`` and ``admin`` roles. Fishermen see their own captures only.
+"""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from app.data.czech_species import CZECH_SPECIES
-from app.routers.auth import get_current_user_id
+from app.database import db_session
+from app.routers.auth import ELEVATED_ROLES, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/sightings", tags=["sightings"])
 
-_ELEVATED_ROLES = {"researcher", "admin"}
+# Columns that reveal a fish's precise location or another user's identity.
+_SENSITIVE_INDIVIDUAL_KEYS = (
+    "last_seen_lat",
+    "last_seen_lng",
+    "first_seen_lat",
+    "first_seen_lng",
+    "first_seen_by",
+    "last_seen_by",
+)
 
 
-def _get_authenticated_user(authorization: Optional[str]) -> dict:
-    """Resolve the local session token and load the authoritative database role."""
-    user_id = get_current_user_id(authorization)
+def _serialize_sighting(row: sqlite3.Row) -> dict[str, Any]:
+    """
+    Convert a sighting row to the JSON shape the Flutter client expects.
 
-    conn = get_db_connection()
-    try:
-        row = conn.execute(
-            "SELECT id, role FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
-    finally:
-        conn.close()
+    Args:
+        row: Row from ``fish_sightings``.
 
-    if row is None:
-        raise HTTPException(status_code=401, detail="Usuario autenticado no encontrado")
-
-    return dict(row)
-
-
-def _serialize_sighting(row) -> dict:
+    Returns:
+        Dict with an added ``$id`` alias for the primary key.
+    """
     sighting = dict(row)
     sighting["$id"] = sighting["id"]
     return sighting
 
 
-def _has_elevated_access(user: dict) -> bool:
-    return user.get("role") in _ELEVATED_ROLES
+def _has_elevated_access(user: dict[str, Any]) -> bool:
+    """
+    Report whether the user may see other people's data and precise GPS.
 
-def _validate_auth(
-    x_fishdex_client_secret: Optional[str] = None,
-    authorization: Optional[str] = None,
-) -> None:
-    """Validate request authentication."""
-    if settings.skip_auth:
-        return
+    Args:
+        user: Authenticated user record.
 
-    expected_secret = settings.client_secret
-    if x_fishdex_client_secret and x_fishdex_client_secret == expected_secret:
-        return
+    Returns:
+        True for ``researcher`` and ``admin``.
+    """
+    return user.get("role") in ELEVATED_ROLES
 
-    if authorization:
-        parts = authorization.split(" ", 1)
-        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1] == expected_secret:
-            return
 
-    raise HTTPException(status_code=401, detail="Unauthorized")
+def _strip_individual_location(individual: dict[str, Any]) -> dict[str, Any]:
+    """
+    Return a copy of a fish individual without location or attribution fields.
+
+    Args:
+        individual: Row from ``fish_individuals`` as a dict.
+
+    Returns:
+        A new dict with sensitive keys removed (the input is not mutated).
+    """
+    return {k: v for k, v in individual.items() if k not in _SENSITIVE_INDIVIDUAL_KEYS}
+
+
+CurrentUser = Annotated[dict, Depends(get_current_user)]
+
 
 @router.get("/map")
 def get_map_sightings(
+    requester: CurrentUser,
     limit: int = Query(default=500, ge=1, le=1000),
-    authorization: Optional[str] = Header(default=None),
-):
-    """Return geolocated sightings visible to the authenticated user's role."""
-    requester = _get_authenticated_user(authorization)
+) -> list[dict[str, Any]]:
+    """
+    Return geolocated sightings visible to the authenticated user's role.
 
+    Fishermen receive only their own captures; researchers and admins receive
+    all captures.
+
+    Args:
+        requester: Authenticated user record.
+        limit: Maximum number of rows to return.
+
+    Returns:
+        List of serialized sightings ordered by capture time descending.
+
+    Raises:
+        HTTPException 500: Query failure.
+    """
     filters = [
         "location_lat IS NOT NULL",
         "location_lng IS NOT NULL",
@@ -81,153 +118,235 @@ def get_map_sightings(
         params.append(requester["id"])
 
     params.append(limit)
-    query = f"""
-        SELECT * FROM fish_sightings
-        WHERE {' AND '.join(filters)}
-        ORDER BY captured_at DESC
-        LIMIT ?
-    """
+    # The WHERE clause is assembled from the fixed literals above only; no
+    # user-controlled string ever reaches the SQL text.
+    query = (
+        "SELECT * FROM fish_sightings "
+        f"WHERE {' AND '.join(filters)} "
+        "ORDER BY captured_at DESC LIMIT ?"
+    )
 
-    conn = get_db_connection()
     try:
-        rows = conn.execute(query, params).fetchall()
-        return [_serialize_sighting(row) for row in rows]
-    except Exception as e:
-        logger.error("Failed to fetch map sightings: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Error al recuperar capturas del mapa")
-    finally:
-        conn.close()
+        with db_session() as conn:
+            rows = conn.execute(query, params).fetchall()
+    except sqlite3.Error as exc:
+        logger.error("Failed to fetch map sightings: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al recuperar capturas del mapa",
+        )
+    return [_serialize_sighting(row) for row in rows]
 
 
 @router.get("/fish/{fish_id}/history")
 def get_fish_history(
     fish_id: str,
-    authorization: Optional[str] = Header(default=None),
-):
-    """Return the complete chronological history of one fish to researchers/admins."""
-    requester = _get_authenticated_user(authorization)
+    requester: CurrentUser,
+) -> list[dict[str, Any]]:
+    """
+    Return the complete chronological history of one fish.
+
+    Restricted to researchers and admins because the history discloses the
+    precise recapture locations of an individual animal.
+
+    Args:
+        fish_id: Fish identifier, e.g. ``CZ-401001-CYPCA-0001``.
+        requester: Authenticated user record.
+
+    Returns:
+        Sightings ordered chronologically.
+
+    Raises:
+        HTTPException 403: Caller lacks an elevated role.
+        HTTPException 500: Query failure.
+    """
     if not _has_elevated_access(requester):
         raise HTTPException(
-            status_code=403,
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="El historial completo está disponible solo para Researchers y Admins",
         )
 
-    conn = get_db_connection()
     try:
-        rows = conn.execute(
-            """
-            SELECT * FROM fish_sightings
-            WHERE fish_id = ?
-              AND location_lat IS NOT NULL
-              AND location_lng IS NOT NULL
-              AND location_lat BETWEEN -90 AND 90
-              AND location_lng BETWEEN -180 AND 180
-            ORDER BY captured_at ASC, catch_number ASC
-            """,
-            (fish_id,),
-        ).fetchall()
-        return [_serialize_sighting(row) for row in rows]
-    except Exception as e:
-        logger.error("Failed to fetch history for fish %s: %s", fish_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Error al recuperar el historial del pez")
-    finally:
-        conn.close()
+        with db_session() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM fish_sightings
+                WHERE fish_id = ?
+                  AND location_lat IS NOT NULL
+                  AND location_lng IS NOT NULL
+                  AND location_lat BETWEEN -90 AND 90
+                  AND location_lng BETWEEN -180 AND 180
+                ORDER BY captured_at ASC, catch_number ASC
+                """,
+                (fish_id,),
+            ).fetchall()
+    except sqlite3.Error as exc:
+        logger.error(
+            "Failed to fetch history for fish %s: %s", fish_id, exc, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al recuperar el historial del pez",
+        )
+    return [_serialize_sighting(row) for row in rows]
 
 
 @router.get("/user/{user_id}")
 def get_user_sightings(
     user_id: str,
+    requester: CurrentUser,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    authorization: Optional[str] = Header(default=None),
-):
-    """Retrieve sightings for the owner or an authenticated researcher/admin."""
-    requester = _get_authenticated_user(authorization)
-    if requester["id"] != user_id and not _has_elevated_access(requester):
-        raise HTTPException(status_code=403, detail="No puedes consultar capturas de otro usuario")
+) -> list[dict[str, Any]]:
+    """
+    Retrieve sightings for the owner or an authenticated researcher/admin.
 
-    conn = get_db_connection()
+    Args:
+        user_id: Owner of the requested sightings.
+        requester: Authenticated user record.
+        limit: Page size.
+        offset: Page offset.
+
+    Returns:
+        List of serialized sightings.
+
+    Raises:
+        HTTPException 403: Caller is neither the owner nor elevated.
+        HTTPException 500: Query failure.
+    """
+    if requester["id"] != user_id and not _has_elevated_access(requester):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes consultar capturas de otro usuario",
+        )
+
     try:
-        rows = conn.execute(
-            """
-            SELECT * FROM fish_sightings
-            WHERE user_id = ?
-            ORDER BY captured_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            (user_id, limit, offset),
-        ).fetchall()
-        return [_serialize_sighting(row) for row in rows]
-    except Exception as e:
-        logger.error("Failed to fetch user sightings: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Error al recuperar avistamientos")
-    finally:
-        conn.close()
+        with db_session() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM fish_sightings
+                WHERE user_id = ?
+                ORDER BY captured_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (user_id, limit, offset),
+            ).fetchall()
+    except sqlite3.Error as exc:
+        logger.error("Failed to fetch user sightings: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al recuperar avistamientos",
+        )
+    return [_serialize_sighting(row) for row in rows]
+
 
 @router.get("/individuals")
 def get_fish_individuals(
-    x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
-    authorization: Optional[str] = Header(default=None),
-):
-    """Retrieve all unique matched fish individuals."""
-    _validate_auth(x_fishdex_client_secret, authorization)
+    requester: CurrentUser,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict[str, Any]]:
+    """
+    Retrieve catalogued fish individuals.
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    Location and attribution columns are stripped for non-elevated callers, who
+    previously received the first/last GPS position of every catalogued fish.
+
+    Args:
+        requester: Authenticated user record.
+        limit: Page size.
+        offset: Page offset.
+
+    Returns:
+        List of fish individuals, location-redacted unless the caller is
+        a researcher or admin.
+
+    Raises:
+        HTTPException 500: Query failure.
+    """
     try:
-        cursor.execute("SELECT * FROM fish_individuals ORDER BY last_seen_at DESC")
-        rows = cursor.fetchall()
-        
-        individuals_list = []
-        for row in rows:
-            d = dict(row)
-            d["$id"] = d["id"] # Map SQLite 'id' to '$id'
-            individuals_list.append(d)
-            
-        return individuals_list
-    except Exception as e:
-        logger.error(f"Failed to fetch fish individuals: {e}")
-        raise HTTPException(status_code=500, detail="Error al recuperar individuos de peces")
-    finally:
-        conn.close()
+        with db_session() as conn:
+            rows = conn.execute(
+                "SELECT * FROM fish_individuals ORDER BY last_seen_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+    except sqlite3.Error as exc:
+        logger.error("Failed to fetch fish individuals: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al recuperar individuos de peces",
+        )
+
+    elevated = _has_elevated_access(requester)
+    individuals: list[dict[str, Any]] = []
+    for row in rows:
+        record = dict(row)
+        record["$id"] = record["id"]
+        individuals.append(record if elevated else _strip_individual_location(record))
+    return individuals
+
 
 @router.get("/stats/{user_id}")
 def get_user_stats(
     user_id: str,
-    x_fishdex_client_secret: Optional[str] = Header(default=None, alias="X-FishDex-Client-Secret"),
-    authorization: Optional[str] = Header(default=None),
-):
-    """Retrieve XP stats and counts for a user."""
-    _validate_auth(x_fishdex_client_secret, authorization)
+    requester: CurrentUser,
+) -> dict[str, Any]:
+    """
+    Retrieve XP stats and counts for a user.
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    Args:
+        user_id: Owner of the requested statistics.
+        requester: Authenticated user record.
+
+    Returns:
+        Stats row augmented with a derived ``level``, or a zeroed record when the
+        user has no stats yet.
+
+    Raises:
+        HTTPException 403: Caller is neither the owner nor elevated.
+        HTTPException 500: Query failure.
+    """
+    if requester["id"] != user_id and not _has_elevated_access(requester):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes consultar estadísticas de otro usuario",
+        )
+
     try:
-        cursor.execute("SELECT * FROM user_stats WHERE user_id = ?", (user_id,))
-        row = cursor.fetchone()
-        
-        if not row:
-            # Return initial/default empty stats
-            return {
-                "user_id": user_id,
-                "total_xp": 0,
-                "total_sightings": 0,
-                "total_species": 0,
-                "level": 1
-            }
-            
-        d = dict(row)
-        d["$id"] = d["id"] # Map SQLite 'id' to '$id'
-        # Compute level dynamically based on XP (e.g. 100 XP per level)
-        d["level"] = (d["total_xp"] // 100) + 1
-        return d
-    except Exception as e:
-        logger.error(f"Failed to fetch user stats: {e}")
-        raise HTTPException(status_code=500, detail="Error al recuperar estadísticas de usuario")
-    finally:
-        conn.close()
+        with db_session() as conn:
+            row = conn.execute(
+                "SELECT * FROM user_stats WHERE user_id = ?", (user_id,)
+            ).fetchone()
+    except sqlite3.Error as exc:
+        logger.error("Failed to fetch user stats: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al recuperar estadísticas de usuario",
+        )
+
+    if row is None:
+        return {
+            "user_id": user_id,
+            "total_xp": 0,
+            "total_sightings": 0,
+            "total_species": 0,
+            "level": 1,
+        }
+
+    stats = dict(row)
+    stats["$id"] = stats["id"]
+    stats["level"] = (stats.get("total_xp") or 0) // 100 + 1
+    return stats
+
 
 @router.get("/catalog")
-def get_species_catalog():
-    """Retrieve the static Czech species catalog list."""
+def get_species_catalog() -> list[dict[str, Any]]:
+    """
+    Retrieve the static Czech species catalog.
+
+    Public: the catalog is reference data with no user or location content.
+
+    Returns:
+        The full species list.
+    """
     return CZECH_SPECIES
