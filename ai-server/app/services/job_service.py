@@ -863,6 +863,76 @@ def _build_quality_detection_dicts(candidates: list) -> list[dict]:
     return detection_dicts
 
 
+@dataclass(frozen=True)
+class DecisionOutcome:
+    """
+    How a pipeline decision translates into persistence behaviour.
+
+    Attributes:
+        confidence_band: Label stored on the sighting for auditing.
+        linkage_decision: Value recorded in the linkage document.
+        requires_human_review: When True the job takes the repeat-capture path and
+            writes **nothing** to the identity gallery.
+    """
+
+    confidence_band: str
+    linkage_decision: str
+    requires_human_review: bool
+
+
+def _map_pipeline_decision(
+    job_id: str, pipeline_decision: str, identity_decision: object = None
+) -> DecisionOutcome:
+    """
+    Translate a pipeline decision into its persistence outcome.
+
+    The pipeline is contractually definitive — it returns ``auto_match``,
+    ``new_fish`` or ``repeat_capture`` and never ``needs_manual_review``. An
+    unrecognised value is nevertheless mapped to ``new_fish`` rather than raising:
+    refusing to store a capture would lose the angler's data, while creating a new
+    identity is recoverable by a later merge. The fallback is logged as a warning
+    because reaching it means the pipeline broke its contract.
+
+    Args:
+        job_id: Job being processed, for logging.
+        pipeline_decision: The decision string from the pipeline.
+        identity_decision: The pipeline's identity decision object, consulted only
+            for the ``auto_match`` confidence band (``"high"`` or ``"forced"``).
+
+    Returns:
+        The corresponding :class:`DecisionOutcome`.
+    """
+    if pipeline_decision == "auto_match":
+        band = getattr(identity_decision, "confidence_band", "high") or "high"
+        return DecisionOutcome(
+            confidence_band=band, linkage_decision="auto_match", requires_human_review=False
+        )
+    if pipeline_decision == "new_fish":
+        return DecisionOutcome(
+            confidence_band="new_fish",
+            linkage_decision="new_fish",
+            requires_human_review=False,
+        )
+    if pipeline_decision == "repeat_capture":
+        return DecisionOutcome(
+            confidence_band="repeat_capture",
+            linkage_decision="repeat_capture",
+            requires_human_review=True,
+        )
+
+    logger.warning(
+        "[Job %s] Unexpected pipeline_decision=%r — treating as new_fish. "
+        "The pipeline is supposed to return a definitive decision.",
+        job_id,
+        pipeline_decision,
+    )
+    return DecisionOutcome(
+        confidence_band="new_fish",
+        linkage_decision="new_fish",
+        requires_human_review=False,
+    )
+
+
 def process_identification_job(
     job_id: str,
     force: bool = False,
@@ -1386,25 +1456,16 @@ def process_identification_job(
             cursor.execute("SELECT * FROM fish_sightings WHERE job_id = ? LIMIT 1", (job_id,))
             existing_sighting_p2 = cursor.fetchone()
             if existing_sighting_p2:
-                logger.warning(f"[Job {job_id}] Sighting already created (Phase 2). Rolling back.")
+                logger.warning(
+                    "[Job %s] Sighting already created (Phase 2). Rolling back.", job_id
+                )
                 conn.rollback()
-                
-                # Fetch completed data
-                sighting_data = dict(existing_sighting_p2)
-                result = {
-                    "status": "completed" if species_slug else "needs_review",
-                    "job_id": job_id,
-                    "fish_id": sighting_data.get("fish_id"),
-                    "sighting_id": sighting_data.get("id"),
-                    "species_slug": species_slug,
-                    "species_english": species_info.get("english_name") if species_info else None,
-                    "confidence": sighting_data.get("confidence", 0.0),
-                    "is_new_fish": bool(sighting_data.get("is_new_fish")),
-                    "xp_earned": sighting_data.get("xp_earned", 10),
-                    "detection_confidence": sighting_data.get("detection_confidence", 0.0),
-                    "match_confidence": sighting_data.get("match_confidence", 0.0),
-                }
-                return result
+                # Reuses the Phase 1 builder so both idempotency checks return the
+                # same response shape. Phase 2 previously built its own dict and
+                # omitted classification_confidence, so one logical event ("this
+                # job already has a sighting") produced two different payloads
+                # depending on which check caught it.
+                return _build_skip_result(job_id, existing_sighting_p2)
 
             # Resolve unique fish_id and catch number
             previous_sighting_id = None
@@ -1438,29 +1499,14 @@ def process_identification_job(
             # --- DECISION LOGIC (via unified pipeline) ---
             # The pipeline always gives a definitive decision: auto_match, new_fish,
             # or repeat_capture. It NEVER returns needs_manual_review.
-            min_margin = getattr(settings, "reid_min_margin", 0.05)
-            min_agreement = getattr(settings, "reid_min_agreement", 0.75)
             detection_confidence = best_detection_confidence if best_detection else 0.0
 
-            if pipeline_decision == "auto_match":
-                # Use the identity_decision confidence_band (could be "high" or "forced")
-                confidence_band = getattr(pipeline_result.identity_decision, 'confidence_band', 'high') if pipeline_result.identity_decision else "high"
-                linkage_decision = "auto_match"
-                requires_human_review = False
-            elif pipeline_decision == "new_fish":
-                confidence_band = "new_fish"
-                linkage_decision = "new_fish"
-                requires_human_review = False
-            elif pipeline_decision == "repeat_capture":
-                confidence_band = "repeat_capture"
-                linkage_decision = "repeat_capture"
-                requires_human_review = True
-            else:
-                # Unexpected decision — treat as new_fish to never block
-                logger.warning(f"[Job {job_id}] Unexpected pipeline_decision='{pipeline_decision}' — treating as new_fish")
-                confidence_band = "new_fish"
-                linkage_decision = "new_fish"
-                requires_human_review = False
+            outcome = _map_pipeline_decision(
+                job_id, pipeline_decision, pipeline_result.identity_decision
+            )
+            confidence_band = outcome.confidence_band
+            linkage_decision = outcome.linkage_decision
+            requires_human_review = outcome.requires_human_review
 
             if requires_human_review:
                 # --- REPEAT CAPTURE PATH: quality too low ---
