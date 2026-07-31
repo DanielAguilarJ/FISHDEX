@@ -5,7 +5,6 @@ Maps which fish species are commonly found in which types of areas
 based on area name classification (pond, reservoir, stream, river, lake).
 """
 
-from typing import Optional
 
 from app.data.czech_species import CZECH_SPECIES
 

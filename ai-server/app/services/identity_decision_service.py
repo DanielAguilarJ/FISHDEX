@@ -90,7 +90,6 @@ def decide_identity(
     Returns an IdentityDecision with all applicable reasons collected.
     """
     t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
-    reasons: list[str] = []
 
     # ──────────────────────────────────────────────────────────────────────
     # 1. repeat_capture — quality gate

@@ -271,7 +271,6 @@ from app.utils.area_utils import normalize_area_code
 from app.utils.crop_utils import (
     crop_obb_rotated,
     crop_bbox_aligned_strict,
-    crop_fish_best,
     compute_fingerprint_box,
     project_fingerprint_polygon_to_frame,
 )

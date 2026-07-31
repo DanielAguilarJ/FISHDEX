@@ -33,7 +33,6 @@ from app.services.identity_scoring_service import (
     score_candidates,
     ScoringResult,
     SupportMetadata,
-    ReferenceEvidence,
 )
 from app.services.identity_decision_service import (
     decide_identity,

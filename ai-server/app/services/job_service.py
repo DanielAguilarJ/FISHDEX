@@ -2,7 +2,6 @@ import logging
 import sqlite3
 import uuid
 import os
-import io
 import asyncio
 import cv2
 import json
@@ -16,7 +15,6 @@ import numpy as np
 from app.config import settings
 from app.database import get_db_connection
 from app.data.czech_species import find_species_by_name
-from app.services.classifier_service import get_classifier_service
 from app.services.detector_service import get_detector_service
 from app.services.reid_embedding_service import get_reid_embedding_service
 from app.services.matching_service import get_matching_service
@@ -32,19 +30,16 @@ from app.services.artifact_service import (
     save_fish_capture_artifacts,
     update_fish_index_file,
 )
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from app.utils.video import (
-    cleanup_temp_file,
     extract_frames_from_video,
     iter_frames_from_video,
     DecodedVideoFrame,
-    select_best_n_frames,
 )
 from app.utils.area_utils import normalize_area_code
 from app.utils.crop_utils import (
     DetectionLike,
     crop_bbox_aligned_strict,
-    crop_bbox_preserve_frame_aspect,
     crop_fish_best,
     crop_obb_rotated,
 )
@@ -694,7 +689,7 @@ def _validate_job_status(job_id: str, job_doc: dict, force: bool) -> None:
 
 def _claim_job(
     conn: sqlite3.Connection, cursor: sqlite3.Cursor, job_id: str, current_status: object
-) -> None:
+) -> str:
     """
     Atomically transition the job to ``processing``.
 
@@ -708,6 +703,11 @@ def _claim_job(
         cursor: Open cursor.
         job_id: Job to claim.
         current_status: Status observed before the attempt, for logging only.
+
+    Returns:
+        The ISO-8601 timestamp recorded as ``started_at``. The caller reuses this
+        single value for every subsequent row it writes, so the sighting, the
+        individual and the job all agree on when the capture was processed.
 
     Raises:
         JobAlreadyHandled: The claim was lost to another worker.
@@ -737,9 +737,10 @@ def _claim_job(
                 "message": "Job is being processed by another instance",
             }
         )
+    return now_str
 
 
-def _resolve_raw_media(job_id: str, job_doc: dict) -> tuple[str, str]:
+def _resolve_raw_media(job_id: str, job_doc: dict) -> tuple[str, str, str]:
     """
     Locate the stored capture on disk and determine its media type.
 
@@ -748,7 +749,9 @@ def _resolve_raw_media(job_id: str, job_doc: dict) -> tuple[str, str]:
         job_doc: Job row.
 
     Returns:
-        Tuple of (absolute path, media type).
+        Tuple of (absolute path, media type, storage-relative filename). The
+        relative filename is persisted on the sighting so the media can be found
+        again without recomputing the storage root.
 
     Raises:
         ValueError: The job carries no media filename.
@@ -776,7 +779,7 @@ def _resolve_raw_media(job_id: str, job_doc: dict) -> tuple[str, str]:
     if not os.path.exists(absolute_path):
         raise FileNotFoundError(f"Raw media file not found on disk: {absolute_path}")
 
-    return absolute_path, media_type
+    return absolute_path, media_type, raw_filename
 
 
 def _resolve_confirmed_species(job_id: str, species_slug_raw: object) -> dict:
@@ -1055,8 +1058,12 @@ def process_identification_job(
             _assert_not_already_processed(cursor, job_id, force)
             job_doc = _load_job_document(cursor, job_id)
             _validate_job_status(job_id, job_doc, force)
-            _claim_job(conn, cursor, job_id, job_doc.get("status"))
-            temp_video_path, media_type = _resolve_raw_media(job_id, job_doc)
+            # now_str is the single timestamp reused by every row this job writes,
+            # so the job, sighting and individual all agree on the processing time.
+            now_str = _claim_job(conn, cursor, job_id, job_doc.get("status"))
+            temp_video_path, media_type, raw_video_filename = _resolve_raw_media(
+                job_id, job_doc
+            )
         except JobAlreadyHandled as handled:
             return handled.payload
 
@@ -1354,7 +1361,6 @@ def process_identification_job(
 
         # best_candidate is highest quality for preview/detection info
         best_candidate = selected_candidates[0]
-        best_score = best_candidate.score
         best_detection_frame = best_candidate.frame
         best_detection = best_candidate.detection
         best_detection_confidence = best_candidate.confidence
@@ -1492,17 +1498,6 @@ def process_identification_job(
             match_margin = 0.0
             candidates_evaluated = 0
 
-        decision_context = {
-            "decision": pipeline_decision,
-            "reasons": pipeline_result.reasons,
-            "model_version": pipeline_result.model_version,
-            "cross_area": pipeline_result.cross_area,
-            "minimum_distance_m": pipeline_result.minimum_distance_m,
-            "quality_score": quality_score,
-            "track_consistent": track_consistent,
-            "multiple_fish_detected": multiple_fish_detected,
-            "processing_stats": processing_stats,
-        }
 
         is_new_fish = pipeline_decision == "new_fish"
 
@@ -1584,8 +1579,8 @@ def process_identification_job(
             outcome = _map_pipeline_decision(
                 job_id, pipeline_decision, pipeline_result.identity_decision
             )
-            confidence_band = outcome.confidence_band
-            linkage_decision = outcome.linkage_decision
+            # The linkage builder reads `outcome` directly; only the branch flag
+            # is needed as a local.
             requires_human_review = outcome.requires_human_review
 
             if requires_human_review:

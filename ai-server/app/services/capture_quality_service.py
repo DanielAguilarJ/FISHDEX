@@ -5,7 +5,6 @@ Evaluates whether a capture is suitable for reliable identification.
 Produces a quality score and individual metrics.
 """
 from dataclasses import dataclass
-from typing import Optional
 import numpy as np
 import logging
 

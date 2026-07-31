@@ -10,8 +10,11 @@ Adds columns to:
 - fish_embeddings: sighting_id index (embeddings DB)
 """
 
+import logging
 import sqlite3
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 VERSION = 4
 NAME = "add_similarity_reference"
@@ -104,9 +107,11 @@ def up(conn: sqlite3.Connection) -> None:
         """)
         emb_conn.commit()
         emb_conn.close()
-    except Exception:
-        # Non-fatal: embeddings DB may not exist yet
-        pass
+    except (sqlite3.Error, OSError) as exc:
+        # Non-fatal: the embeddings database may not exist yet on a fresh install.
+        # Logged so a genuine failure (disk full, corrupt file) is not mistaken for
+        # the expected "not created yet" case.
+        logger.warning("Could not index fish_embeddings.sighting_id: %s", exc)
 
 
 def down(conn: sqlite3.Connection) -> None:
@@ -140,5 +145,5 @@ def down(conn: sqlite3.Connection) -> None:
         emb_conn.execute("DROP INDEX IF EXISTS idx_embeddings_sighting_id")
         emb_conn.commit()
         emb_conn.close()
-    except Exception:
-        pass
+    except (sqlite3.Error, OSError) as exc:
+        logger.warning("Could not drop idx_embeddings_sighting_id: %s", exc)

@@ -21,8 +21,7 @@ import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from typing import Iterator, List, Tuple
-from pathlib import Path
+from typing import Iterator, List
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ Implements per-individual scoring with multi-frame voting:
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -133,7 +133,6 @@ def _select_best_reference(
         sighting_groups[key].append((idx, float(support_scores[idx])))
 
     # Find the best sighting: highest median score among its supports
-    best_sighting_id: Optional[str] = None
     best_sighting_score: float = -1.0
     best_support_idx: int = 0
 
@@ -142,7 +141,10 @@ def _select_best_reference(
         sighting_median = float(np.median(scores))
         if sighting_median > best_sighting_score:
             best_sighting_score = sighting_median
-            best_sighting_id = sighting_key if not sighting_key.startswith("_no_sighting_") else None
+            # NOTE: the winning sighting id is not tracked separately — it is
+            # already reachable as best_meta.sighting_id below, and the two are
+            # equivalent (a synthesised "_no_sighting_*" key only arises when
+            # meta.sighting_id is None).
             # Pick the support with the highest individual score within this sighting
             best_entry = max(entries, key=lambda e: e[1])
             best_support_idx = best_entry[0]
