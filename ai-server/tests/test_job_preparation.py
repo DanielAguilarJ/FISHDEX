@@ -312,3 +312,87 @@ def test_legacy_raw_video_filename_column_is_honoured(job_db: Path) -> None:
 
     with pytest.raises(FileNotFoundError, match="legacy.mp4"):
         run_job("job-legacy")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 9 — species resolution
+# ─────────────────────────────────────────────────────────────────────────────
+# Species is never inferred: the detector is binary and the angler confirms it.
+# A bad slug must therefore abort the job rather than fall back to a guess, since
+# the candidate gallery is partitioned by species and a wrong partition would
+# compare a carp against pike embeddings.
+
+
+def test_species_resolution_returns_canonical_catalog_entry() -> None:
+    from app.services.job_service import _resolve_confirmed_species
+
+    info = _resolve_confirmed_species("job-1", "cyprinus_carpio")
+
+    assert info["slug"] == "cyprinus_carpio"
+    assert info.get("english_name")
+
+
+def test_species_resolution_canonicalises_surrounding_whitespace() -> None:
+    from app.services.job_service import _resolve_confirmed_species
+
+    assert (
+        _resolve_confirmed_species("job-1", "  cyprinus_carpio  ")["slug"]
+        == "cyprinus_carpio"
+    )
+
+
+@pytest.mark.parametrize("bad_slug", [None, "", "   ", 42, [], {}])
+def test_species_resolution_rejects_missing_slug(bad_slug: object) -> None:
+    from app.services.job_service import _resolve_confirmed_species
+
+    with pytest.raises(ValueError, match="without a selected species_slug"):
+        _resolve_confirmed_species("job-1", bad_slug)
+
+
+def test_species_resolution_rejects_unknown_slug() -> None:
+    from app.services.job_service import _resolve_confirmed_species
+
+    with pytest.raises(ValueError, match="invalid species_slug"):
+        _resolve_confirmed_species("job-1", "loch_ness_monster")
+
+
+def test_species_resolution_never_guesses_on_a_typo() -> None:
+    """A near-miss must fail loudly, not fuzzy-match onto the wrong species."""
+    from app.services.job_service import _resolve_confirmed_species
+
+    with pytest.raises(ValueError, match="invalid species_slug"):
+        _resolve_confirmed_species("job-1", "cyprinus_carpi")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Local sentinels
+# ─────────────────────────────────────────────────────────────────────────────
+def test_no_dir_based_local_variable_probing() -> None:
+    """
+    Six call sites used ``'name' in dir()`` to test whether a local had been
+    assigned. That silently reports False from any nested scope, so the guards
+    are now explicit None/default sentinels. This test keeps the idiom from
+    coming back.
+    """
+    import inspect
+
+    from app.services import job_service
+
+    source = inspect.getsource(job_service)
+    offending = [
+        line.strip()
+        for line in source.splitlines()
+        if "in dir()" in line and not line.strip().startswith("#")
+    ]
+    assert offending == [], f"dir()-based local probing reintroduced: {offending}"
+
+
+def test_claimable_statuses_is_the_single_source_of_truth() -> None:
+    """
+    The status guard and the atomic UPDATE previously duplicated the claimable
+    status tuple — one as an if-chain, one as a hardcoded SQL IN clause. They now
+    share a constant so they cannot drift apart.
+    """
+    from app.services.job_service import CLAIMABLE_STATUSES
+
+    assert CLAIMABLE_STATUSES == ("uploaded", "pending_crop")

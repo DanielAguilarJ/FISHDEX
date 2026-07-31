@@ -23,7 +23,7 @@ from app.services.identification_pipeline import (
     get_identification_pipeline,
     CaptureMetadata,
 )
-from app.services.fish_tracking_service import validate_single_fish
+from app.services.fish_tracking_service import TrackingResult, validate_single_fish
 from app.services.capture_quality_service import evaluate_capture
 from app.services.event_bus import event_bus
 from app.services.artifact_service import (
@@ -729,6 +729,45 @@ def _resolve_raw_media(job_id: str, job_doc: dict) -> tuple[str, str]:
     return absolute_path, media_type
 
 
+def _resolve_confirmed_species(job_id: str, species_slug_raw: object) -> dict:
+    """
+    Validate the angler-selected species against the Czech catalog.
+
+    Species is never inferred by a classifier: the detector is binary (fish /
+    no fish) and the angler confirms the species at capture time. A job without
+    a valid slug therefore cannot be identified at all, because the candidate
+    gallery is partitioned by species.
+
+    Args:
+        job_id: Job being processed, for logging.
+        species_slug_raw: The ``species_slug`` column, which may be absent,
+            non-string, or a non-canonical spelling.
+
+    Returns:
+        The catalog entry, whose ``slug`` is the canonical form to use for
+        matching, storage and UI.
+
+    Raises:
+        ValueError: The slug is missing, blank, or not in the catalog.
+    """
+    if not isinstance(species_slug_raw, str) or not species_slug_raw.strip():
+        raise ValueError("Job cannot be identified without a selected species_slug")
+
+    species_info = find_species_by_name(species_slug_raw.strip())
+    if species_info is None:
+        raise ValueError(f"Job contains an invalid species_slug: {species_slug_raw}")
+
+    logger.info(
+        "[Job %s] Species confirmed: %s / %s slug=%s rarity=%s",
+        job_id,
+        species_info.get("english_name"),
+        species_info.get("latin_name"),
+        species_info["slug"],
+        species_info.get("rarity"),
+    )
+    return species_info
+
+
 def process_identification_job(
     job_id: str,
     force: bool = False,
@@ -753,6 +792,13 @@ def process_identification_job(
 
     temp_video_path: Optional[str] = None
     job_doc: Optional[dict] = None
+    # Tracking only runs on the video path. Declared up front with an explicit
+    # None sentinel: the previous code probed `'tracking_result' in dir()` in six
+    # places, which silently reports False from any nested scope and is O(locals).
+    tracking_result: Optional[TrackingResult] = None
+    # Same reason: these are only set on the multiframe selection path.
+    min_gap: float = 0.0
+    temporal_diversity_applied: bool = False
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1112,13 +1158,13 @@ def process_identification_job(
             "selected_frame_timestamps": [round(c.timestamp_seconds, 4) for c in selected_candidates],
             "selected_frame_scores": [round(c.score, 6) for c in selected_candidates],
             "selected_track_ids": [c.track_id for c in selected_candidates],
-            "dominant_track_id": tracking_result.dominant_track_id if 'tracking_result' in dir() else None,
-            "minimum_selected_frame_gap_seconds": min_gap if 'min_gap' in dir() else 0.0,
-            "temporal_diversity_applied": temporal_diversity_applied if 'temporal_diversity_applied' in dir() else False,
-            "tracking_total_detections": tracking_result.total_detections if 'tracking_result' in dir() else 0,
-            "tracking_dominant_track_length": tracking_result.dominant_track_length if 'tracking_result' in dir() else 0,
-            "tracking_secondary_tracks": tracking_result.secondary_tracks if 'tracking_result' in dir() else 0,
-            "multiple_fish_detected": tracking_result.multiple_fish_detected if 'tracking_result' in dir() else False,
+            "dominant_track_id": tracking_result.dominant_track_id if tracking_result is not None else None,
+            "minimum_selected_frame_gap_seconds": min_gap,
+            "temporal_diversity_applied": temporal_diversity_applied,
+            "tracking_total_detections": tracking_result.total_detections if tracking_result is not None else 0,
+            "tracking_dominant_track_length": tracking_result.dominant_track_length if tracking_result is not None else 0,
+            "tracking_secondary_tracks": tracking_result.secondary_tracks if tracking_result is not None else 0,
+            "multiple_fish_detected": tracking_result.multiple_fish_detected if tracking_result is not None else False,
             "selection_method": "temporal_diversity_track_filtered",
         }
         logger.info(f"[Job {job_id}] Processing stats: {processing_stats}")
@@ -1139,41 +1185,18 @@ def process_identification_job(
         )
 
         # --- Step 9: Resolve and validate the user-selected species ---
-        species_slug_raw = job_doc.get("species_slug")
-        species_info = None
-        classification_result = None
-        classifier_available = False
-        classification_confidence = 0.0
-
-        logger.info(
-            f"[Job {job_id}] Bypassing species classification per "
-            "binary detection configuration."
-        )
-
-        if (
-            not isinstance(species_slug_raw, str)
-            or not species_slug_raw.strip()
-        ):
-            raise ValueError(
-                "Job cannot be identified without a selected species_slug"
-            )
-
-        species_info = find_species_by_name(species_slug_raw.strip())
-        if species_info is None:
-            raise ValueError(
-                f"Job contains an invalid species_slug: {species_slug_raw}"
-            )
-
+        # --- Step 9: Resolve and validate the user-selected species ---
+        species_info = _resolve_confirmed_species(job_id, job_doc.get("species_slug"))
         # Always use the canonical catalog slug for matching, storage and UI.
         species_slug = species_info["slug"]
 
-        logger.info(
-            f"[Job {job_id}] Species info: "
-            f"{species_info.get('english_name')} / "
-            f"{species_info.get('latin_name')} "
-            f"slug={species_slug} "
-            f"rarity={species_info.get('rarity')}"
-        )
+        # Species classification is bypassed: the detector is binary (fish / no
+        # fish) and the species is confirmed by the angler. These two values are
+        # therefore always None/0.0, but they are still persisted because the
+        # sighting schema carries the columns and a future classifier would fill
+        # them in without a migration.
+        classification_result: Optional[dict] = None
+        classification_confidence = 0.0
 
         # --- Step 10: Quality assessment (tracking already done in selection phase) ---
         _emit_progress(job_id, "analyzing_quality", 75, "Assessing capture quality and tracking")
@@ -1201,7 +1224,8 @@ def process_identification_job(
                 detection_dicts_for_quality.append(det_dict)
 
         # Use tracking result from selection phase (already computed)
-        if 'tracking_result' not in dir():
+        if tracking_result is None:
+            # Image input: the video path never ran tracking, so do it now.
             tracking_result = validate_single_fish(frame_detections_for_tracking)
         track_consistent = tracking_result.is_single_fish
         multiple_fish_detected = tracking_result.multiple_fish_detected
