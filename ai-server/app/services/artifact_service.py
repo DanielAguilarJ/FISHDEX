@@ -419,7 +419,7 @@ def save_fish_capture_artifacts(
             ann_abs = Path(settings.server_data_dir) / "storage" / annotated_preview_filename
             _write_jpg(ann_abs, annotated_img, quality=78)
             logger.info(f"Saved annotated preview: {annotated_preview_filename}")
-        except Exception as ann_err:
+        except Exception as ann_err:  # noqa: BLE001 — an artifact failure must not discard the identification
             logger.warning(f"Failed to generate annotated preview: {ann_err}")
             annotated_preview_filename = None
 
@@ -489,7 +489,7 @@ def save_fish_capture_artifacts(
                 )
                 _write_jpg(ann_abs_path, ann_f, quality=78)
                 annotated_frame_files.append(ann_rel)
-            except Exception as ds_err:
+            except Exception as ds_err:  # noqa: BLE001 — an artifact failure must not discard the identification
                 logger.warning(f"Dataset frame {idx} failed: {ds_err}")
 
         logger.info(

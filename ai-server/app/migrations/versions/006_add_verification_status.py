@@ -15,8 +15,11 @@ Values:
     - legacy_untrusted: Pre-migration data with unknown provenance
 """
 
+import logging
 import sqlite3
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 VERSION = 6
 NAME = "add_verification_status"
@@ -86,7 +89,8 @@ def down(conn: sqlite3.Connection) -> None:
     """Best-effort rollback — drop indexes (can't drop column in SQLite)."""
     try:
         emb_conn = _get_embeddings_conn()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — rollback is best-effort
+        logger.warning("Embeddings DB unavailable, skipping rollback: %s", exc)
         return
 
     try:

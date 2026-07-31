@@ -12,8 +12,11 @@ Changes:
 3. Add sighting_id index if missing.
 """
 
+import logging
 import sqlite3
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 VERSION = 5
 NAME = "embeddings_unique_index"
@@ -166,7 +169,8 @@ def down(conn: sqlite3.Connection) -> None:
     """Drop the unique index (best-effort rollback)."""
     try:
         emb_conn = _get_embeddings_conn()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — rollback is best-effort
+        logger.warning("Embeddings DB unavailable, skipping rollback: %s", exc)
         return
 
     try:

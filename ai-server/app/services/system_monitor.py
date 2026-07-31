@@ -33,7 +33,7 @@ async def system_monitoring_task():
         try:
             stats = get_system_stats()
             await event_bus.emit("server_status", stats)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — a background loop must survive one bad iteration
             logger.error(f"Error in system monitoring loop: {e}")
         await asyncio.sleep(5)
 

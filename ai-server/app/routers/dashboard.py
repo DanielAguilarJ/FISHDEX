@@ -84,14 +84,14 @@ async def get_dashboard_status(
     try:
         detector = get_detector_service()
         detector_loaded = detector is not None and bool(getattr(detector, "available", False))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a diagnostic endpoint reports partial status rather than 500
         logger.warning(f"Could not check detector status: {e}")
 
     try:
         from app.services.classifier_service import get_classifier_service
         classifier = get_classifier_service()
         classifier_loaded = classifier is not None and bool(getattr(classifier, "available", False))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a diagnostic endpoint reports partial status rather than 500
         logger.warning(f"Could not check classifier status: {e}")
 
     # Aggregated Job stats from local SQLite database
@@ -118,7 +118,7 @@ async def get_dashboard_status(
                 jobs_summary["completed"] += 1
             elif status == "failed":
                 jobs_summary["failed"] += 1
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a diagnostic endpoint reports partial status rather than 500
         logger.error(f"Failed to fetch jobs summary from SQLite: {e}")
     finally:
         if conn is not None:
@@ -236,7 +236,7 @@ async def get_dashboard_jobs(
                     if sighting_preview:
                         preview_filename = sighting_preview["preview_filename"]
 
-                except Exception as preview_err:
+                except Exception as preview_err:  # noqa: BLE001 — a diagnostic endpoint reports partial status rather than 500
                     logger.warning(
                         "Could not resolve preview for job %s: %s",
                         d.get("id"),

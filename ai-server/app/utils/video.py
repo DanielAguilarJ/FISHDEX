@@ -134,7 +134,7 @@ def _probe_video_rotation(video_path: str) -> int:
     except FileNotFoundError:
         logger.debug("ffprobe not found — video rotation metadata will not be read")
         return 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — rotation metadata is optional
         logger.debug("ffprobe error reading rotation: %s", e)
         return 0
 

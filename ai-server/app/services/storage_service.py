@@ -138,7 +138,7 @@ def save_catch(
             embedding_matrix.shape,
             prototype.shape,
         )
-    except Exception as emb_exc:
+    except Exception as emb_exc:  # noqa: BLE001 — embedding extraction is best-effort at save time
         logger.warning("Failed to save ReID embedding for %s: %s", fish_id, emb_exc)
 
     logger.info(

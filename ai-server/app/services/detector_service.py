@@ -129,7 +129,7 @@ class DetectorService:
                 )
                 self._available = True
                 logger.info("Detector model loaded: %s (providers=%s)", self.model_path, providers)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — a corrupt model degrades to unavailable, never aborts
                 logger.warning("Failed to load detector model: %s", e)
         else:
             logger.warning(
@@ -324,7 +324,7 @@ class DetectorService:
                          len(detections), conf_threshold or self.confidence_threshold)
             return detections
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — a corrupt model degrades to unavailable, never aborts
             logger.error("Detection inference failed: %s", e)
             return self._fallback_detection(frame)
 

@@ -75,7 +75,7 @@ class ClassifierService:
                 len(self.labels),
                 providers,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — a corrupt model degrades to unavailable, never aborts
             logger.error("Failed to load classifier: %s", e)
             self.session = None
             self._available = False
@@ -182,7 +182,7 @@ class ClassifierService:
 
             return {"available": True, "predictions": predictions}
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — a corrupt model degrades to unavailable, never aborts
             logger.error("Classification inference failed: %s", e)
             return {"available": False, "requires_manual_input": True}
 

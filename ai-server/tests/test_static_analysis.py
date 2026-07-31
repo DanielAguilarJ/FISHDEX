@@ -127,6 +127,22 @@ def test_no_f_string_in_logging_calls_without_placeholders() -> None:
 
 
 @requires_ruff
+def test_blind_excepts_are_justified() -> None:
+    """
+    Every ``except Exception`` must be deliberate and annotated.
+
+    28 exist, and all are genuine "must not crash" boundaries: model loading
+    degrading to unavailable, background loops surviving one bad iteration,
+    artifact writes not discarding a completed identification, migration rollbacks
+    being best-effort. Each carries a ``# noqa: BLE001`` naming the reason, and all
+    of them log. This test fails if a new unannotated one appears.
+    """
+    status, output = run_ruff("BLE001")
+
+    assert status == 0, f"unjustified blind excepts:\n{output}"
+
+
+@requires_ruff
 def test_exceptions_raised_inside_handlers_are_chained() -> None:
     """
     ``raise X`` inside an ``except`` block discards the original traceback.

@@ -112,7 +112,8 @@ def _check_migration_version() -> int:
             return row[0] if row and row[0] else 0
         finally:
             conn.close()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — version probe must never abort a rebuild
+        logger.warning("Could not read schema_migrations version: %s", exc)
         return 0
 
 

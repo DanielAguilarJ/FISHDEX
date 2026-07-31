@@ -373,7 +373,7 @@ def _apply_versioned_migrations(conn: sqlite3.Connection) -> None:
 
         final_version = run_migrations(conn)
         logger.info("Migrations applied up to version %d", final_version)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — a migration failure must not stop a legacy DB from starting
         logger.warning(
             "Migration runner failed (non-fatal for existing DBs): %s", exc, exc_info=True
         )

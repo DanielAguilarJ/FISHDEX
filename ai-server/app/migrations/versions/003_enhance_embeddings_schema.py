@@ -9,8 +9,11 @@ not the main application database. The runner applies it to the main DB's
 schema_migrations for tracking, but the DDL executes against the embeddings DB.
 """
 
+import logging
 import sqlite3
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 VERSION = 3
 NAME = "enhance_embeddings_schema"
@@ -109,7 +112,8 @@ def down(conn: sqlite3.Connection) -> None:
     """Best-effort rollback of embeddings schema changes."""
     try:
         emb_conn = _get_embeddings_conn()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — rollback is best-effort
+        logger.warning("Embeddings DB unavailable, skipping rollback: %s", exc)
         return
 
     try:

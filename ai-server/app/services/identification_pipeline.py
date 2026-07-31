@@ -548,7 +548,7 @@ class IdentificationPipeline:
                 return False
 
             return True
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — index probe failure means 'not complete', not a crash
             # Fail-open on error: don't block startup on transient DB issues
             logger.warning(
                 "Index completeness check failed (assuming complete): %s",

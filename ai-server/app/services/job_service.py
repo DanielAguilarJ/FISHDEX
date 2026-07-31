@@ -1180,7 +1180,7 @@ def process_identification_job(
                     fps_val = cap_info.get(cv2.CAP_PROP_FPS) or 0.0
                     cap_info.release()
                     video_duration_seconds = (decoded_frame_count / fps_val) if fps_val > 0 else 0.0
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — one failing side effect must not lose the capture
                     logger.warning(
                         "[Job %s] Could not read video FPS: %s", job_id, exc
                     )
@@ -1633,7 +1633,7 @@ def process_identification_job(
                     )
                     review_artifact_dir = review_artifacts.get("job_artifact_dir")
                     review_preview = review_artifacts.get("preview_filename")
-                except Exception as art_err:
+                except Exception as art_err:  # noqa: BLE001 — one failing side effect must not lose the capture
                     logger.warning(f"[Job {job_id}] Failed to save artifacts: {art_err}")
                     review_artifact_dir = None
                     review_preview = None
@@ -2071,7 +2071,7 @@ def process_identification_job(
                     "linkage": linkage,
                 }
                 update_fish_index_file(index_path, entry_data)
-            except Exception as index_err:
+            except Exception as index_err:  # noqa: BLE001 — one failing side effect must not lose the capture
                 logger.error(f"[Job {job_id}] Failed to write index file post-commit: {index_err}")
 
         except Exception as tx_err:
@@ -2122,7 +2122,7 @@ def process_identification_job(
                 (str(e)[:1000], datetime.now(timezone.utc).isoformat(), job_id)
             )
             conn.commit()
-        except Exception as update_err:
+        except Exception as update_err:  # noqa: BLE001 — one failing side effect must not lose the capture
             logger.error(f"[Job {job_id}] Failed to save job failure state: {update_err}")
 
         raise

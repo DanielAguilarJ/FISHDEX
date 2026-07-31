@@ -203,7 +203,7 @@ def load_calibration(model_version: str) -> Optional[CalibrationData]:
         )
         return _calibration_cache
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — an unreadable calibration means uncalibrated, not broken
         logger.error("Failed to load calibration from %s: %s", cal_path, e)
         return None
 

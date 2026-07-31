@@ -126,7 +126,7 @@ class OBBRoiService:
                 conf=settings.obb_conf_threshold,
                 task="obb",
             )[0]
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — inference failure degrades to 'no detection'
             logger.warning("OBBRoiService: YOLO inference failed: %s", exc)
             return RoiResult(qualified=False, roi=None, confidence=0.0, reason=f"inference error: {exc}")
 

@@ -109,7 +109,7 @@ async def _retry_pending_crops() -> None:
                 # Small delay between jobs to not overload
                 await asyncio.sleep(5)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — a background loop must survive one bad iteration
             logger.error(f"Crop retry loop error: {e}")
 
         await asyncio.sleep(60)
@@ -220,7 +220,7 @@ async def _retry_single_job(
             else:
                 _increment_retry(job_id, retry_count)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a background loop must survive one bad iteration
         logger.error(f"[Retry {job_id}] Error during retry: {e}")
         _increment_retry(job_id, retry_count)
 
@@ -272,7 +272,7 @@ def _increment_retry(job_id: str, current_count: int) -> None:
             (current_count + 1, job_id),
         )
         conn.commit()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — a background loop must survive one bad iteration
         logger.error(f"[Retry {job_id}] Failed to increment retry_count: {e}")
     finally:
         conn.close()
