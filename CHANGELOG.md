@@ -396,21 +396,75 @@ to `0.0.0.0`, and network calls without a timeout.
 Silent exception handlers in `ai-server/app` are down from 37 at the start of this
 audit to 14; the remainder are narrow parse fallbacks with an explicit default.
 
+### Test coverage
+
+Coverage was raised from 46% to 63% overall, prioritised by what fails *silently*
+rather than by statement count. The lesson from the extraction work was explicit:
+14 latent `NameError`s survived a full green suite because they sat on a path with
+30% coverage.
+
+New suites, and the reason each matters:
+
+| Suite | Tests | What it protects |
+|-------|------:|------------------|
+| `test_species_lookup.py` | 38 | Species resolution partitions the candidate gallery; the wrong species compares a fish against another species' embeddings |
+| `test_fish_encoder.py` | 35 | Train/inference preprocessing parity — a mismatch does not raise, matching accuracy just collapses |
+| `test_video_decoding.py` | 37 | Everything downstream sees only these frames; a wrongly rotated frame yields a valid but incomparable embedding |
+| `test_classifier_service.py` | 28 | Preprocessing must match training or the model returns confident nonsense; softmax stability |
+| `test_storage_layout.py` | 27 | Distinct fish counted rather than catches; corrupt cache files tolerated |
+| `test_retry_service.py` | 23 | The last chance to rescue a capture; a stuck job is a lost capture |
+| `test_artifact_index.py` | 22 | Index idempotency — without it every reprocess inflates a fish's recapture count |
+| `test_obb_roi.py` | 19 | Corner ordering: ultralytics does not guarantee which corner comes first, and a mirrored crop never matches |
+| `test_dashboard_jobs.py` | 22 | Status filter allow-list, pagination, filtered-count correctness |
+| `test_job_preparation.py` | 32 | Characterization of the job claim, written before extracting it |
+| `test_temporal_selection.py` | 33 | Frame selection, including equivalence of the two entry points |
+| `test_decision_mapping.py` | 20 | The gate deciding whether a capture enters the identity gallery |
+| `test_linkage_document.py` | 19 | The audit trail behind every identification decision |
+| `test_image_processing.py` | 47 | OBB rectification, bbox clamping, upload validation, no-detection paths |
+| `test_schema_self_sufficiency.py` | 14 | The base schema must not depend on a migration that is allowed to fail |
+| `test_static_analysis.py` | 14 | Undefined names, unused code, unjustified blind excepts, security rules |
+| `test_docstring_accuracy.py` | 65 | Documentation that names non-existent parameters |
+| `test_integration.py` | 26 | API authorisation regressions, rewritten to run without a live server |
+
+Per-module coverage of the security-critical and image-processing paths:
+
+| Module | Coverage |
+|--------|---------:|
+| `database.py` | 98% |
+| `model_fingerprint_service.py` | 99% |
+| `media_validation.py` | 97% |
+| `identity_scoring_service.py` | 97% |
+| `crop_utils.py` | 90% |
+| `config.py` | 87% |
+| `storage_service.py` | 84% (was 7%) |
+| `matching_service.py` | 83% |
+| `result_cache.py` | 82% |
+| `identification_pipeline.py` | 80% |
+| `sightings.py` | 79% |
+| `obb_roi_service.py` | 77% (was 33%) |
+| `video.py` | 77% (was 47%) |
+| `security.py` | 71% |
+| `auth.py` | 71% |
+| `classifier_service.py` | 63% (was 0%) |
+
+Two modules also shrank substantially as dead code came out: `storage_service`
+515 → 251 lines, and 1 332 lines removed from the retired `/identify` chain.
+
 ### Verification
 
 | Check | Result |
 |-------|--------|
-| `pytest` (ai-server) | 492 passed, 0 failed (was 257 passed, 5 failed) |
+| `pytest` (ai-server) | 787 passed, 0 failed (was 257 passed, 5 failed) |
 | `pytest` (scripts) | 13 passed |
 | `flutter analyze` | 0 errors, 0 warnings |
 | `flutter build bundle` | succeeds |
 | `flutter test` | 9 passed |
 | `caddy validate` | valid, no warnings |
 | `ruff` (correctness + security rules) | clean |
-| Docstring coverage | 100% (390/390 functions) |
+| Docstring coverage | 100% functions, classes and modules (enforced by test) |
 | Type hints | 95% returns, 97% arguments |
-| `job_service` coverage | 30% (was 11%) |
-| Coverage of hardened modules | `security` 97%, `media_validation` 97%, `crop_utils` 90%, `matching_service` 83%, `result_cache` 82% |
+| Overall coverage | 63% (was 46%) |
+| Coverage of hardened modules | `database` 98%, `media_validation` 97%, `crop_utils` 90%, `storage_service` 84%, `matching_service` 83% |
 
 ### Known gaps
 
