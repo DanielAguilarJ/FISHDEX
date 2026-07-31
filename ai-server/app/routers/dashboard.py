@@ -263,7 +263,7 @@ async def get_dashboard_jobs(
 
     except Exception as e:
         logger.error(f"Failed to list jobs from SQLite: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve jobs from SQLite")
+        raise HTTPException(status_code=500, detail="Failed to retrieve jobs from SQLite") from e
 
     finally:
         if conn is not None:
@@ -303,7 +303,7 @@ async def retry_dashboard_job(
         logger.error("Failed to retry job %s: %s", job_id, exc, exc_info=True)
         raise HTTPException(
             status_code=500, detail="No se pudo reprocesar el trabajo"
-        )
+        ) from exc
     return {"status": "success", "result": result}
 
 def _read_private_json(relative_filename: Optional[str]) -> Optional[dict]:
@@ -408,7 +408,7 @@ async def get_dashboard_job_detail(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch job detail for job {job_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve job detail")
+        raise HTTPException(status_code=500, detail="Failed to retrieve job detail") from e
     finally:
         if conn is not None:
             conn.close()
@@ -453,7 +453,7 @@ async def get_dashboard_job_document(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch job document for job {job_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve job document")
+        raise HTTPException(status_code=500, detail="Failed to retrieve job document") from e
     finally:
         if conn is not None:
             conn.close()
@@ -512,7 +512,7 @@ async def get_dashboard_fish_manifest(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch fish manifest for fish {fish_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve fish manifest")
+        raise HTTPException(status_code=500, detail="Failed to retrieve fish manifest") from e
     finally:
         if conn is not None:
             conn.close()
@@ -573,7 +573,7 @@ async def get_dashboard_fish_timeline(
 
     except Exception as e:
         logger.error(f"Failed to fetch fish timeline for fish {fish_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve fish timeline")
+        raise HTTPException(status_code=500, detail="Failed to retrieve fish timeline") from e
     finally:
         if conn is not None:
             conn.close()

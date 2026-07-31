@@ -241,16 +241,19 @@ def register(request: Request, req: RegisterRequest) -> UserResponse:
         # UNIQUE(email) violation. 409 is unavoidable for a usable signup form,
         # but the message stays generic and the endpoint is rate-limited.
         logger.info("Registration rejected: email already in use")
+        # `from None` deliberately: the constraint name in the original exception
+        # would disclose schema detail, and this is an expected outcome rather
+        # than an internal failure worth chaining.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No se pudo completar el registro con esos datos",
-        )
+        ) from None
     except sqlite3.Error as exc:
         logger.error("Failed to register user: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al registrar usuario",
-        )
+        ) from exc
 
     logger.info("Registered new user %s with role %s", user_id, DEFAULT_ROLE)
     return UserResponse(id=user_id, email=email, name=req.name.strip(), role=DEFAULT_ROLE)
@@ -388,7 +391,7 @@ def update_user_role(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al actualizar el rol",
-        )
+        ) from exc
     finally:
         conn.close()
 

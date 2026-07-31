@@ -136,7 +136,7 @@ def get_map_sightings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al recuperar capturas del mapa",
-        )
+        ) from exc
     return [_serialize_sighting(row) for row in rows]
 
 
@@ -189,7 +189,7 @@ def get_fish_history(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al recuperar el historial del pez",
-        )
+        ) from exc
     return [_serialize_sighting(row) for row in rows]
 
 
@@ -238,7 +238,7 @@ def get_user_sightings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al recuperar avistamientos",
-        )
+        ) from exc
     return [_serialize_sighting(row) for row in rows]
 
 
@@ -277,7 +277,7 @@ def get_fish_individuals(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al recuperar individuos de peces",
-        )
+        ) from exc
 
     elevated = _has_elevated_access(requester)
     individuals: list[dict[str, Any]] = []
@@ -324,7 +324,7 @@ def get_user_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al recuperar estadísticas de usuario",
-        )
+        ) from exc
 
     if row is None:
         return {

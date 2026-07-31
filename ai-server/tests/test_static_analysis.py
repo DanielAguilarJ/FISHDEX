@@ -127,6 +127,22 @@ def test_no_f_string_in_logging_calls_without_placeholders() -> None:
 
 
 @requires_ruff
+def test_exceptions_raised_inside_handlers_are_chained() -> None:
+    """
+    ``raise X`` inside an ``except`` block discards the original traceback.
+
+    Every API error handler translates an internal failure into an HTTPException,
+    so without ``from exc`` the log shows the 500 but not what caused it. 16 sites
+    now chain; the one deliberate ``from None`` is the duplicate-email conflict,
+    where the constraint name would disclose schema detail and the outcome is
+    expected rather than an internal failure.
+    """
+    status, output = run_ruff("B904")
+
+    assert status == 0, f"unchained exceptions inside handlers:\n{output}"
+
+
+@requires_ruff
 def test_no_unreviewed_sql_string_construction() -> None:
     """
     Every dynamically assembled SQL statement must be reviewed and suppressed

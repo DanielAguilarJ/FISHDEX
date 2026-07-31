@@ -394,7 +394,7 @@ async def _persist_upload(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al escribir el archivo de captura en el disco",
-        )
+        ) from exc
 
     logger.info(
         "Saved raw %s for job %s (%.1f KB)", media_type, job_id, len(content) / 1024
@@ -490,7 +490,7 @@ async def upload_job_video(
     except MediaValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        )
+        ) from exc
 
     owner_id = _resolve_owner_id(principal, user_id)
 
@@ -528,7 +528,7 @@ async def upload_job_video(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al registrar el trabajo en la base de datos",
-        )
+        ) from exc
 
     background_tasks.add_task(process_identification_job, job_id)
     return {"job_id": job_id}
