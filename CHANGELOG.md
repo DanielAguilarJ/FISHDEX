@@ -275,16 +275,66 @@ Read this section before deploying.
   `unawaited_futures`, `avoid_print`, `avoid_dynamic_calls`.
 - **`print()` replaced with `logging`** in the MCP server and the OBB extractor.
 
+### Removed
+
+Deleted 1 332 lines of unreachable code. With `POST /api/v1/identify` retired,
+its entire supporting chain became dead; verified by grepping the import graph.
+
+| Module | Lines | Why it was dead |
+|--------|-------|-----------------|
+| `app/services/inference.py` | 351 | Imported by nothing |
+| `app/services/similarity_service.py` | 405 | Imported only by `inference.py` |
+| `app/services/subset_service.py` | 139 | Imported only by `inference.py` |
+| `app/services/crop_service.py` | 117 | Superseded by `obb_roi_service`, which says so in its own docstring |
+| `app/services/embedding_service.py` | 156 | ResNet50 encoder, replaced by FishEncoder |
+| `app/models/schemas.py` | 108 | Every schema orphaned |
+
+Also removed what they left behind: the legacy ONNX crop model pre-load in
+`main.py`, `storage_service.get_restricted_history` (only caller was
+`inference.py`), and `config.onnx_model_path` (only consumer was `crop_service`).
+
+This eliminated 5 of the 50 functions over 50 lines, including
+`inference.identify_fish` (271 lines) and `similarity_service.find_best_match`
+(153).
+
+### Code quality
+
+- **Type annotations completed.** Return hints 90% → 95%, argument hints
+  93% → 97%. The recurring gap was an untyped `detection` parameter threaded
+  through 12 functions; detections arrive both as the `DetectionResult` dataclass
+  from `detector_service` and as plain dicts from the tracking and retry paths, so
+  `crop_utils` now defines a `DetectionProtocol` and a `DetectionLike` alias that
+  documents the contract without forcing either producer into a shared base class.
+- **Docstring coverage 85% → 100%** (390/390 functions). The largest gap was
+  `fish_encoder_model.py` (24 undocumented methods), where the `nn.Module` forward
+  passes now state their tensor shapes. Where a design choice is non-obvious the
+  docstring explains why rather than restating the code — for example that
+  `MixStyle` and `DropBlock` are no-ops at eval time and therefore never perturb
+  inference embeddings, and that `AddCoords` matters because the spot pattern is
+  always sampled from the same body region.
+- **`process_identification_job` preparation phase extracted, tests first.**
+  The function is ~1 290 lines with 11% coverage, so 13 characterization tests
+  were written *before* touching it, pinning return payloads and database state.
+  They passed unmodified against the original function, which is what makes them a
+  valid safety net. Steps 0–4 are now five helpers of 21–44 lines plus a
+  `JobAlreadyHandled` exception that carries the early-exit payload, keeping the
+  two "another worker has it" paths out of the main flow. The claimable statuses
+  moved into a `CLAIMABLE_STATUSES` constant so the status guard and the atomic
+  `UPDATE` can no longer drift apart — the tuple was previously duplicated between
+  an if-chain and a hardcoded SQL `IN` clause. `job_service` coverage 11% → 22%.
+
 ### Verification
 
 | Check | Result |
 |-------|--------|
-| `pytest` (ai-server) | 336 passed, 0 failed (was 257 passed, 5 failed) |
+| `pytest` (ai-server) | 349 passed, 0 failed (was 257 passed, 5 failed) |
 | `pytest` (scripts) | 13 passed |
 | `flutter analyze` | 0 errors, 0 warnings |
 | `flutter build bundle` | succeeds |
 | `flutter test` | 9 passed |
 | `caddy validate` | valid, no warnings |
+| Docstring coverage | 100% (390/390 functions) |
+| Type hints | 95% returns, 97% arguments |
 | Coverage of hardened modules | `security` 97%, `media_validation` 97%, `crop_utils` 90%, `matching_service` 83%, `result_cache` 82% |
 
 ### Known gaps
@@ -298,16 +348,15 @@ Deliberately out of scope; each is a separate, larger piece of work.
   depends on a null provider and will throw on interaction. Completing the
   migration to the REST API — or removing the dead paths — is the prerequisite for
   turning `strict-casts` on.
-- **`job_service.process_identification_job` is ~1 400 lines** and runs the
-  identification pipeline twice per job (once before the write lock, once inside
-  it). Splitting it is a refactor with real regression risk and needs its own test
-  scaffold first; test coverage of that module is 11%.
+- **`job_service.process_identification_job` is still ~1 200 lines** after the
+  preparation phase was extracted, and it runs the identification pipeline twice
+  per job (once before the write lock, once inside it). The remaining seams —
+  frame decoding and candidate collection, the critical transaction, and artifact
+  staging — each need their own characterization tests before extraction, on the
+  same tests-first basis used for steps 0–4. Module coverage is 22%.
 - **The dashboard needs `'unsafe-inline'` in its CSP** because of 17 inline
   `onclick` handlers and 3 inline `<script>` blocks. Moving them to
   `addEventListener` would allow a nonce-based policy.
-- **`inference.py`, `similarity_service.py` and `crop_service.py` are legacy**,
-  reachable only from the retired `/identify` path. They are still imported and
-  therefore kept, but should be deleted once nothing references them.
 - **`MatchingService.find_match` loads every embedding for a species into memory**
   and filters by GPS in Python. Fine at current gallery size; needs an index
   (FAISS, sqlite-vec, or a spatial pre-filter) before it grows.
