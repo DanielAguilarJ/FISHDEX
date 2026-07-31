@@ -933,6 +933,86 @@ def _map_pipeline_decision(
     )
 
 
+@dataclass(frozen=True)
+class LinkageContext:
+    """
+    Inputs shared by both linkage documents (repeat-capture and definitive).
+
+    Grouping them keeps :func:`build_linkage_base` from taking a dozen positional
+    arguments, and makes it obvious that both paths are fed identical evidence.
+    """
+
+    area_code: str
+    latitude: Optional[float]
+    longitude: Optional[float]
+    match_margin: float
+    top2_score: float
+    candidates_evaluated: int
+    quality_score: float
+    track_consistent: bool
+    multiple_fish_detected: bool
+
+
+def build_linkage_base(
+    context: LinkageContext, outcome: DecisionOutcome, reasons: object
+) -> dict:
+    """
+    Build the fields every linkage document carries, whichever path produced it.
+
+    The two paths previously built their dicts independently and shared 18 of
+    ~23 keys, so adding evidence to one silently omitted it from the other. The
+    common base now lives here and each path adds only what is genuinely specific
+    to it.
+
+    Note ``requires_human_review`` is always False, including on the
+    repeat-capture path. That is not a contradiction: the manual-review queue was
+    removed in favour of forced-decision logic, so no document ever asks a human
+    to adjudicate. ``decision`` and ``confidence_band`` carry that information
+    instead.
+
+    Args:
+        context: Evidence shared by both paths.
+        outcome: The mapped pipeline decision.
+        reasons: Decision reasons from the pipeline, stored verbatim.
+
+    Returns:
+        A new dict holding the common linkage fields.
+    """
+    return {
+        "strategy": "unified_pipeline_v1",
+        "threshold": settings.reid_similarity_threshold,
+        "top2_score": round(top2_score_or_zero(context.top2_score), 4),
+        "margin": round(context.match_margin or 0.0, 4),
+        "confidence_band": outcome.confidence_band,
+        "decision": outcome.linkage_decision,
+        # See the note above: there is no manual-review queue any more.
+        "requires_human_review": False,
+        "reasons": reasons,
+        "area_code": context.area_code,
+        "latitude": context.latitude,
+        "longitude": context.longitude,
+        "nearby_area_radius_km": settings.nearby_area_radius_km,
+        "candidates_evaluated": context.candidates_evaluated,
+        "quality_score": context.quality_score,
+        "track_consistent": context.track_consistent,
+        "multiple_fish_detected": context.multiple_fish_detected,
+    }
+
+
+def top2_score_or_zero(value: Optional[float]) -> float:
+    """
+    Coerce a possibly-absent runner-up score to a number.
+
+    Args:
+        value: The second-best candidate's score, or None when there was no
+            runner-up (an empty or single-entry gallery).
+
+    Returns:
+        The score, or 0.0.
+    """
+    return float(value) if value is not None else 0.0
+
+
 def process_identification_job(
     job_id: str,
     force: bool = False,
@@ -1514,29 +1594,31 @@ def process_identification_job(
                 final_status = "repeat_capture"
                 xp_earned = 0
 
-                linkage = {
-                    "is_linked": False,
-                    "strategy": "unified_pipeline_v1",
-                    "threshold": settings.reid_similarity_threshold,
-                    "matched_fish_id": None,
-                    "proposed_fish_id": proposed_fish_id,
-                    "proposed_score": round(match_confidence, 4),
-                    "top2_fish_id": scoring.top2_fish_id if scoring else None,
-                    "top2_score": round(top2_score, 4),
-                    "margin": round(match_margin, 4),
-                    "confidence_band": confidence_band,
-                    "decision": linkage_decision,
-                    "requires_human_review": False,
-                    "reasons": pipeline_result.reasons,
-                    "area_code": area_code_clean,
-                    "latitude": job_doc.get("latitude"),
-                    "longitude": job_doc.get("longitude"),
-                    "nearby_area_radius_km": settings.nearby_area_radius_km,
-                    "candidates_evaluated": candidates_evaluated,
-                    "quality_score": quality_score,
-                    "track_consistent": track_consistent,
-                    "multiple_fish_detected": multiple_fish_detected,
-                }
+                linkage_context = LinkageContext(
+                    area_code=area_code_clean,
+                    latitude=job_doc.get("latitude"),
+                    longitude=job_doc.get("longitude"),
+                    match_margin=match_margin,
+                    top2_score=top2_score,
+                    candidates_evaluated=candidates_evaluated,
+                    quality_score=quality_score,
+                    track_consistent=track_consistent,
+                    multiple_fish_detected=multiple_fish_detected,
+                )
+                linkage = build_linkage_base(
+                    linkage_context, outcome, pipeline_result.reasons
+                )
+                # Repeat-capture specifics: nothing was linked, and the candidate
+                # that *would* have been chosen is recorded as a proposal only.
+                linkage.update(
+                    {
+                        "is_linked": False,
+                        "matched_fish_id": None,
+                        "proposed_fish_id": proposed_fish_id,
+                        "proposed_score": round(match_confidence, 4),
+                        "top2_fish_id": scoring.top2_fish_id if scoring else None,
+                    }
+                )
 
                 # Build similarity reference for the repeat capture case
                 similarity_reference = _build_similarity_reference(
@@ -1649,33 +1731,36 @@ def process_identification_job(
 
             xp_earned = _calculate_xp(species_info, is_new_fish)
 
-            linkage = {
-                "is_linked": not is_new_fish,
-                "strategy": "unified_pipeline_v1",
-                "threshold": settings.reid_similarity_threshold,
-                "matched_fish_id": matched_fish_id,
-                "final_fish_id": fish_id,
-                "previous_sighting_id": previous_sighting_id,
-                "match_confidence": round(match_confidence, 4),
-                "top2_score": round(top2_score, 4),
-                "margin": round(match_margin, 4),
-                "confidence_band": confidence_band,
-                "decision": linkage_decision,
-                "requires_human_review": False,
-                "reasons": pipeline_result.reasons,
-                "total_sightings_before": total_sightings_before,
-                "total_sightings_after": total_sightings_after,
-                "same_species_required": True,
-                "area_code": area_code_clean,
-                "latitude": job_doc.get("latitude"),
-                "longitude": job_doc.get("longitude"),
-                "nearby_area_radius_km": settings.nearby_area_radius_km,
-                "candidates_evaluated": candidates_evaluated,
-                "quality_score": quality_score,
-                "track_consistent": track_consistent,
-                "multiple_fish_detected": multiple_fish_detected,
-                "model_version": pipeline_result.model_version,
-            }
+            linkage = build_linkage_base(
+                LinkageContext(
+                    area_code=area_code_clean,
+                    latitude=job_doc.get("latitude"),
+                    longitude=job_doc.get("longitude"),
+                    match_margin=match_margin,
+                    top2_score=top2_score,
+                    candidates_evaluated=candidates_evaluated,
+                    quality_score=quality_score,
+                    track_consistent=track_consistent,
+                    multiple_fish_detected=multiple_fish_detected,
+                ),
+                outcome,
+                pipeline_result.reasons,
+            )
+            # Definitive specifics: an identity was assigned, so record what it
+            # linked to and how the sighting count moved.
+            linkage.update(
+                {
+                    "is_linked": not is_new_fish,
+                    "matched_fish_id": matched_fish_id,
+                    "final_fish_id": fish_id,
+                    "previous_sighting_id": previous_sighting_id,
+                    "match_confidence": round(match_confidence, 4),
+                    "total_sightings_before": total_sightings_before,
+                    "total_sightings_after": total_sightings_after,
+                    "same_species_required": True,
+                    "model_version": pipeline_result.model_version,
+                }
+            )
 
             # Build similarity reference for the definitive case
             similarity_reference = _build_similarity_reference(
