@@ -146,6 +146,23 @@ _IDENTIFICATION_JOB_COLUMNS: dict[str, str] = {
     "total_sightings_after": "INTEGER DEFAULT 1",
     "linkage_json": "TEXT",
     "retry_count": "INTEGER DEFAULT 0",
+    # ── Columns the application writes that were previously provided ONLY by
+    # migration 001. `_apply_versioned_migrations` downgrades a migration failure
+    # to a warning, so on a database where 001 did not run these were absent and
+    # the write failed with "no such column" at runtime:
+    #   * POST /api/v1/jobs/upload writes all five gps_*/area_selection_source
+    #     columns on every capture
+    #   * the repeat-capture branch writes result_json and updated_at
+    # `_ensure_columns` is idempotent (it consults PRAGMA table_info first) and
+    # migration 001 also checks before adding, so declaring them here is safe and
+    # makes the base schema self-sufficient.
+    "updated_at": "TEXT",
+    "result_json": "TEXT",
+    "gps_accuracy_m": "REAL",
+    "gps_timestamp": "TEXT",
+    "gps_is_mocked": "INTEGER DEFAULT 0",
+    "gps_source": "TEXT",
+    "area_selection_source": "TEXT",
     # Similarity reference (migration 004)
     "match_reference_fish_id": "TEXT",
     "match_reference_sighting_id": "TEXT",
