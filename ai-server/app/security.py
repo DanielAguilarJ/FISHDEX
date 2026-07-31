@@ -44,7 +44,7 @@ MAX_PASSWORD_LENGTH = 1024  # Guard against DoS via multi-MB PBKDF2 input.
 
 # ── Session token parameters ────────────────────────────────────────────────
 TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
-_TOKEN_SEPARATOR = "."
+_TOKEN_SEPARATOR = "."  # noqa: S105 — field separator, not a secret
 
 
 # ─────────────────────────────────────────────────────────────────────────────

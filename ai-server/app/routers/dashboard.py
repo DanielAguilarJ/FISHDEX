@@ -15,6 +15,20 @@ from app.services.detector_service import get_detector_service
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
+# Statuses a job row may hold. Used to validate the dashboard filter so a typo
+# returns 400 rather than an empty list that looks like "no jobs".
+JOB_STATUSES: frozenset[str] = frozenset(
+    {
+        "uploaded",
+        "processing",
+        "pending_crop",
+        "completed",
+        "repeat_capture",
+        "needs_manual_review",
+        "failed",
+    }
+)
+
 def _validate_dashboard_auth(
     x_fishdex_dashboard_secret: Optional[str] = None,
     secret: Optional[str] = None,
@@ -135,22 +149,47 @@ async def get_dashboard_jobs(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
-    """List identification jobs from local SQLite with pagination and status filtering."""
+    """
+    List identification jobs from local SQLite with pagination and status filtering.
+
+    Args:
+        limit: Page size, 1-500.
+        offset: Page offset.
+        status: Optional status filter; must be one of :data:`JOB_STATUSES`.
+        x_fishdex_dashboard_secret: Dashboard secret header.
+        secret: Dashboard secret query parameter (legacy).
+
+    Returns:
+        Dict with ``jobs``, ``total``, ``limit``, ``offset`` and ``has_more``.
+
+    Raises:
+        HTTPException 400: Unknown status filter.
+        HTTPException 401: Invalid dashboard secret.
+        HTTPException 500: Query failure.
+    """
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
+
+    if status is not None and status not in JOB_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown status filter. Allowed: {sorted(JOB_STATUSES)}",
+        )
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Build WHERE clause for optional status filter
+        # The only interpolated fragment is one of two fixed literals chosen by a
+        # boolean; the client-supplied `status` value travels as a bound parameter.
+        # Ruff cannot see that, hence the suppressions below.
         where_clause = "WHERE status = ?" if status else ""
         count_params = (status,) if status else ()
         query_params = (status, limit, offset) if status else (limit, offset)
 
         # Get total count for pagination metadata
         cursor.execute(
-            f"SELECT COUNT(*) FROM identification_jobs {where_clause}",
+            f"SELECT COUNT(*) FROM identification_jobs {where_clause}",  # noqa: S608
             count_params,
         )
         total_count = cursor.fetchone()[0]
@@ -162,7 +201,7 @@ async def get_dashboard_jobs(
             {where_clause}
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
-            """,
+            """,  # noqa: S608
             query_params,
         )
         rows = cursor.fetchall()

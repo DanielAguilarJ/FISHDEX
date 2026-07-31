@@ -120,8 +120,10 @@ def get_map_sightings(
     params.append(limit)
     # The WHERE clause is assembled from the fixed literals above only; no
     # user-controlled string ever reaches the SQL text.
+    # `filters` holds only the fixed literals declared above; the caller's id and
+    # limit travel as bound parameters. Ruff cannot prove that, hence the noqa.
     query = (
-        "SELECT * FROM fish_sightings "
+        "SELECT * FROM fish_sightings "  # noqa: S608
         f"WHERE {' AND '.join(filters)} "
         "ORDER BY captured_at DESC LIMIT ?"
     )

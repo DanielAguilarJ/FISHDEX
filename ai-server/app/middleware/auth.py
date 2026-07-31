@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # ─── Bearer token extractor ─────────────────────────────────────────────
 _bearer_scheme = HTTPBearer(auto_error=False)
 
-CLIENT_SECRET_HEADER = "X-FishDex-Client-Secret"
+CLIENT_SECRET_HEADER = "X-FishDex-Client-Secret"  # noqa: S105 — header name, not a secret
 
 
 # ─── Authenticated principal ────────────────────────────────────────────

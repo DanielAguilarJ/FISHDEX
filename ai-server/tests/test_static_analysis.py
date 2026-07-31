@@ -127,6 +127,77 @@ def test_no_f_string_in_logging_calls_without_placeholders() -> None:
 
 
 @requires_ruff
+def test_no_unreviewed_sql_string_construction() -> None:
+    """
+    Every dynamically assembled SQL statement must be reviewed and suppressed
+    explicitly.
+
+    Four sites legitimately interpolate SQL, and all four interpolate only fixed
+    internal literals (a chosen WHERE fragment, or a run of '?' placeholders sized
+    from a module constant) while every value travels as a bound parameter. Each
+    carries a `# noqa: S608` with that reasoning. This test fails if a new,
+    unreviewed one appears.
+    """
+    status, output = run_ruff("S608")
+
+    assert status == 0, f"unreviewed SQL string construction:\n{output}"
+
+
+@requires_ruff
+def test_no_unreviewed_hardcoded_credentials() -> None:
+    """
+    No hardcoded credential may be introduced without review.
+
+    The five current matches are false positives — three placeholder defaults that
+    startup rejects in production, one HTTP header *name*, and one token field
+    separator — and each is suppressed with that explanation.
+    """
+    status, output = run_ruff("S105", "S106", "S107")
+
+    assert status == 0, f"unreviewed hardcoded credentials:\n{output}"
+
+
+@requires_ruff
+def test_no_insecure_deserialisation_or_shell_use() -> None:
+    """
+    Guards the two remote-code-execution vectors this audit removed: pickle-based
+    deserialisation and shell-interpolated subprocess calls.
+    """
+    status, output = run_ruff("S301", "S302", "S602", "S604", "S605")
+
+    assert status == 0, f"insecure deserialisation or shell use:\n{output}"
+
+
+@requires_ruff
+def test_no_unsafe_yaml_or_eval() -> None:
+    """`eval`, `exec` and `yaml.load` without a safe loader all execute input."""
+    status, output = run_ruff("S307", "S506")
+
+    assert status == 0, f"unsafe eval/exec/yaml usage:\n{output}"
+
+
+@requires_ruff
+def test_no_binding_to_all_interfaces() -> None:
+    """
+    Guards against a service silently listening on 0.0.0.0.
+
+    The MCP server used to, with no authentication of its own. The FastAPI app
+    binds via uvicorn arguments behind Caddy, not in Python source.
+    """
+    status, output = run_ruff("S104")
+
+    assert status == 0, f"hardcoded bind to all interfaces:\n{output}"
+
+
+@requires_ruff
+def test_no_requests_without_a_timeout() -> None:
+    """An outbound call with no timeout can hang a worker indefinitely."""
+    status, output = run_ruff("S113")
+
+    assert status == 0, f"network call without timeout:\n{output}"
+
+
+@requires_ruff
 def test_no_comparison_to_none_with_equality() -> None:
     """``== None`` is not the same test as ``is None`` for objects with __eq__."""
     status, output = run_ruff("E711")

@@ -149,9 +149,11 @@ class Settings(BaseSettings):
 
     # ── Auth settings ────────────────────────────────────────────────
     skip_auth: bool = False
-    ai_server_secret: str = "change-me-in-production"
-    client_secret: str = "change-me"
-    dashboard_secret: str = "change-me"
+    # Deliberate placeholders, not secrets: startup aborts in production while any
+    # of them still holds one of these values (see placeholder_secret_names).
+    ai_server_secret: str = "change-me-in-production"  # noqa: S105
+    client_secret: str = "change-me"  # noqa: S105
+    dashboard_secret: str = "change-me"  # noqa: S105
     environment: str = "development"
     device: str = "cpu"
 

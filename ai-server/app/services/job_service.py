@@ -715,8 +715,10 @@ def _claim_job(
     logger.info("[Job %s] Attempting atomic status transition to 'processing'", job_id)
     now_str = datetime.now(timezone.utc).isoformat()
     placeholders = ", ".join("?" for _ in CLAIMABLE_STATUSES)
+    # `placeholders` is a run of '?' sized from the CLAIMABLE_STATUSES constant;
+    # every value is bound. No user input reaches the SQL text.
     cursor.execute(
-        "UPDATE identification_jobs "
+        "UPDATE identification_jobs "  # noqa: S608
         "SET status = 'processing', started_at = ?, error_message = NULL "
         f"WHERE id = ? AND status IN ({placeholders})",
         (now_str, job_id, *CLAIMABLE_STATUSES),
