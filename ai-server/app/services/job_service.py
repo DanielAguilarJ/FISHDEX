@@ -40,7 +40,13 @@ from app.utils.video import (
     select_best_n_frames,
 )
 from app.utils.area_utils import normalize_area_code
-from app.utils.crop_utils import crop_fish_best, crop_obb_rotated, crop_bbox_aligned_strict, crop_bbox_preserve_frame_aspect
+from app.utils.crop_utils import (
+    DetectionLike,
+    crop_bbox_aligned_strict,
+    crop_bbox_preserve_frame_aspect,
+    crop_fish_best,
+    crop_obb_rotated,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +117,7 @@ def _emit_progress(job_id: str, status: str, progress: int, message: str) -> Non
         lambda: asyncio.ensure_future(event_bus.emit("job_progress", payload))
     )
 
-def _get_detection_confidence(detection) -> float:
+def _get_detection_confidence(detection: Optional[DetectionLike]) -> float:
     if detection is None:
         return 0.0
 
@@ -121,7 +127,7 @@ def _get_detection_confidence(detection) -> float:
     return float(getattr(detection, "confidence", 0.0) or 0.0)
 
 
-def _get_detection_bbox(detection):
+def _get_detection_bbox(detection: Optional[DetectionLike]) -> Optional[tuple]:
     if detection is None:
         return None
 
@@ -131,7 +137,9 @@ def _get_detection_bbox(detection):
     return getattr(detection, "bbox_xyxy", None)
 
 
-def _crop_fish_from_frame(frame: np.ndarray, detection) -> Optional[np.ndarray]:
+def _crop_fish_from_frame(
+    frame: np.ndarray, detection: Optional[DetectionLike]
+) -> Optional[np.ndarray]:
     """
     Primary crop: OBB-rotated tight crop using the detected width, height and
     rotation from the model. Falls back to axis-aligned bbox if OBB fails.
@@ -143,7 +151,9 @@ def _crop_fish_from_frame(frame: np.ndarray, detection) -> Optional[np.ndarray]:
     return result
 
 
-def _crop_primary_reid_roi(frame: np.ndarray, detection) -> Optional[np.ndarray]:
+def _crop_primary_reid_roi(
+    frame: np.ndarray, detection: Optional[DetectionLike]
+) -> Optional[np.ndarray]:
     """
     Returns the complete fish ROI used as input to ReID and storage.
 
@@ -162,7 +172,9 @@ def _crop_primary_reid_roi(frame: np.ndarray, detection) -> Optional[np.ndarray]
     return crop_fish_best(frame, detection, pad_frac=settings.crop_padding_frac)
 
 
-def _detection_area_ratio(detection, frame_shape) -> float:
+def _detection_area_ratio(
+    detection: Optional[DetectionLike], frame_shape: tuple
+) -> float:
     """Return ratio of OBB area to frame area (0.0–1.0)."""
     polygon = None
     if detection is not None:
@@ -230,7 +242,11 @@ def _sharpness_score(image: np.ndarray) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def _candidate_score(frame: np.ndarray, detection, crop: Optional[np.ndarray] = None) -> float:
+def _candidate_score(
+    frame: np.ndarray,
+    detection: Optional[DetectionLike],
+    crop: Optional[np.ndarray] = None,
+) -> float:
     """Combined quality score: 70% confidence + 20% sharpness + 10% tightness.
     If crop is provided, sharpness is measured on the crop (more accurate).
     Otherwise falls back to full frame."""
@@ -312,7 +328,7 @@ def _load_frames_from_media(path: str, media_type: str) -> list[np.ndarray]:
         max_side=settings.frame_max_side or 960,
     )
 
-def _generate_fish_id(cursor, area_code: str, species_slug: str) -> str:
+def _generate_fish_id(cursor: sqlite3.Cursor, area_code: str, species_slug: str) -> str:
     """Generate fish ID in format: CZ-{area_code_clean}-{ABBREV}-{NNNN} using local SQLite cursor."""
     area_code_clean = normalize_area_code(area_code)
 

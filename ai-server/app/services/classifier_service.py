@@ -29,7 +29,7 @@ INPUT_SIZE = 224
 class ClassifierService:
     """Fish species classifier using ONNX model with graceful fallback."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.model_path = Path(settings.classifier_model_path)
         self.labels_path = Path(settings.classifier_labels_path)
         self.session = None

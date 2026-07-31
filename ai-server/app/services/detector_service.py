@@ -106,7 +106,7 @@ def _nms_axis_aligned(
 class DetectorService:
     """YOLOv8 OBB fish detector using ONNX runtime with letterbox preprocessing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.model_path = Path(settings.detector_model_path)
         self.confidence_threshold = settings.detector_confidence_threshold
         self.session = None

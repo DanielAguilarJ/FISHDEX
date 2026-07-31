@@ -69,7 +69,7 @@ def _is_valid_tight(detection, frame_shape, min_conf: float, max_area: float) ->
     return True
 
 
-async def _retry_pending_crops():
+async def _retry_pending_crops() -> None:
     """Background loop: retry pending_crop jobs every 60 seconds."""
     logger.info("Crop retry service started")
 
@@ -114,7 +114,9 @@ async def _retry_pending_crops():
         await asyncio.sleep(60)
 
 
-async def _retry_single_job(job_id: str, raw_filename: str, media_type: str, retry_count: int):
+async def _retry_single_job(
+    job_id: str, raw_filename: str, media_type: str, retry_count: int
+) -> None:
     """Attempt one retry for a single pending_crop job."""
     from app.services.detector_service import get_detector_service
 
@@ -259,7 +261,7 @@ def _reset_job_for_full_pipeline(job_id: str, current_count: int) -> bool:
 
 
 
-def _increment_retry(job_id: str, current_count: int):
+def _increment_retry(job_id: str, current_count: int) -> None:
     """Increment retry_count in DB."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -325,7 +327,7 @@ def _mark_missing_media(job_id: str) -> None:
         conn.close()
 
 
-def start_retry_service():
+def start_retry_service() -> None:
     """Start the background crop retry task."""
     global _retry_task
     if _retry_task is None:

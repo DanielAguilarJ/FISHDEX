@@ -26,12 +26,35 @@ NO fallback to center-crop — if there's no valid detection, returns None.
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional, Protocol, Union, runtime_checkable
 
 import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Detection shape
+# ---------------------------------------------------------------------------
+# Detections arrive from two places with the same duck-typed shape:
+#   * DetectionResult dataclasses produced by detector_service
+#   * plain dicts produced by the tracking and retry paths
+# A Protocol documents the contract without forcing either producer to inherit
+# from a common base, and the alias keeps the 12 call signatures readable.
+
+
+@runtime_checkable
+class DetectionProtocol(Protocol):
+    """Attribute-style detection: an object exposing polygon and bbox."""
+
+    polygon: Optional[list]
+    bbox_xyxy: Optional[tuple]
+
+
+#: Either an object satisfying :class:`DetectionProtocol` or a mapping with
+#: ``polygon`` / ``bbox_xyxy`` (or legacy ``bbox``) keys.
+DetectionLike = Union[DetectionProtocol, dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +74,7 @@ class OBBRectification:
     output_height: int
 
 
-def _get_polygon(detection) -> Optional[list]:
+def _get_polygon(detection: Optional[DetectionLike]) -> Optional[list]:
     """Extract the OBB polygon corner list from any detection object."""
     if detection is None:
         return None
@@ -60,7 +83,7 @@ def _get_polygon(detection) -> Optional[list]:
     return getattr(detection, "polygon", None)
 
 
-def _get_bbox(detection) -> Optional[tuple]:
+def _get_bbox(detection: Optional[DetectionLike]) -> Optional[tuple]:
     """Extract the axis-aligned bbox_xyxy from any detection object."""
     if detection is None:
         return None
@@ -70,7 +93,7 @@ def _get_bbox(detection) -> Optional[tuple]:
 
 
 def get_obb_rectification(
-    detection,
+    detection: Optional[DetectionLike],
     pad_frac: float = 0.01,
 ) -> Optional[OBBRectification]:
     """
@@ -131,7 +154,7 @@ def get_obb_rectification(
 
 def crop_obb_rotated(
     frame: np.ndarray,
-    detection,
+    detection: Optional[DetectionLike],
     pad_frac: float = 0.01,
 ) -> Optional[np.ndarray]:
     """
@@ -161,7 +184,7 @@ def crop_obb_rotated(
 
 def crop_bbox_aligned_strict(
     frame: np.ndarray,
-    detection,
+    detection: Optional[DetectionLike],
     pad_frac: float = 0.01,
 ) -> Optional[np.ndarray]:
     """
@@ -197,7 +220,7 @@ def crop_bbox_aligned_strict(
 
 def crop_fish_best(
     frame: np.ndarray,
-    detection,
+    detection: Optional[DetectionLike],
     pad_frac: float = 0.01,
 ) -> Optional[np.ndarray]:
     """
@@ -253,7 +276,7 @@ def pad_image_to_aspect(
 
 def crop_bbox_preserve_frame_aspect(
     frame: np.ndarray,
-    detection,
+    detection: Optional[DetectionLike],
     pad_frac: float = 0.01,
     fill_color: tuple[int, int, int] = (114, 114, 114),
 ) -> Optional[np.ndarray]:
@@ -321,7 +344,7 @@ def compute_fingerprint_box(
 
 
 def project_fingerprint_polygon_to_frame(
-    detection,
+    detection: Optional[DetectionLike],
     pad_frac: float = 0.01,
     x_start: float = 0.20,
     x_end: float = 0.80,

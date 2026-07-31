@@ -169,7 +169,7 @@ def build_eval_transform(
 class MixStyle(nn.Module):
     """MixStyle domain augmentation (no-op at eval time)."""
 
-    def __init__(self, p: float = 0.5, alpha: float = 0.3, eps: float = 1e-6):
+    def __init__(self, p: float = 0.5, alpha: float = 0.3, eps: float = 1e-6) -> None:
         super().__init__()
         self.p = float(p)
         self.alpha = float(alpha)
@@ -200,7 +200,7 @@ class MixStyle(nn.Module):
 class GeM(nn.Module):
     """Generalized Mean Pooling with per-channel learnable exponents."""
 
-    def __init__(self, in_dim: int, p: float = 3.0, eps: float = 1e-6):
+    def __init__(self, in_dim: int, p: float = 3.0, eps: float = 1e-6) -> None:
         super().__init__()
         self.p = nn.Parameter(torch.ones(in_dim) * p)
         self.eps = float(eps)
@@ -216,7 +216,7 @@ class GeM(nn.Module):
 class AdaCos(nn.Module):
     """Adaptive cosine softmax classifier head."""
 
-    def __init__(self, in_dim: int, n_classes: int, m: float = 0.2, init_s: float = 30.0):
+    def __init__(self, in_dim: int, n_classes: int, m: float = 0.2, init_s: float = 30.0) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.empty(n_classes, in_dim))
         nn.init.xavier_normal_(self.weight)
@@ -308,7 +308,7 @@ class DeformRefine(nn.Module):
 class AddCoords(nn.Module):
     """Append normalised (x, y [, r]) coordinate channels."""
 
-    def __init__(self, with_r: bool = True):
+    def __init__(self, with_r: bool = True) -> None:
         super().__init__()
         self.with_r = bool(with_r)
 
@@ -365,7 +365,7 @@ class CoordConv2d(nn.Module):
 class GlobalContext(nn.Module):
     """Lightweight global context squeeze-excitation."""
 
-    def __init__(self, channels: int, reduction: int = 4):
+    def __init__(self, channels: int, reduction: int = 4) -> None:
         super().__init__()
         hidden = max(1, channels // reduction)
         self.fc1 = nn.Conv2d(channels, hidden, 1, bias=False)
@@ -430,7 +430,7 @@ class HighResFusion(nn.Module):
 class DropBlock2D(nn.Module):
     """DropBlock regularisation (no-op at eval time)."""
 
-    def __init__(self, drop_prob: float = 0.08, block_size: int = 3):
+    def __init__(self, drop_prob: float = 0.08, block_size: int = 3) -> None:
         super().__init__()
         self.drop_prob = float(drop_prob)
         self.block_size = int(block_size)

@@ -79,7 +79,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 class MatchingService:
     """Fish re-identification via embedding similarity in SQLite."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.db_path = Path(settings.embeddings_db_path)
         self._ensure_db()
         logger.info("MatchingService initialized (db=%s)", self.db_path)

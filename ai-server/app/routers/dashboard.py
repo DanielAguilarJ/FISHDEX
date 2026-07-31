@@ -4,7 +4,7 @@ import os
 import time
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Header, Query
 
 from app.config import settings
@@ -58,7 +58,7 @@ def _validate_dashboard_auth(
 async def get_dashboard_status(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
-):
+) -> dict[str, Any]:
     """Retrieve detailed server metrics and local SQLite job stats."""
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
@@ -136,7 +136,7 @@ async def get_dashboard_jobs(
     status: Optional[str] = Query(default=None),
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
-):
+) -> dict[str, Any]:
     """List identification jobs from local SQLite with pagination and status filtering."""
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
@@ -237,7 +237,7 @@ async def retry_dashboard_job(
     job_id: str,
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
-):
+) -> dict[str, Any]:
     """
     Force reprocessing of a failed job.
 
@@ -298,7 +298,7 @@ async def get_dashboard_job_detail(
     job_id: str,
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
-):
+) -> dict[str, Any]:
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     conn = None
@@ -358,7 +358,7 @@ async def get_dashboard_job_document(
     job_id: str,
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
-):
+) -> dict[str, Any]:
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     conn = None
@@ -392,7 +392,7 @@ async def get_dashboard_fish_manifest(
     fish_id: str,
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
-):
+) -> dict[str, Any]:
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     conn = None
@@ -441,7 +441,7 @@ async def get_dashboard_fish_timeline(
     fish_id: str,
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
-):
+) -> dict[str, Any]:
     """
     Returns a chronological list of all captures (sightings) for a given fish_id.
     Includes location coordinates, dates, user IDs, media URLs, weather, size, etc.
