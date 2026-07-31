@@ -39,6 +39,35 @@ def _clear_result_cache() -> Iterator[None]:
     get_result_cache().clear()
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters() -> Iterator[None]:
+    """
+    Clear slowapi's counters before every test.
+
+    The limiters are module-level singletons with in-memory storage shared across
+    the whole session, and every test connects from the same client address. Without
+    this, a file that exercises the auth endpoints exhausts the quota and the *next*
+    file's tests receive 429 instead of the status they assert on — a failure whose
+    cause is in a different file entirely.
+
+    The limits themselves are verified deliberately in
+    ``test_account_lifecycle.py``.
+    """
+    from app.routers import auth as auth_router
+
+    limiters = [auth_router.limiter]
+    try:
+        from app.main import limiter as app_limiter
+
+        limiters.append(app_limiter)
+    except Exception:  # noqa: BLE001 — importing main is optional for unit tests
+        pass
+
+    for limiter in limiters:
+        limiter.reset()
+    yield
+
+
 @pytest.fixture
 def isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """

@@ -17,6 +17,14 @@ import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+# NOTE: patch attributes on THIS object, not "app.config.settings".
+# The modules under test do `from app.config import settings` at import time and
+# hold their own reference, so replacing the attribute on app.config has no
+# effect once they are imported. The previous form only worked when the test
+# happened to run before anything else imported them, which made the result
+# depend on test ordering.
+from app.config import settings as real_settings
+
 import numpy as np
 import pytest
 
@@ -83,8 +91,7 @@ class TestFindCropFiles:
         """Only images/crop_*.jpg should be returned."""
         tmp_path, art_rel = artifact_tree
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.server_data_dir = str(tmp_path)
+        with patch.object(real_settings, "server_data_dir", str(tmp_path)):
 
             from app.commands.rebuild_embeddings import _find_crop_files
             crops = _find_crop_files(art_rel)
@@ -99,12 +106,14 @@ class TestFindCropFiles:
         """preview.jpg should never be included."""
         tmp_path, art_rel = artifact_tree
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.server_data_dir = str(tmp_path)
+        with patch.object(real_settings, "server_data_dir", str(tmp_path)):
 
             from app.commands.rebuild_embeddings import _find_crop_files
             crops = _find_crop_files(art_rel)
 
+        # Assert non-empty first: these loops used to pass vacuously because the
+        # settings patch did not reach the module, so _find_crop_files returned [].
+        assert crops, "no crops found — the exclusion assertions would be vacuous"
         for p in crops:
             assert "preview" not in p.name
 
@@ -112,27 +121,31 @@ class TestFindCropFiles:
         """images_bbox/ directory crops should not be included."""
         tmp_path, art_rel = artifact_tree
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.server_data_dir = str(tmp_path)
+        with patch.object(real_settings, "server_data_dir", str(tmp_path)):
 
             from app.commands.rebuild_embeddings import _find_crop_files
             crops = _find_crop_files(art_rel)
 
+        assert crops, "no crops found — the exclusion assertion would be vacuous"
         for p in crops:
-            assert "images_bbox" not in str(p)
+            # Compare the parent directory only: pytest names the temp directory
+            # after the test, so the string "images_bbox" appears in the full path
+            # regardless of which directory the file came from.
+            assert p.parent.name == "images"
 
     def test_excludes_dataset(self, artifact_tree):
         """dataset/ directory should not be included."""
         tmp_path, art_rel = artifact_tree
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.server_data_dir = str(tmp_path)
+        with patch.object(real_settings, "server_data_dir", str(tmp_path)):
 
             from app.commands.rebuild_embeddings import _find_crop_files
             crops = _find_crop_files(art_rel)
 
+        assert crops, "no crops found — the exclusion assertion would be vacuous"
         for p in crops:
-            assert "dataset" not in str(p)
+            # Same reason as above: the temp directory name contains "dataset".
+            assert p.parent.name == "images"
 
     def test_empty_artifact_dir_returns_empty(self):
         """None or empty artifact_dir returns []."""
@@ -143,8 +156,7 @@ class TestFindCropFiles:
     def test_missing_images_dir_returns_empty(self, tmp_path):
         """If images/ doesn't exist, return []."""
         art_rel = "nonexistent/artifact"
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.server_data_dir = str(tmp_path)
+        with patch.object(real_settings, "server_data_dir", str(tmp_path)):
 
             from app.commands.rebuild_embeddings import _find_crop_files
             assert _find_crop_files(art_rel) == []
@@ -268,9 +280,8 @@ class TestStoreEmbeddingValidation:
         """Create a MatchingService with temp DB."""
         db_path = tmp_path / "test_embeddings.sqlite"
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.embeddings_db_path = str(db_path)
-            mock_settings.reid_cache_name = "test_v1"
+        with patch.object(real_settings, "embeddings_db_path", str(db_path)), \
+                patch.object(real_settings, "reid_cache_name", "test_v1"):
 
             from app.services.matching_service import MatchingService
             ms = MatchingService()
@@ -356,9 +367,8 @@ class TestEmbeddingIdempotency:
     def matching_service(self, tmp_path):
         db_path = tmp_path / "test_embeddings.sqlite"
 
-        with patch("app.config.settings") as mock_settings:
-            mock_settings.embeddings_db_path = str(db_path)
-            mock_settings.reid_cache_name = "test_v1"
+        with patch.object(real_settings, "embeddings_db_path", str(db_path)), \
+                patch.object(real_settings, "reid_cache_name", "test_v1"):
 
             from app.services.matching_service import MatchingService
             ms = MatchingService()
