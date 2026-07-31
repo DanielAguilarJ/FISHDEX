@@ -1,3 +1,24 @@
+"""
+FishDex AI Server - Identification job processing
+=================================================
+Owns the end-to-end processing of one capture: claim the job, decode frames, run
+detection and tracking, select the frames that carry the most independent
+evidence, embed them, run the identification pipeline, and commit the result.
+
+Concurrency model
+-----------------
+Two guards prevent duplicate identities for the same capture:
+
+* the job is claimed with an atomic ``UPDATE ... WHERE status IN (...)``, so only
+  one worker proceeds;
+* the identification pipeline is re-run inside ``BEGIN IMMEDIATE`` before the
+  write, so another job cannot insert a competing embedding between the match and
+  the commit.
+
+Idempotency is checked twice — once before any work, once inside the write lock —
+and both checks return the same payload shape.
+"""
+
 import logging
 import sqlite3
 import uuid

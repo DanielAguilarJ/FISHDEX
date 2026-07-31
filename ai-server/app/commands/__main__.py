@@ -1,13 +1,14 @@
 """Dispatcher for app.commands submodules."""
 import sys
+from typing import NoReturn
 
 
-def main():
+def main() -> NoReturn:
     """
-    Dispatch to an operational command.
+    Print the available operational commands and exit.
 
-    Returns:
-        Process exit status.
+    Terminates the process with ``sys.exit`` rather than returning, so the
+    exit status is the command's only output channel.
     """
     print("Usage:")
     print("  python -m app.commands.audit_embeddings [--strict] [--json-output PATH]")

@@ -21,6 +21,7 @@ import logging
 import shutil
 import sqlite3
 import sys
+from typing import NoReturn
 import time
 from datetime import datetime
 from pathlib import Path
@@ -438,12 +439,12 @@ def run_rebuild(
     return report
 
 
-def main():
+def main() -> NoReturn:
     """
-    Parse arguments and rebuild the embedding gallery.
+    Parse arguments, rebuild the embedding gallery and exit.
 
-    Returns:
-        Process exit status.
+    Terminates the process with ``sys.exit`` rather than returning, so the
+    exit status is the command's only output channel.
     """
     parser = argparse.ArgumentParser(
         description="Rebuild embeddings from sighting crop files.",

@@ -16,9 +16,11 @@ import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from collections.abc import Awaitable
 from typing import Any, Callable
 
 from fastapi import FastAPI, Request
+from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -295,7 +297,9 @@ else:
 
 
 @app.middleware("http")
-async def count_requests(request: Request, call_next):
+async def count_requests(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """
     Count every served request.
 

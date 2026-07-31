@@ -462,18 +462,20 @@ class CoordConv2d(nn.Module):
         groups: int = 1,
         bias: bool = False,
         with_r: bool = True,
-    ):
+    ) -> None:
         """
         Configure a convolution that receives coordinate channels.
 
         Args:
-            in_ch: Input channels, before the coordinate channels are appended.
-            out_ch: Output channels.
-            k: Kernel size.
+            in_channels: Input channels, before the coordinate channels are appended.
+            out_channels: Output channels.
+            kernel_size: Convolution kernel size.
             stride: Convolution stride.
-            padding: Convolution padding.
-            with_r: Append a radial channel in addition to x and y.
+            padding: Convolution padding; defaults to keeping the spatial size.
+            dilation: Convolution dilation.
+            groups: Convolution groups.
             bias: Whether the convolution learns a bias term.
+            with_r: Append a radial channel in addition to x and y.
         """
         super().__init__()
         if padding is None:
@@ -545,14 +547,16 @@ class HighResFusion(nn.Module):
         out_ch: int,
         mixstyle: Optional[nn.Module] = None,
         with_r: bool = True,
-    ):
+    ) -> None:
         """
         Configure fusion of a high-resolution map into a coarser one.
 
         Args:
-            high_ch: Channels of the high-resolution source map.
-            tgt_ch: Channels of the target map to fuse into.
-            mid_ch: Width of the alignment bottleneck.
+            ch_high: Channels of the high-resolution source map.
+            ch_tgt: Channels of the target map to fuse into.
+            out_ch: Channels of the fused output.
+            mixstyle: Optional MixStyle module applied to the aligned features.
+            with_r: Append a radial coordinate channel during alignment.
         """
         super().__init__()
         self.align = nn.Conv2d(ch_high, ch_high, kernel_size=1, bias=False)
@@ -681,17 +685,16 @@ class FishEncoder(nn.Module):
         num_classes: int,
         out_dim: int = 512,
         model_name: str = "convnext_small.fb_in22k_ft_in1k",
-    ):
+    ) -> None:
         """
         Build the encoder.
 
         Args:
+            num_classes: Identity count for the AdaCos training head. The head is
+                unused at inference, which reads the embedding before it.
+            out_dim: Embedding dimensionality.
             model_name: timm backbone identifier, e.g.
                 ``convnext_small.fb_in22k_ft_in1k``.
-            out_dim: Embedding dimensionality.
-            n_classes: Identity count for the training head; None for inference-only.
-            pretrained: Load ImageNet weights for the backbone.
-            drop_path_rate: Stochastic depth rate for the backbone.
         """
         super().__init__()
         # pretrained=False: weights come from the .pt checkpoint, not the internet

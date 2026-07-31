@@ -1,3 +1,14 @@
+"""
+FishDex AI Server - Capture artifact storage
+============================================
+Writes the durable record of an identification: ROI crops, annotated previews,
+the sighting document and the per-fish index.
+
+Artifact failures never abort an identification. A capture whose evidence could
+not be written is still a valid sighting, so every write here is best-effort and
+logged rather than raised.
+"""
+
 import json
 import shutil
 from pathlib import Path
@@ -36,7 +47,7 @@ def _storage_url(relative_path: str | None) -> str | None:
     Build the public storage URL for a stored relative path.
 
     Args:
-        relative: Path relative to the storage root.
+        relative_path: Path relative to the storage root.
 
     Returns:
         URL served by the /storage mount, with separators normalised.

@@ -1,3 +1,12 @@
+"""
+FishDex AI Server - Background system monitor
+=============================================
+Publishes CPU, memory and disk metrics to the dashboard event stream on a timer.
+
+The loop must survive a bad iteration: a monitoring failure is never a reason to
+stop serving identifications.
+"""
+
 import asyncio
 import logging
 import time

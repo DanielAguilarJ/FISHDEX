@@ -1,3 +1,13 @@
+"""
+FishDex AI Server - Operator dashboard API
+==========================================
+Read-only server metrics, job listing and artifact inspection for the operator
+dashboard, plus a force-reprocess action.
+
+Authenticated with the dashboard secret rather than a user session: the dashboard
+is an operations tool, not a user-facing surface.
+"""
+
 import asyncio
 import logging
 import json

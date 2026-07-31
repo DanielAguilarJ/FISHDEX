@@ -306,7 +306,7 @@ def select_best_n_frames(frames: List[np.ndarray], n: int = 5) -> List[np.ndarra
         Score a frame's sharpness by Laplacian variance.
 
         Args:
-            frame: BGR frame.
+            f: BGR frame.
 
         Returns:
             Variance of the Laplacian; higher means sharper.
