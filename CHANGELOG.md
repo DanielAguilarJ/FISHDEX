@@ -312,22 +312,50 @@ This eliminated 5 of the 50 functions over 50 lines, including
   `MixStyle` and `DropBlock` are no-ops at eval time and therefore never perturb
   inference embeddings, and that `AddCoords` matters because the spot pattern is
   always sampled from the same body region.
-- **`process_identification_job` preparation phase extracted, tests first.**
-  The function is ~1 290 lines with 11% coverage, so 13 characterization tests
-  were written *before* touching it, pinning return payloads and database state.
-  They passed unmodified against the original function, which is what makes them a
-  valid safety net. Steps 0–4 are now five helpers of 21–44 lines plus a
-  `JobAlreadyHandled` exception that carries the early-exit payload, keeping the
-  two "another worker has it" paths out of the main flow. The claimable statuses
-  moved into a `CLAIMABLE_STATUSES` constant so the status guard and the atomic
-  `UPDATE` can no longer drift apart — the tuple was previously duplicated between
-  an if-chain and a hardcoded SQL `IN` clause. `job_service` coverage 11% → 22%.
+- **`process_identification_job` decomposition, tests first.** The function was
+  ~1 290 lines with 11% coverage, so nothing was extracted without a safety net
+  first. It is now ~1 136 lines with nine helpers of 21–47 lines pulled out, and
+  module coverage is 27%.
+
+  For the stateful preparation phase (steps 0–4), 13 characterization tests were
+  written *before* touching the code and passed unmodified against the original
+  function — that is what makes them a valid net. For the pure pieces (species
+  resolution, the quality payload, temporal selection) the function was extracted
+  first and unit-tested directly, which is safe because the behaviour is a
+  function of its arguments.
+
+  Defects surfaced and fixed along the way:
+
+  - **Duplicated temporal NMS.** The selection algorithm existed twice — once as
+    `_select_with_temporal_diversity`, once reimplemented inline with a throwaway
+    `_MetaWrapper` class to get indices instead of objects. The copies had already
+    drifted: the inline version omitted the `max_count`/`min_gap` clamping, so a
+    non-positive `max_count` selected nothing instead of returning one frame. Both
+    now share `select_indices_with_temporal_diversity`, typed against a
+    `TemporallyScored` protocol the metadata records satisfy directly.
+  - **`dir()`-based local probing.** Six guards used `'name' in dir()` to test
+    whether a local had been assigned. `dir()` with no argument returns the current
+    local scope, so it happened to work, but it silently reports False from any
+    nested scope and is O(number of locals). Replaced with explicit `None`/default
+    sentinels, and a test keeps the idiom from returning.
+  - **Duplicated claimable-status list.** The status guard used an if-chain while
+    the atomic `UPDATE` hardcoded the same statuses in a SQL `IN` clause. They now
+    share a `CLAIMABLE_STATUSES` constant and cannot drift.
+  - **Unisolated coordinate conversion.** The quality payload converted
+    `bbox_xyxy` (corner-to-corner) to `[x, y, w, h]` (origin plus extent) inline.
+    Getting that wrong does not raise — it silently produces nonsensical area and
+    centring scores that then feed the repeat-capture decision — so it is now a
+    tested function.
+  - **Dead local.** `classifier_available` was assigned and never read.
+    `classification_result`/`classification_confidence` are kept (they are
+    persisted, and are always `None`/`0.0` because the detector is binary and the
+    angler confirms the species) but that is now documented rather than implicit.
 
 ### Verification
 
 | Check | Result |
 |-------|--------|
-| `pytest` (ai-server) | 349 passed, 0 failed (was 257 passed, 5 failed) |
+| `pytest` (ai-server) | 401 passed, 0 failed (was 257 passed, 5 failed) |
 | `pytest` (scripts) | 13 passed |
 | `flutter analyze` | 0 errors, 0 warnings |
 | `flutter build bundle` | succeeds |
@@ -335,6 +363,7 @@ This eliminated 5 of the 50 functions over 50 lines, including
 | `caddy validate` | valid, no warnings |
 | Docstring coverage | 100% (390/390 functions) |
 | Type hints | 95% returns, 97% arguments |
+| `job_service` coverage | 27% (was 11%) |
 | Coverage of hardened modules | `security` 97%, `media_validation` 97%, `crop_utils` 90%, `matching_service` 83%, `result_cache` 82% |
 
 ### Known gaps
@@ -348,12 +377,18 @@ Deliberately out of scope; each is a separate, larger piece of work.
   depends on a null provider and will throw on interaction. Completing the
   migration to the REST API — or removing the dead paths — is the prerequisite for
   turning `strict-casts` on.
-- **`job_service.process_identification_job` is still ~1 200 lines** after the
-  preparation phase was extracted, and it runs the identification pipeline twice
-  per job (once before the write lock, once inside it). The remaining seams —
-  frame decoding and candidate collection, the critical transaction, and artifact
-  staging — each need their own characterization tests before extraction, on the
-  same tests-first basis used for steps 0–4. Module coverage is 22%.
+- **`job_service.process_identification_job` is still ~1 136 lines** and runs the
+  identification pipeline twice per job (once before the write lock, once inside
+  it). Two seams account for most of what remains: the frame decoding and
+  candidate-collection pass, and the ~560-line critical transaction. Both mutate
+  database and filesystem state, so each needs its own characterization tests
+  before extraction, on the same tests-first basis used for steps 0–4. Module
+  coverage is 27%.
+- **The double pipeline run is a known performance cost**, not an oversight: the
+  second run happens under `BEGIN IMMEDIATE` so a concurrent job cannot create a
+  duplicate identity between the match and the write. Removing the first run would
+  be the cheaper fix, but it currently feeds the progress events and the
+  repeat-capture short circuit.
 - **The dashboard needs `'unsafe-inline'` in its CSP** because of 17 inline
   `onclick` handlers and 3 inline `<script>` blocks. Moving them to
   `addEventListener` would allow a nonce-based policy.

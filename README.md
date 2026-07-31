@@ -204,7 +204,7 @@ only in debug builds.
 ```sh
 cd ai-server
 pip install -r requirements.txt -r requirements-dev.txt
-pytest                                  # 349 tests
+pytest                                  # 401 tests
 pytest --cov=app --cov-report=term      # with coverage
 pytest -m "not slow"                    # skip tests that load real weights
 ```
