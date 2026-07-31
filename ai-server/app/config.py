@@ -88,9 +88,6 @@ class Settings(BaseSettings):
     fish_media_dir: str = "data/storage/fish_media"
     job_artifacts_dir: str = "data/storage/jobs"
 
-    # ── Legacy: ONNX model (kept for backward compat with old crop_service)
-    onnx_model_path: str = "norway fish/fin_detector_best.onnx"
-
     # ── New OBB ROI detector ─────────────────────────────────────────
     # Override: FISHDEX_OBB_MODEL_PATH, FISHDEX_OBB_CONF_THRESHOLD, etc.
     obb_model_path: str = "models/detector/obb_best.pt"

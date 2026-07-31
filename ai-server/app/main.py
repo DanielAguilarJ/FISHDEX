@@ -159,7 +159,6 @@ def _preload_models() -> None:
     first capture.
     """
     loaders: tuple[tuple[str, Callable[[], Any]], ...] = (
-        ("legacy ONNX crop model", _load_crop_service),
         ("OBB detector", _load_detector_service),
         ("species classifier", _load_classifier_service),
         ("FishEncoder ReID model", _load_reid_service),
@@ -169,13 +168,6 @@ def _preload_models() -> None:
             logger.info("%s: available=%s", label, loader())
         except Exception as exc:  # noqa: BLE001 — startup must not abort on one model
             logger.warning("Could not pre-load %s: %s", label, exc, exc_info=True)
-
-
-def _load_crop_service() -> bool:
-    """Instantiate the legacy ONNX crop service. Returns its availability."""
-    from app.services.crop_service import get_crop_service
-
-    return bool(get_crop_service().available)
 
 
 def _load_detector_service() -> bool:

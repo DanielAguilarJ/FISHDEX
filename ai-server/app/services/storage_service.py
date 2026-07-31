@@ -248,30 +248,6 @@ def list_fish_in_area(area_code: str, species_slug: Optional[str] = None) -> lis
     return sorted(fish_ids)
 
 
-def get_restricted_history(history: list[dict]) -> list[dict]:
-    """
-    Return history with GPS coordinates removed (for fisherman role).
-    Researchers get full history; fishermen get restricted version.
-
-    Args:
-        history: Full catch history list
-
-    Returns:
-        History with latitude/longitude fields removed or masked.
-    """
-    restricted = []
-    for catch in history:
-        catch_copy = {**catch}
-        # Remove exact GPS coordinates
-        catch_copy.pop("latitude", None)
-        catch_copy.pop("longitude", None)
-        catch_copy.pop("location_lat", None)
-        catch_copy.pop("location_lon", None)
-        # Keep area_code (general location is OK)
-        restricted.append(catch_copy)
-    return restricted
-
-
 def generate_fish_id(area_code: str, species_slug: str) -> str:
     """
     Generate a unique fish ID for a new fish.
