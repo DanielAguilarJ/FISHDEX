@@ -9,7 +9,8 @@ import json
 import shutil
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Any, Optional
+from collections.abc import Sequence
+from typing import Any, Optional, Protocol
 import numpy as np
 
 from app.config import settings
@@ -282,6 +283,69 @@ def _candidate_score(
     return (0.70 * conf) + (0.20 * sharp) + (0.10 * area_quality)
 
 
+class TemporallyScored(Protocol):
+    """
+    Anything the temporal-diversity selector can rank.
+
+    Both :class:`FrameCandidate` (which carries the decoded frame) and the
+    lightweight metadata records used during the first decoding pass satisfy it.
+    """
+
+    score: float
+    frame_index: int
+    timestamp_seconds: float
+
+
+def select_indices_with_temporal_diversity(
+    items: Sequence[TemporallyScored],
+    max_count: int = 5,
+    min_gap_seconds: float = 0.30,
+) -> list[int]:
+    """
+    Pick the indices of the best temporally-spread items (temporal NMS).
+
+    Sorts by quality (score descending, ``frame_index`` as a deterministic
+    tiebreaker), then greedily accepts an item only when it is at least
+    ``min_gap_seconds`` away from everything already accepted.
+
+    Deliberately does **not** backfill: if only two sufficiently distinct frames
+    exist, two are returned. Padding with near-duplicates would give the
+    multiframe vote several copies of the same view, which inflates apparent
+    agreement without adding evidence.
+
+    Args:
+        items: Candidates or metadata records to rank.
+        max_count: Maximum number of indices to return.
+        min_gap_seconds: Minimum temporal separation between selections.
+
+    Returns:
+        Indices into ``items``, in selection order (best first).
+    """
+    if not items:
+        return []
+    max_count = max(1, max_count)
+    min_gap_seconds = max(0.0, min_gap_seconds)
+
+    ranked = sorted(
+        range(len(items)),
+        key=lambda i: (-items[i].score, items[i].frame_index),
+    )
+
+    selected: list[int] = []
+    for index in ranked:
+        if len(selected) >= max_count:
+            break
+        timestamp = items[index].timestamp_seconds
+        if any(
+            abs(timestamp - items[chosen].timestamp_seconds) < min_gap_seconds
+            for chosen in selected
+        ):
+            continue
+        selected.append(index)
+
+    return selected
+
+
 def _select_with_temporal_diversity(
     candidates: list["FrameCandidate"],
     max_count: int = 5,
@@ -290,38 +354,24 @@ def _select_with_temporal_diversity(
     """
     Select top candidates with temporal diversity (temporal NMS).
 
-    Sorts by quality (score descending, frame_index as tiebreaker), then
-    greedily picks candidates that are at least min_gap_seconds apart from
-    all previously selected.
+    Thin wrapper over :func:`select_indices_with_temporal_diversity`. The
+    selection algorithm used to exist twice — once here and once inline in
+    ``process_identification_job``, where it was reimplemented to return indices
+    via a throwaway ``_MetaWrapper`` class. The two copies could drift, and did:
+    the inline version omitted the ``max_count``/``min_gap`` clamping.
 
-    Does NOT backfill with temporally-close frames. If only 2 diverse frames
-    exist, returns 2 — never pads with near-duplicates.
+    Args:
+        candidates: Frame candidates to rank.
+        max_count: Maximum number of candidates to return.
+        min_gap_seconds: Minimum temporal separation between selections.
+
+    Returns:
+        The selected candidates, best first.
     """
-    if not candidates:
-        return []
-    if max_count < 1:
-        max_count = 1
-    if min_gap_seconds < 0:
-        min_gap_seconds = 0.0
-
-    # Sort by quality descending, frame_index as deterministic tiebreaker
-    sorted_cands = sorted(candidates, key=lambda c: (-c.score, c.frame_index))
-
-    selected: list["FrameCandidate"] = []
-    for cand in sorted_cands:
-        if len(selected) >= max_count:
-            break
-        # Check temporal distance from all already selected
-        too_close = False
-        for sel in selected:
-            gap = abs(cand.timestamp_seconds - sel.timestamp_seconds)
-            if gap < min_gap_seconds:
-                too_close = True
-                break
-        if not too_close:
-            selected.append(cand)
-
-    return selected
+    indices = select_indices_with_temporal_diversity(
+        candidates, max_count=max_count, min_gap_seconds=min_gap_seconds
+    )
+    return [candidates[i] for i in indices]
 
 def _infer_media_type(filename: str | None, content_type: str | None = None) -> str:
     """
@@ -1055,41 +1105,13 @@ def process_identification_job(
             min_gap = settings.reid_min_selected_frame_gap_seconds
             temporal_diversity_applied = len(candidate_metadata) > 0
 
-            # Create temporary FrameCandidate-like objects for selection
-            # (reuse the same function signature by wrapping metadata)
-            class _MetaWrapper:
-                """Adapts a plain metadata mapping to the attribute access the pipeline expects."""
-
-                def __init__(self, m: Any) -> None:
-                    """
-                    Copy the three fields the selection helper reads.
-
-                    Args:
-                        m: Candidate metadata carrying frame index, timestamp and score.
-                    """
-                    self.frame_index = m.frame_index
-                    self.timestamp_seconds = m.timestamp_seconds
-                    self.score = m.score
-
-            meta_wrappers = [_MetaWrapper(m) for m in candidate_metadata]
-            # Sort by quality descending with temporal gap
-            selected_meta_indices: list[int] = []
-            meta_wrappers_sorted = sorted(
-                range(len(meta_wrappers)),
-                key=lambda i: (-meta_wrappers[i].score, meta_wrappers[i].frame_index),
+            # Metadata records expose score / frame_index / timestamp_seconds, so
+            # they satisfy TemporallyScored directly — no wrapper class needed.
+            selected_meta_indices = select_indices_with_temporal_diversity(
+                candidate_metadata,
+                max_count=max_selected,
+                min_gap_seconds=min_gap,
             )
-            for idx in meta_wrappers_sorted:
-                if len(selected_meta_indices) >= max_selected:
-                    break
-                too_close = False
-                for sel_idx in selected_meta_indices:
-                    gap = abs(meta_wrappers[idx].timestamp_seconds - meta_wrappers[sel_idx].timestamp_seconds)
-                    if gap < min_gap:
-                        too_close = True
-                        break
-                if not too_close:
-                    selected_meta_indices.append(idx)
-
             selected_metadata = [candidate_metadata[i] for i in selected_meta_indices]
 
             # --- Second pass: reconstruct only selected frames/crops ---
