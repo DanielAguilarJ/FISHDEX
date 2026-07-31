@@ -33,6 +33,7 @@ def _get_embeddings_conn() -> sqlite3.Connection:
 
 
 def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    """Report whether a column exists on a table."""
     cursor = conn.execute(f"PRAGMA table_info({table})")
     return column in {row[1] for row in cursor.fetchall()}
 
@@ -47,6 +48,7 @@ def _id_column_is_integer(conn: sqlite3.Connection) -> bool:
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    """Report whether a table exists in the database."""
     cursor = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
         (table,),

@@ -107,6 +107,7 @@ class DetectorService:
     """YOLOv8 OBB fish detector using ONNX runtime with letterbox preprocessing."""
 
     def __init__(self) -> None:
+        """Load the ONNX OBB detector session, if the model file is present."""
         self.model_path = Path(settings.detector_model_path)
         self.confidence_threshold = settings.detector_confidence_threshold
         self.session = None
@@ -138,6 +139,7 @@ class DetectorService:
 
     @property
     def available(self) -> bool:
+        """Whether the detector session loaded successfully."""
         return self._available
 
     def _preprocess(self, frame: np.ndarray) -> tuple[np.ndarray, float, int, int, int, int]:

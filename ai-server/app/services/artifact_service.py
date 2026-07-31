@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 def _write_jpg(path: Path, image: np.ndarray, quality: int | None = None) -> None:
+    """
+    Encode and write a BGR frame as JPEG, creating parent directories.
+
+    Args:
+        path: Destination file.
+        image: BGR frame.
+
+    Returns:
+        True when the file was written.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     q = quality if quality is not None else (settings.jpeg_quality or 90)
     ok = cv2.imwrite(str(path), image, [cv2.IMWRITE_JPEG_QUALITY, q])
@@ -22,12 +32,22 @@ def _write_jpg(path: Path, image: np.ndarray, quality: int | None = None) -> Non
 
 
 def _storage_url(relative_path: str | None) -> str | None:
+    """
+    Build the public storage URL for a stored relative path.
+
+    Args:
+        relative: Path relative to the storage root.
+
+    Returns:
+        URL served by the /storage mount, with separators normalised.
+    """
     if not relative_path:
         return None
     return "/storage/" + relative_path.replace("\\", "/")
 
 
 def _now_iso() -> str:
+    """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(timezone.utc).isoformat()
 
 

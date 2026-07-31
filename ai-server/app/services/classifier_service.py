@@ -30,6 +30,7 @@ class ClassifierService:
     """Fish species classifier using ONNX model with graceful fallback."""
 
     def __init__(self) -> None:
+        """Load the ONNX species classifier and its label map, if present."""
         self.model_path = Path(settings.classifier_model_path)
         self.labels_path = Path(settings.classifier_labels_path)
         self.session = None
@@ -81,6 +82,7 @@ class ClassifierService:
 
     @property
     def available(self) -> bool:
+        """Whether the classifier session and labels loaded successfully."""
         return self._available
 
     def _letterbox_rgb(self, rgb: np.ndarray, size: int = INPUT_SIZE) -> np.ndarray:

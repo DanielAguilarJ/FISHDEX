@@ -64,6 +64,18 @@ class FishFingerprintCrop:
         y_end: float = 0.55,
         force_landscape: bool = True,
     ):
+        """
+        Configure the fingerprint crop bounds.
+
+        Args:
+            x_start: Left edge as a fraction of ROI width.
+            x_end: Right edge as a fraction of ROI width.
+            y_start: Top edge as a fraction of ROI height.
+            y_end: Bottom edge as a fraction of ROI height.
+
+        Raises:
+            ValueError: Bounds are outside [0, 1] or do not describe a positive area.
+        """
         if not 0.0 <= x_start < x_end <= 1.0:
             raise ValueError(
                 f"Expected 0 <= x_start < x_end <= 1, got x_start={x_start}, x_end={x_end}"
@@ -80,6 +92,16 @@ class FishFingerprintCrop:
         self.force_landscape = bool(force_landscape)
 
     def __call__(self, image: Image.Image) -> Image.Image:
+        """
+        Crop the fingerprint region from a deskewed fish ROI.
+
+        Args:
+            image: Full deskewed ROI, fish already oriented horizontally.
+
+        Returns:
+            The sub-image bounded by the configured fractional box. Bounds are
+            clamped so the result is always at least 1x1 px.
+        """
         if not isinstance(image, Image.Image):
             raise TypeError(
                 f"FishFingerprintCrop expects a PIL Image, got {type(image).__name__}"
@@ -107,6 +129,7 @@ class FishFingerprintCrop:
         return image.crop((x1, y1, x2, y2))
 
     def __repr__(self) -> str:
+        """Return a representation showing the configured crop fractions."""
         return (
             f"FishFingerprintCrop(x=[{self.x_start:.2f}, {self.x_end:.2f}], "
             f"y=[{self.y_start:.2f}, {self.y_end:.2f}])"
@@ -170,12 +193,30 @@ class MixStyle(nn.Module):
     """MixStyle domain augmentation (no-op at eval time)."""
 
     def __init__(self, p: float = 0.5, alpha: float = 0.3, eps: float = 1e-6) -> None:
+        """
+        Configure the style-mixing augmentation.
+
+        Args:
+            p: Probability of applying the mix on a given forward pass.
+            alpha: Beta distribution parameter controlling the mixing weight.
+            eps: Added to the variance before the square root for stability.
+        """
         super().__init__()
         self.p = float(p)
         self.alpha = float(alpha)
         self.eps = float(eps)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Mix per-sample channel statistics across the batch.
+
+        Args:
+            x: Feature map of shape (N, C, H, W).
+
+        Returns:
+            A tensor of the same shape. Returned unchanged at eval time, so this
+            layer never perturbs inference embeddings.
+        """
         if (not self.training) or torch.rand(1).item() > self.p:
             return x
 
@@ -201,12 +242,30 @@ class GeM(nn.Module):
     """Generalized Mean Pooling with per-channel learnable exponents."""
 
     def __init__(self, in_dim: int, p: float = 3.0, eps: float = 1e-6) -> None:
+        """
+        Configure generalised mean pooling.
+
+        Args:
+            in_dim: Number of channels; one learnable exponent is kept per channel.
+            p: Initial pooling exponent. p=1 is average pooling, p→∞ is max pooling.
+            eps: Lower clamp applied before exponentiation, to keep the power finite.
+        """
         super().__init__()
         self.p = nn.Parameter(torch.ones(in_dim) * p)
         self.eps = float(eps)
         self.in_dim = int(in_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Pool spatially with a learnable per-channel exponent.
+
+        Args:
+            x: Feature map of shape (N, C, H, W).
+
+        Returns:
+            Pooled tensor of shape (N, C, 1, 1). The exponent is clamped to
+            [1, 6] so training cannot drive it into a degenerate regime.
+        """
         p_vector = self.p.clamp(1.0, 6.0).view(1, self.in_dim, 1, 1)
         x = x.clamp(min=self.eps).pow(p_vector)
         x = F.avg_pool2d(x, (x.size(-2), x.size(-1)))
@@ -217,6 +276,17 @@ class AdaCos(nn.Module):
     """Adaptive cosine softmax classifier head."""
 
     def __init__(self, in_dim: int, n_classes: int, m: float = 0.2, init_s: float = 30.0) -> None:
+        """
+        Configure the adaptive cosine-margin classifier head.
+
+        Used for training only; inference reads the embedding before this head.
+
+        Args:
+            in_dim: Embedding dimensionality.
+            n_classes: Number of identities in the training set.
+            m: Additive angular margin subtracted from the target logit.
+            init_s: Initial logit scale, re-estimated each batch from the median angle.
+        """
         super().__init__()
         self.weight = nn.Parameter(torch.empty(n_classes, in_dim))
         nn.init.xavier_normal_(self.weight)
@@ -224,6 +294,17 @@ class AdaCos(nn.Module):
         self.m = float(m)
 
     def forward(self, x: torch.Tensor, labels: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        Compute scaled cosine logits.
+
+        Args:
+            x: Embeddings of shape (N, in_dim).
+            labels: Ground-truth identity indices of shape (N,). When provided,
+                the angular margin is applied and the scale is re-estimated.
+
+        Returns:
+            Logits of shape (N, n_classes).
+        """
         x = F.normalize(x, dim=1)
         weight = F.normalize(self.weight, dim=1)
         logits = x @ weight.t()
@@ -256,7 +337,18 @@ class DeformRefine(nn.Module):
         k: int = 3,
         groups: int = 1,
         dilation: int = 1,
-    ):
+    ) -> None:
+        """
+        Configure the deformable refinement block.
+
+        Args:
+            in_ch: Input channel count.
+            out_ch: Output channel count.
+            mid_ch: Bottleneck width; defaults to max(out_ch // 2, 32).
+            k: Kernel size for the offset, mask and deformable convolutions.
+            groups: Deformable groups.
+            dilation: Dilation applied to the offset/mask/deform convolutions.
+        """
         super().__init__()
         padding = (k // 2) * dilation
         mid_ch = mid_ch or max(out_ch // 2, 32)
@@ -297,6 +389,18 @@ class DeformRefine(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Refine features with learned sampling offsets.
+
+        Letting the kernel sample off-grid helps the encoder follow a fish's curved
+        body rather than a rigid rectangle.
+
+        Args:
+            x: Feature map of shape (N, in_ch, H, W).
+
+        Returns:
+            Refined map of shape (N, out_ch, H, W).
+        """
         z = self.pre(x)
         offset = self.offset(z)
         mask = torch.sigmoid(self.mask(z))
@@ -309,10 +413,27 @@ class AddCoords(nn.Module):
     """Append normalised (x, y [, r]) coordinate channels."""
 
     def __init__(self, with_r: bool = True) -> None:
+        """
+        Configure coordinate channel injection.
+
+        Args:
+            with_r: Also append a radial distance channel alongside x and y.
+        """
         super().__init__()
         self.with_r = bool(with_r)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Append coordinate channels to the feature map.
+
+        Args:
+            x: Feature map of shape (N, C, H, W).
+
+        Returns:
+            Tensor of shape (N, C + 2, H, W), or (N, C + 3, H, W) when ``with_r``
+            is set. Absolute position matters here because the spot pattern is
+            always sampled from the same body region.
+        """
         batch_size, _, height, width = x.shape
         yy = torch.linspace(-1.0, 1.0, steps=height, device=x.device, dtype=x.dtype).view(
             1, 1, height, 1
@@ -342,6 +463,18 @@ class CoordConv2d(nn.Module):
         bias: bool = False,
         with_r: bool = True,
     ):
+        """
+        Configure a convolution that receives coordinate channels.
+
+        Args:
+            in_ch: Input channels, before the coordinate channels are appended.
+            out_ch: Output channels.
+            k: Kernel size.
+            stride: Convolution stride.
+            padding: Convolution padding.
+            with_r: Append a radial channel in addition to x and y.
+            bias: Whether the convolution learns a bias term.
+        """
         super().__init__()
         if padding is None:
             padding = (kernel_size // 2) * dilation
@@ -359,6 +492,15 @@ class CoordConv2d(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Append coordinates, then convolve.
+
+        Args:
+            x: Feature map of shape (N, in_ch, H, W).
+
+        Returns:
+            Feature map of shape (N, out_ch, H', W').
+        """
         return self.conv(self.addcoords(x))
 
 
@@ -366,6 +508,13 @@ class GlobalContext(nn.Module):
     """Lightweight global context squeeze-excitation."""
 
     def __init__(self, channels: int, reduction: int = 4) -> None:
+        """
+        Configure the squeeze-excitation style global context block.
+
+        Args:
+            channels: Channel count of the input feature map.
+            reduction: Bottleneck reduction factor for the excitation MLP.
+        """
         super().__init__()
         hidden = max(1, channels // reduction)
         self.fc1 = nn.Conv2d(channels, hidden, 1, bias=False)
@@ -373,6 +522,15 @@ class GlobalContext(nn.Module):
         self.fc2 = nn.Conv2d(hidden, channels, 1, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Rescale channels by a globally pooled context vector.
+
+        Args:
+            x: Feature map of shape (N, C, H, W).
+
+        Returns:
+            Recalibrated map of the same shape.
+        """
         context = x.mean(dim=(2, 3), keepdim=True)
         return x * torch.sigmoid(self.fc2(self.act(self.fc1(context))))
 
@@ -388,6 +546,14 @@ class HighResFusion(nn.Module):
         mixstyle: Optional[nn.Module] = None,
         with_r: bool = True,
     ):
+        """
+        Configure fusion of a high-resolution map into a coarser one.
+
+        Args:
+            high_ch: Channels of the high-resolution source map.
+            tgt_ch: Channels of the target map to fuse into.
+            mid_ch: Width of the alignment bottleneck.
+        """
         super().__init__()
         self.align = nn.Conv2d(ch_high, ch_high, kernel_size=1, bias=False)
         self.bn_align = nn.BatchNorm2d(ch_high)
@@ -414,6 +580,19 @@ class HighResFusion(nn.Module):
         )
 
     def forward(self, x_high: torch.Tensor, x_tgt: torch.Tensor) -> torch.Tensor:
+        """
+        Downsample and add high-resolution detail into the target map.
+
+        Fine detail matters disproportionately for re-identification: the
+        individuating information is in small spots, which a coarse stride loses.
+
+        Args:
+            x_high: High-resolution features, shape (N, high_ch, H, W).
+            x_tgt: Target features at coarser stride, shape (N, tgt_ch, H', W').
+
+        Returns:
+            Fused map with the shape of ``x_tgt``.
+        """
         xh = F.silu(self.bn_align(self.align(x_high)), inplace=True)
         xh = F.silu(self.bn_cc(self.cc_high(xh)), inplace=True)
         xh = self.deform_refine_high(xh)
@@ -431,11 +610,29 @@ class DropBlock2D(nn.Module):
     """DropBlock regularisation (no-op at eval time)."""
 
     def __init__(self, drop_prob: float = 0.08, block_size: int = 3) -> None:
+        """
+        Configure structured spatial dropout.
+
+        Args:
+            drop_prob: Fraction of activations to drop.
+            block_size: Side length of each dropped square region. Dropping
+                contiguous blocks rather than isolated pixels forces the encoder
+                to use the whole pattern instead of a few salient spots.
+        """
         super().__init__()
         self.drop_prob = float(drop_prob)
         self.block_size = int(block_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Zero contiguous spatial blocks during training.
+
+        Args:
+            x: Feature map of shape (N, C, H, W).
+
+        Returns:
+            Tensor of the same shape, returned unchanged at eval time.
+        """
         if (not self.training) or self.drop_prob <= 0.0:
             return x
         batch_size, channels, height, width = x.shape
@@ -485,6 +682,17 @@ class FishEncoder(nn.Module):
         out_dim: int = 512,
         model_name: str = "convnext_small.fb_in22k_ft_in1k",
     ):
+        """
+        Build the encoder.
+
+        Args:
+            model_name: timm backbone identifier, e.g.
+                ``convnext_small.fb_in22k_ft_in1k``.
+            out_dim: Embedding dimensionality.
+            n_classes: Identity count for the training head; None for inference-only.
+            pretrained: Load ImageNet weights for the backbone.
+            drop_path_rate: Stochastic depth rate for the backbone.
+        """
         super().__init__()
         # pretrained=False: weights come from the .pt checkpoint, not the internet
         self.backbone = timm.create_model(
@@ -531,6 +739,15 @@ class FishEncoder(nn.Module):
         self.classifier = AdaCos(out_dim, num_classes, m=0.2, init_s=30.0)
 
     def _pre_bn_feat(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Run the backbone and pooling stack, stopping before the BN neck.
+
+        Args:
+            x: Preprocessed image batch of shape (N, 3, H, W).
+
+        Returns:
+            Pooled features of shape (N, embedding_dim), before batch norm.
+        """
         features = self.backbone(x)
         x_tgt = features[self.tgt_idx]
 
@@ -547,6 +764,16 @@ class FishEncoder(nn.Module):
         return self.gem(x).flatten(1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Produce an L2-normalised identity embedding.
+
+        Args:
+            x: Preprocessed image batch of shape (N, 3, H, W).
+
+        Returns:
+            Embeddings of shape (N, out_dim). Normalisation is what makes a dot
+            product equal to cosine similarity in the matching stage.
+        """
         feature = self._pre_bn_feat(x)
         feature_bn = self.bnneck(feature)
         return F.normalize(feature_bn, dim=-1)

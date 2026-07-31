@@ -23,6 +23,7 @@ class ModelNotAvailableError(Exception):
     """Raised when the ReID checkpoint file does not exist on disk."""
 
     def __init__(self, path: Path) -> None:
+        """Initialise the fingerprint cache."""
         self.path = path
         super().__init__(f"ReID checkpoint not found: {path}")
 
@@ -32,6 +33,7 @@ class ModelNotAvailableError(Exception):
 
 @dataclass(frozen=True)
 class ModelFingerprint:
+    """Identifies the exact model and preprocessing that produced an embedding."""
     checkpoint_sha256: str  # first 12 hex chars
     model_name: str
     embedding_dim: int

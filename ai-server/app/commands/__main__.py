@@ -3,6 +3,12 @@ import sys
 
 
 def main():
+    """
+    Dispatch to an operational command.
+
+    Returns:
+        Process exit status.
+    """
     print("Usage:")
     print("  python -m app.commands.audit_embeddings [--strict] [--json-output PATH]")
     print("  python -m app.commands.rebuild_embeddings --dry-run [--species SLUG]")

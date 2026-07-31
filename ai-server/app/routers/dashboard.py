@@ -270,6 +270,18 @@ async def retry_dashboard_job(
     return {"status": "success", "result": result}
 
 def _read_private_json(relative_filename: Optional[str]) -> Optional[dict]:
+    """
+    Read a JSON document from the private data directory.
+
+    Args:
+        relative_filename: Path relative to the private data root.
+
+    Returns:
+        Parsed document, or None when no filename was supplied.
+
+    Raises:
+        HTTPException 400: The path escapes the private root.
+    """
     if not relative_filename:
         return None
 
@@ -299,6 +311,17 @@ async def get_dashboard_job_detail(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
+    """
+    Return the full record for one job, including artifacts and linkage.
+
+    Args:
+        job_id: Job to inspect.
+        x_fishdex_dashboard_secret: Dashboard secret header.
+        secret: Dashboard secret query parameter (legacy).
+
+    Returns:
+        Job row enriched with its stored documents.
+    """
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     conn = None
@@ -359,6 +382,17 @@ async def get_dashboard_job_document(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
+    """
+    Return the stored identification document for a job.
+
+    Args:
+        job_id: Job to inspect.
+        x_fishdex_dashboard_secret: Dashboard secret header.
+        secret: Dashboard secret query parameter (legacy).
+
+    Returns:
+        The parsed document.
+    """
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     conn = None
@@ -393,6 +427,17 @@ async def get_dashboard_fish_manifest(
     x_fishdex_dashboard_secret: Optional[str] = Header(default=None, alias="X-FishDex-Dashboard-Secret"),
     secret: Optional[str] = Query(default=None),
 ) -> dict[str, Any]:
+    """
+    Return the artifact manifest for one fish identity.
+
+    Args:
+        fish_id: Fish identifier.
+        x_fishdex_dashboard_secret: Dashboard secret header.
+        secret: Dashboard secret query parameter (legacy).
+
+    Returns:
+        The parsed manifest.
+    """
     _validate_dashboard_auth(x_fishdex_dashboard_secret, secret)
 
     conn = None

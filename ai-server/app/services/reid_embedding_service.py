@@ -39,6 +39,7 @@ class ReIDEmbeddingService:
     """Wraps FishEncoder for inference-only embedding extraction."""
 
     def __init__(self) -> None:
+        """Load the FishEncoder checkpoint and build its eval transform."""
         self._model = None
         self._transform: Optional[transforms.Compose] = None
         self._device: Optional[torch.device] = None
@@ -114,6 +115,12 @@ class ReIDEmbeddingService:
         return torch.stack(tensors, dim=0)  # (N,3,H,W)
 
     def _assert_loaded(self) -> None:
+        """
+        Guard against use before the model has loaded.
+
+        Raises:
+            RuntimeError: The checkpoint is not available.
+        """
         if not self.is_loaded or self._model is None:
             raise RuntimeError(
                 "ReIDEmbeddingService: FishEncoder is not loaded. "

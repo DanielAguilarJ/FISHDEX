@@ -101,6 +101,7 @@ class IdentificationPipeline:
     """
 
     def __init__(self):
+        """Resolve the matching, scoring and decision services this pipeline uses."""
         from app.services.matching_service import get_matching_service
         self._matching = get_matching_service()
         self._auto_match_radius_m = (
@@ -163,6 +164,16 @@ class IdentificationPipeline:
         multiple_fish_detected: bool,
     ) -> PipelineResult:
         # --- Step 1: Validate inputs ---
+        """
+        Execute the identification stages for one capture.
+
+        Args:
+            query_embeddings: L2-normalised query matrix of shape (N, D).
+            metadata: Validated capture metadata.
+
+        Returns:
+            The pipeline result carrying the decision and its supporting evidence.
+        """
         if query_embeddings.ndim != 2:
             raise ValueError(f"Expected 2D embeddings, got shape {query_embeddings.shape}")
 

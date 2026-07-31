@@ -439,6 +439,12 @@ def run_rebuild(
 
 
 def main():
+    """
+    Parse arguments and rebuild the embedding gallery.
+
+    Returns:
+        Process exit status.
+    """
     parser = argparse.ArgumentParser(
         description="Rebuild embeddings from sighting crop files.",
         epilog=(

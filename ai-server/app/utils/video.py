@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class DecodedVideoFrame:
+    """One decoded frame with its index and timestamp within the source video."""
     frame_index: int
     timestamp_seconds: float
     frame: np.ndarray
@@ -302,6 +303,15 @@ def select_best_n_frames(frames: List[np.ndarray], n: int = 5) -> List[np.ndarra
         return list(frames)
 
     def _sharpness(f: np.ndarray) -> float:
+        """
+        Score a frame's sharpness by Laplacian variance.
+
+        Args:
+            frame: BGR frame.
+
+        Returns:
+            Variance of the Laplacian; higher means sharper.
+        """
         gray = cv2.cvtColor(f, cv2.COLOR_BGR2GRAY)
         return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 

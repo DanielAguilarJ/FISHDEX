@@ -184,6 +184,12 @@ def run_audit(strict: bool = False, json_output: str | None = None) -> dict:
 
 
 def main():
+    """
+    Parse arguments and run the embedding audit.
+
+    Returns:
+        Process exit status.
+    """
     parser = argparse.ArgumentParser(
         description="Audit embeddings database integrity."
     )

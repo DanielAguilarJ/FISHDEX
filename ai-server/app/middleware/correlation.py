@@ -31,6 +31,15 @@ class CorrelationFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """
+        Attach the current correlation ID to a log record.
+
+        Args:
+            record: Record being emitted.
+
+        Returns:
+            Always True; the record is annotated, never dropped.
+        """
         record.correlation_id = correlation_id_ctx.get("-")  # type: ignore[attr-defined]
         return True
 
@@ -49,6 +58,16 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Prefer client/proxy-supplied ID; fall back to a fresh UUID4
+        """
+        Assign a correlation ID for the duration of one request.
+
+        Args:
+            request: Incoming request.
+            call_next: Downstream ASGI handler.
+
+        Returns:
+            The downstream response, with X-Request-ID echoed back.
+        """
         cid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
 
         # Store on request.state so route handlers can access it

@@ -65,6 +65,7 @@ class FrameCandidateMetadata:
 
 @dataclass
 class FrameCandidate:
+    """A decoded frame that passed detection, with its scoring metadata."""
     frame_index: int
     timestamp_seconds: float
     score: float
@@ -118,6 +119,15 @@ def _emit_progress(job_id: str, status: str, progress: int, message: str) -> Non
     )
 
 def _get_detection_confidence(detection: Optional[DetectionLike]) -> float:
+    """
+    Read a detection's confidence, tolerating both dict and object shapes.
+
+    Args:
+        detection: Detection from the detector or the tracking path.
+
+    Returns:
+        Confidence in [0, 1]; 0.0 when unavailable.
+    """
     if detection is None:
         return 0.0
 
@@ -128,6 +138,15 @@ def _get_detection_confidence(detection: Optional[DetectionLike]) -> float:
 
 
 def _get_detection_bbox(detection: Optional[DetectionLike]) -> Optional[tuple]:
+    """
+    Read a detection's axis-aligned bounding box.
+
+    Args:
+        detection: Detection from the detector or the tracking path.
+
+    Returns:
+        ``(x1, y1, x2, y2)``, or None when the detection carries no bbox.
+    """
     if detection is None:
         return None
 
@@ -301,6 +320,15 @@ def _select_with_temporal_diversity(
     return selected
 
 def _infer_media_type(filename: str | None, content_type: str | None = None) -> str:
+    """
+    Classify a stored capture as an image or a video.
+
+    Args:
+        filename: Stored filename, whose extension is server-generated.
+
+    Returns:
+        Either ``"image"`` or ``"video"``.
+    """
     content_type = (content_type or "").lower()
     filename = (filename or "").lower()
 
@@ -316,6 +344,16 @@ def _infer_media_type(filename: str | None, content_type: str | None = None) -> 
 
 
 def _load_frames_from_media(path: str, media_type: str) -> list[np.ndarray]:
+    """
+    Decode frames from a stored capture.
+
+    Args:
+        path: Absolute path to the stored media file.
+        media_type: ``"image"`` or ``"video"``.
+
+    Returns:
+        Decoded frames ready for detection; empty when the file cannot be read.
+    """
     if media_type == "image":
         img = cv2.imread(path)
         if img is None:
@@ -784,7 +822,15 @@ def process_identification_job(
             # Create temporary FrameCandidate-like objects for selection
             # (reuse the same function signature by wrapping metadata)
             class _MetaWrapper:
-                def __init__(self, m):
+                """Adapts a plain metadata mapping to the attribute access the pipeline expects."""
+
+                def __init__(self, m: Any) -> None:
+                    """
+                    Copy the three fields the selection helper reads.
+
+                    Args:
+                        m: Candidate metadata carrying frame index, timestamp and score.
+                    """
                     self.frame_index = m.frame_index
                     self.timestamp_seconds = m.timestamp_seconds
                     self.score = m.score

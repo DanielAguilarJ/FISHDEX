@@ -51,6 +51,12 @@ def _configure_logging() -> None:
     old_factory = logging.getLogRecordFactory()
 
     def record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        """
+        Create a log record that always carries a correlation_id attribute.
+
+        Returns:
+            The record, with a placeholder ID when none is set.
+        """
         record = old_factory(*args, **kwargs)
         if not hasattr(record, "correlation_id"):
             record.correlation_id = "-"

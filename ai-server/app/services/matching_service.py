@@ -80,6 +80,7 @@ class MatchingService:
     """Fish re-identification via embedding similarity in SQLite."""
 
     def __init__(self) -> None:
+        """Open the embeddings database and ensure its schema is current."""
         self.db_path = Path(settings.embeddings_db_path)
         self._ensure_db()
         logger.info("MatchingService initialized (db=%s)", self.db_path)

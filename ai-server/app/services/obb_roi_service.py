@@ -52,6 +52,7 @@ class OBBRoiService:
     """
 
     def __init__(self) -> None:
+        """Load the YOLO OBB model, leaving is_loaded False when unavailable."""
         self._model = None
         self.is_loaded: bool = False
         self._load()
