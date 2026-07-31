@@ -351,19 +351,65 @@ This eliminated 5 of the 50 functions over 50 lines, including
     persisted, and are always `None`/`0.0` because the detector is binary and the
     angler confirms the species) but that is now documented rather than implicit.
 
+### Static analysis
+
+A ruff pass over the whole package after the refactor found defects the test suite
+could not: `job_service` alone is only ~30% covered, so anything on the
+definitive-identification path fails at runtime, never in CI.
+
+- **16 undefined names (`F821`).** Fourteen were regressions from this audit's own
+  extraction work: `now_str` and `raw_video_filename` were locals of
+  `process_identification_job`, and moving steps 3-4 into helpers took them out of
+  scope. Every later reference would have raised `NameError` the moment a capture
+  actually produced an identity. The other two were in `retry_service`, where
+  narrowing `except Exception` to `except sqlite3.Error` had not added the import,
+  so a failing UPDATE inside the error handler would itself raise `NameError`.
+- **6 unused variables (`F841`)**, including an 11-line `decision_context` dict
+  built and discarded. `best_sighting_id` in `identity_scoring_service` was checked
+  before removal and is genuinely redundant rather than a dropped value —
+  `best_meta.sighting_id` already carries it.
+- **16 unused imports (`F401`)**, two of which (`classifier_service`,
+  `crop_bbox_preserve_frame_aspect`) were keeping otherwise-dead code reachable.
+- **17 unchained exceptions (`B904`).** Every API handler translates an internal
+  failure into an `HTTPException`, but a bare `raise` discards the original
+  traceback, so the log showed the 500 without what caused it. 16 now chain with
+  `from exc`; the duplicate-email conflict uses `from None` deliberately, since the
+  SQLite constraint name would disclose schema detail.
+- **28 blind excepts (`BLE001`).** All are genuine "must not crash" boundaries, but
+  nothing distinguished a considered decision from an oversight, and four still
+  discarded the error entirely. The four now log; the rest carry a reason inline.
+- **4 dynamically built SQL statements and 5 credential-shaped literals** reviewed
+  and suppressed with reasoning inline. All four SQL sites interpolate only fixed
+  internal literals while every value is bound; three literals are the placeholder
+  secrets that startup rejects in production, the other two are an HTTP header name
+  and a token field separator.
+- **Unvalidated dashboard status filter.** Not injectable, but a typo returned an
+  empty list, which an operator reads as "there are no jobs" rather than "your
+  filter is wrong". Now validated against a `JOB_STATUSES` constant.
+
+`tests/test_static_analysis.py` runs these checks inside the suite so none of these
+classes can ship again: `F821`, `F841`, `F401`, `S110`, `B006`, `F541`, `E711`,
+`F811`, `B904`, `BLE001`, `S608`, `S105/106/107`, plus guards against pickle
+deserialisation, shell-interpolated subprocess, `eval`/`exec`, unsafe YAML, binding
+to `0.0.0.0`, and network calls without a timeout.
+
+Silent exception handlers in `ai-server/app` are down from 37 at the start of this
+audit to 14; the remainder are narrow parse fallbacks with an explicit default.
+
 ### Verification
 
 | Check | Result |
 |-------|--------|
-| `pytest` (ai-server) | 401 passed, 0 failed (was 257 passed, 5 failed) |
+| `pytest` (ai-server) | 492 passed, 0 failed (was 257 passed, 5 failed) |
 | `pytest` (scripts) | 13 passed |
 | `flutter analyze` | 0 errors, 0 warnings |
 | `flutter build bundle` | succeeds |
 | `flutter test` | 9 passed |
 | `caddy validate` | valid, no warnings |
+| `ruff` (correctness + security rules) | clean |
 | Docstring coverage | 100% (390/390 functions) |
 | Type hints | 95% returns, 97% arguments |
-| `job_service` coverage | 27% (was 11%) |
+| `job_service` coverage | 30% (was 11%) |
 | Coverage of hardened modules | `security` 97%, `media_validation` 97%, `crop_utils` 90%, `matching_service` 83%, `result_cache` 82% |
 
 ### Known gaps
