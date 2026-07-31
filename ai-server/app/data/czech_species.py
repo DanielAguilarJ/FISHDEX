@@ -5,7 +5,14 @@ All 45 fish species found in Czech Republic fishing areas.
 Each species has Czech, English, and Latin names plus rarity classification.
 """
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# Minimum query length before substring matching is attempted at all. Below this
+# almost every query is ambiguous: a single letter matches 42 of the 45 species.
+MIN_FUZZY_QUERY_LENGTH = 4
 
 
 # =============================================================================
@@ -383,23 +390,46 @@ CZECH_SPECIES: list[dict] = [
 
 def find_species_by_name(name: str) -> Optional[dict]:
     """
-    Find a species by Czech, English, or Latin name, or slug (case-insensitive).
+    Find a species by Czech, English or Latin name, or by slug (case-insensitive).
+
+    Matching happens in two passes:
+
+    1. **Exact**, after normalising case and treating spaces and underscores as
+       equivalent. This is what the identification pipeline relies on.
+    2. **Substring**, but only when the query is at least
+       :data:`MIN_FUZZY_QUERY_LENGTH` characters *and* exactly one species matches.
+
+    The second pass used to return the first species containing the query, which
+    silently produced wrong answers on the most natural queries a human would try:
+
+    * ``"perch"`` matched 3 species and returned *Pike-perch (Zander)*
+      (``sander_lucioperca``) rather than *European perch*
+      (``perca_fluviatilis``) — a different fish, purely because of catalog order.
+    * ``"carp"`` matched 6 species and returned *Common carp*.
+    * ``"a"`` matched 42 species and also returned *Common carp*.
+
+    That mattered beyond search: ``scripts/export_classifier_onnx.py`` maps trained
+    class labels through this function, so an ambiguous label would have baked a
+    wrong species into the exported model's label map.
 
     Args:
-        name: The species name/slug to search for.
+        name: Species name or slug to look up.
 
     Returns:
-        The species dict if found, None otherwise.
+        The species dict, or None when there is no match or the query is
+        ambiguous.
     """
     if not name:
         return None
 
     name_lower = name.lower().strip()
+    if not name_lower:
+        return None
     name_slug = name_lower.replace(" ", "_").replace("-", "_")
 
+    # ── Pass 1: exact ────────────────────────────────────────────────────────
     for species in CZECH_SPECIES:
         species_slug = species["slug"].lower()
-
         if (
             species["czech_name"].lower() == name_lower
             or species["english_name"].lower() == name_lower
@@ -410,14 +440,32 @@ def find_species_by_name(name: str) -> Optional[dict]:
         ):
             return species
 
-    for species in CZECH_SPECIES:
-        if (
-            name_lower in species["czech_name"].lower()
-            or name_lower in species["english_name"].lower()
-            or name_lower in species["latin_name"].lower()
-        ):
-            return species
+    # ── Pass 2: substring, only when unambiguous ─────────────────────────────
+    if len(name_lower) < MIN_FUZZY_QUERY_LENGTH:
+        return None
 
+    matches = [
+        species
+        for species in CZECH_SPECIES
+        if name_lower in species["czech_name"].lower()
+        or name_lower in species["english_name"].lower()
+        or name_lower in species["latin_name"].lower()
+    ]
+
+    if len(matches) == 1:
+        logger.debug(
+            "Species %r resolved by substring to %s", name, matches[0]["slug"]
+        )
+        return matches[0]
+
+    if matches:
+        # Returning an arbitrary one of these is how "perch" became Zander.
+        logger.warning(
+            "Ambiguous species query %r matches %d species (%s); refusing to guess",
+            name,
+            len(matches),
+            ", ".join(m["slug"] for m in matches[:5]),
+        )
     return None
 
 
@@ -436,6 +484,9 @@ def get_all_species() -> list[dict]:
     Get the complete species database.
 
     Returns:
-        List of all species dicts.
+        A new list containing every species dict. The list is copied so a caller
+        cannot append to, remove from or reorder the module-level catalog — the
+        substring matcher and the job-upload validator both depend on its order
+        and contents.
     """
-    return CZECH_SPECIES
+    return list(CZECH_SPECIES)
