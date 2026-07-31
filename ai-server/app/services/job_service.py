@@ -83,6 +83,10 @@ XP_BASE_MAP = {
 }
 NEW_FISH_BONUS_XP = 50
 
+# Statuses a worker may transition to 'processing'. The atomic claim filters on
+# these, so a job in any other state cannot be picked up concurrently.
+CLAIMABLE_STATUSES: tuple[str, ...] = ("uploaded", "pending_crop")
+
 def _emit_progress(job_id: str, status: str, progress: int, message: str) -> None:
     """
     Publish a job progress update to the dashboard event stream.
@@ -494,6 +498,237 @@ def _build_similarity_reference(
     return similarity_reference
 
 
+class JobAlreadyHandled(Exception):
+    """
+    Raised when a job needs no processing and a payload should be returned as-is.
+
+    Carries the response the caller should hand back, which keeps the early-exit
+    paths (already-completed, already-claimed) out of the main flow.
+    """
+
+    def __init__(self, payload: dict) -> None:
+        """
+        Store the prepared response.
+
+        Args:
+            payload: Result dict to return to the caller.
+        """
+        super().__init__(payload.get("status", "already_handled"))
+        self.payload = payload
+
+
+def _build_skip_result(job_id: str, sighting_row: sqlite3.Row) -> dict:
+    """
+    Build the response for a job whose sighting already exists.
+
+    Args:
+        job_id: Job that was requested.
+        sighting_row: The existing ``fish_sightings`` row.
+
+    Returns:
+        A result payload mirroring a freshly completed job.
+    """
+    sighting_data = dict(sighting_row)
+    species_slug = sighting_data.get("species_slug")
+    species_info = find_species_by_name(species_slug) if species_slug else None
+
+    return {
+        "status": "completed" if species_slug else "needs_review",
+        "job_id": job_id,
+        "fish_id": sighting_data.get("fish_id"),
+        "sighting_id": sighting_data.get("id"),
+        "species_slug": species_slug,
+        "species_english": species_info.get("english_name") if species_info else None,
+        "confidence": sighting_data.get("confidence", 0.0),
+        "is_new_fish": bool(sighting_data.get("is_new_fish")),
+        "xp_earned": sighting_data.get("xp_earned", 10),
+        "detection_confidence": sighting_data.get("detection_confidence", 0.0),
+        "classification_confidence": sighting_data.get("classification_confidence", 0.0),
+        "match_confidence": sighting_data.get("match_confidence", 0.0),
+    }
+
+
+def _assert_not_already_processed(
+    cursor: sqlite3.Cursor, job_id: str, force: bool
+) -> None:
+    """
+    Short-circuit when this job already produced a sighting (idempotency).
+
+    Args:
+        cursor: Open cursor.
+        job_id: Job being processed.
+        force: When True, reprocess even though a sighting exists.
+
+    Raises:
+        JobAlreadyHandled: A sighting exists and ``force`` is False.
+    """
+    cursor.execute("SELECT * FROM fish_sightings WHERE job_id = ? LIMIT 1", (job_id,))
+    existing_sighting = cursor.fetchone()
+    if existing_sighting is None or force:
+        return
+
+    logger.info(
+        "[Job %s] Sighting already exists in DB (Phase 1). Skipping processing.", job_id
+    )
+    result = _build_skip_result(job_id, existing_sighting)
+    _emit_progress(
+        job_id,
+        result["status"],
+        100,
+        f"Job skipped (already done): {result.get('fish_id')}",
+    )
+    raise JobAlreadyHandled(result)
+
+
+def _load_job_document(cursor: sqlite3.Cursor, job_id: str) -> dict:
+    """
+    Fetch the job row.
+
+    Args:
+        cursor: Open cursor.
+        job_id: Job to load.
+
+    Returns:
+        The row as a dict.
+
+    Raises:
+        ValueError: No such job.
+    """
+    _emit_progress(job_id, "processing", 5, "Job started")
+    logger.info("[Job %s] Fetching job from local database", job_id)
+
+    cursor.execute("SELECT * FROM identification_jobs WHERE id = ?", (job_id,))
+    job_row = cursor.fetchone()
+    if not job_row:
+        raise ValueError(f"Job {job_id} not found in database")
+    return dict(job_row)
+
+
+def _validate_job_status(job_id: str, job_doc: dict, force: bool) -> None:
+    """
+    Reject statuses that must not be reprocessed without ``force``.
+
+    Args:
+        job_id: Job being processed.
+        job_doc: Job row.
+        force: Bypass the completed/failed guards.
+
+    Raises:
+        ValueError: The job is completed or previously failed and ``force`` is False.
+        JobAlreadyHandled: Another worker is already processing this job.
+    """
+    current_status = job_doc.get("status")
+    logger.info("[Job %s] Current status: %s", job_id, current_status)
+
+    if current_status in CLAIMABLE_STATUSES or force:
+        return
+
+    if current_status == "completed":
+        raise ValueError(f"Job {job_id} already completed. Use force=True to reprocess.")
+    if current_status == "processing":
+        logger.info(
+            "[Job %s] Already in 'processing' status. Exiting gracefully to avoid "
+            "a race condition.",
+            job_id,
+        )
+        raise JobAlreadyHandled(
+            {
+                "status": "already_processing",
+                "job_id": job_id,
+                "message": "Job is being processed by another instance",
+            }
+        )
+    if current_status == "failed":
+        raise ValueError(f"Job {job_id} previously failed. Use force=True to retry.")
+
+
+def _claim_job(
+    conn: sqlite3.Connection, cursor: sqlite3.Cursor, job_id: str, current_status: object
+) -> None:
+    """
+    Atomically transition the job to ``processing``.
+
+    The UPDATE filters on the claimable statuses, so if another worker already
+    took the job ``rowcount`` is 0 and this instance backs off. This is the
+    concurrency guard that prevents two workers from producing duplicate
+    identities for the same capture.
+
+    Args:
+        conn: Open connection (committed here).
+        cursor: Open cursor.
+        job_id: Job to claim.
+        current_status: Status observed before the attempt, for logging only.
+
+    Raises:
+        JobAlreadyHandled: The claim was lost to another worker.
+    """
+    logger.info("[Job %s] Attempting atomic status transition to 'processing'", job_id)
+    now_str = datetime.now(timezone.utc).isoformat()
+    placeholders = ", ".join("?" for _ in CLAIMABLE_STATUSES)
+    cursor.execute(
+        "UPDATE identification_jobs "
+        "SET status = 'processing', started_at = ?, error_message = NULL "
+        f"WHERE id = ? AND status IN ({placeholders})",
+        (now_str, job_id, *CLAIMABLE_STATUSES),
+    )
+    conn.commit()
+
+    if cursor.rowcount == 0:
+        logger.info(
+            "[Job %s] Could not acquire processing lock (current_status=%s). "
+            "Another instance is handling it.",
+            job_id,
+            current_status,
+        )
+        raise JobAlreadyHandled(
+            {
+                "status": "already_processing",
+                "job_id": job_id,
+                "message": "Job is being processed by another instance",
+            }
+        )
+
+
+def _resolve_raw_media(job_id: str, job_doc: dict) -> tuple[str, str]:
+    """
+    Locate the stored capture on disk and determine its media type.
+
+    Args:
+        job_id: Job being processed.
+        job_doc: Job row.
+
+    Returns:
+        Tuple of (absolute path, media type).
+
+    Raises:
+        ValueError: The job carries no media filename.
+        FileNotFoundError: The referenced file is absent from disk.
+    """
+    raw_filename = job_doc.get("raw_media_filename") or job_doc.get("raw_video_filename")
+    if not raw_filename:
+        raise ValueError("Job has no raw media filename")
+
+    media_type = job_doc.get("media_type") or _infer_media_type(
+        raw_filename, job_doc.get("content_type")
+    )
+
+    _emit_progress(
+        job_id, "downloading_video", 15, f"Loading {media_type} file from local storage"
+    )
+    absolute_path = str(Path(settings.server_data_dir) / "storage" / raw_filename)
+    logger.info(
+        "[Job %s] Media resolved to local path: %s (type: %s)",
+        job_id,
+        absolute_path,
+        media_type,
+    )
+
+    if not os.path.exists(absolute_path):
+        raise FileNotFoundError(f"Raw media file not found on disk: {absolute_path}")
+
+    return absolute_path, media_type
+
+
 def process_identification_job(
     job_id: str,
     force: bool = False,
@@ -523,106 +758,16 @@ def process_identification_job(
     cursor = conn.cursor()
 
     try:
-        # --- Step 0: Phase 1 Idempotency Check ---
-        cursor.execute("SELECT * FROM fish_sightings WHERE job_id = ? LIMIT 1", (job_id,))
-        existing_sighting = cursor.fetchone()
-        if existing_sighting and not force:
-            logger.info(f"[Job {job_id}] Sighting already exists in DB (Phase 1). Skipping processing.")
-            sighting_data = dict(existing_sighting)
-            
-            # Canonicalize species slug info if possible
-            species_slug = sighting_data.get("species_slug")
-            species_info = find_species_by_name(species_slug) if species_slug else None
-            
-            result = {
-                "status": "completed" if species_slug else "needs_review",
-                "job_id": job_id,
-                "fish_id": sighting_data.get("fish_id"),
-                "sighting_id": sighting_data.get("id"),
-                "species_slug": species_slug,
-                "species_english": species_info.get("english_name") if species_info else None,
-                "confidence": sighting_data.get("confidence", 0.0),
-                "is_new_fish": bool(sighting_data.get("is_new_fish")),
-                "xp_earned": sighting_data.get("xp_earned", 10),
-                "detection_confidence": sighting_data.get("detection_confidence", 0.0),
-                "classification_confidence": sighting_data.get("classification_confidence", 0.0),
-                "match_confidence": sighting_data.get("match_confidence", 0.0),
-            }
-            _emit_progress(job_id, result["status"], 100, f"Job skipped (already done): {sighting_data.get('fish_id')}")
-            return result
-
-        # --- Step 1: Get job document ---
-        _emit_progress(job_id, "processing", 5, "Job started")
-        logger.info(f"[Job {job_id}] Fetching job from local database")
-        
-        cursor.execute("SELECT * FROM identification_jobs WHERE id = ?", (job_id,))
-        job_row = cursor.fetchone()
-        
-        if not job_row:
-            raise ValueError(f"Job {job_id} not found in database")
-            
-        job_doc = dict(job_row)
-
-        # --- Step 2: Validate status ---
-        current_status = job_doc.get("status")
-        logger.info(f"[Job {job_id}] Current status: {current_status}")
-
-        if current_status != "uploaded" and current_status != "pending_crop" and not force:
-            if current_status == "completed":
-                raise ValueError(f"Job {job_id} already completed. Use force=True to reprocess.")
-            elif current_status == "processing":
-                logger.info(
-                    f"[Job {job_id}] Already in 'processing' status. "
-                    "Exiting gracefully to avoid race condition."
-                )
-                return {
-                    "status": "already_processing",
-                    "job_id": job_id,
-                    "message": "Job is being processed by another instance",
-                }
-            elif current_status == "failed" and not force:
-                raise ValueError(f"Job {job_id} previously failed. Use force=True to retry.")
-
-        # --- Step 3: Atomically transition status to processing ---
-        # Uses WHERE status='uploaded' (or 'pending_crop') to prevent race conditions.
-        # If another instance already claimed this job, rowcount will be 0.
-        logger.info(f"[Job {job_id}] Attempting atomic status transition to 'processing'")
-        now_str = datetime.now(timezone.utc).isoformat()
-        cursor.execute(
-            "UPDATE identification_jobs SET status = 'processing', started_at = ?, error_message = NULL "
-            "WHERE id = ? AND status IN ('uploaded', 'pending_crop')",
-            (now_str, job_id)
-        )
-        conn.commit()
-        
-        if cursor.rowcount == 0:
-            # Another process already claimed this job — exit gracefully
-            logger.info(
-                f"[Job {job_id}] Could not acquire processing lock "
-                f"(current_status={current_status}). Another instance is handling it."
-            )
-            return {
-                "status": "already_processing",
-                "job_id": job_id,
-                "message": "Job is being processed by another instance",
-            }
-
-        # --- Step 4: Locate raw media (video/photo) ---
-        raw_video_filename = job_doc.get("raw_media_filename") or job_doc.get("raw_video_filename")
-        if not raw_video_filename:
-            raise ValueError("Job has no raw media filename")
-
-        media_type = job_doc.get("media_type") or _infer_media_type(
-            raw_video_filename,
-            job_doc.get("content_type")
-        )
-
-        _emit_progress(job_id, "downloading_video", 15, f"Loading {media_type} file from local storage")
-        temp_video_path = str(Path(settings.server_data_dir) / "storage" / raw_video_filename)
-        logger.info(f"[Job {job_id}] Media resolved to local path: {temp_video_path} (type: {media_type})")
-        
-        if not os.path.exists(temp_video_path):
-            raise FileNotFoundError(f"Raw media file not found on disk: {temp_video_path}")
+        # --- Steps 0-4: claim the job and locate its media ---
+        # Extracted into helpers; JobAlreadyHandled carries the early-exit payload.
+        try:
+            _assert_not_already_processed(cursor, job_id, force)
+            job_doc = _load_job_document(cursor, job_id)
+            _validate_job_status(job_id, job_doc, force)
+            _claim_job(conn, cursor, job_id, job_doc.get("status"))
+            temp_video_path, media_type = _resolve_raw_media(job_id, job_doc)
+        except JobAlreadyHandled as handled:
+            return handled.payload
 
         # --- Step 5 & 6 & 7: Sequential frame decoding + single-pass detection + global candidate collection ---
         _emit_progress(job_id, "detecting_fish", 50, f"Scanning {media_type} frames with YOLOv8 OBB detector")
