@@ -396,3 +396,110 @@ def test_claimable_statuses_is_the_single_source_of_truth() -> None:
     from app.services.job_service import CLAIMABLE_STATUSES
 
     assert CLAIMABLE_STATUSES == ("uploaded", "pending_crop")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Step 10 — quality detection payload
+# ─────────────────────────────────────────────────────────────────────────────
+# Detections carry bbox_xyxy (corner-to-corner); the quality service expects
+# [x, y, w, h] (origin plus extent). Mixing the two does not raise — it silently
+# produces nonsensical area and centring scores — so the conversion is pinned.
+
+
+class _FakeCandidate:
+    """Minimal stand-in for FrameCandidate."""
+
+    def __init__(
+        self,
+        bbox: tuple | None,
+        confidence: float = 0.8,
+        width: int = 640,
+        height: int = 480,
+    ) -> None:
+        """
+        Build a candidate with a synthetic frame.
+
+        Args:
+            bbox: Detection bbox in xyxy form, or None for a bbox-less detection.
+            confidence: Detection confidence.
+            width: Source frame width.
+            height: Source frame height.
+        """
+        import numpy as np
+
+        self.detection = {"bbox_xyxy": bbox} if bbox is not None else {}
+        self.confidence = confidence
+        self.frame = np.zeros((height, width, 3), dtype=np.uint8)
+        self.timestamp_seconds = 0.0
+
+
+def test_bbox_is_converted_from_xyxy_to_xywh() -> None:
+    from app.services.job_service import _build_quality_detection_dicts
+
+    result = _build_quality_detection_dicts([_FakeCandidate((10.0, 20.0, 110.0, 70.0))])
+
+    assert len(result) == 1
+    # x, y stay as the origin; w, h become the extents (100 x 50), not corners.
+    assert result[0]["bbox"] == [10.0, 20.0, 100.0, 50.0]
+
+
+def test_inverted_bbox_cannot_produce_negative_extent() -> None:
+    """A reversed box must clamp to zero rather than yield a negative width."""
+    from app.services.job_service import _build_quality_detection_dicts
+
+    result = _build_quality_detection_dicts([_FakeCandidate((100.0, 80.0, 40.0, 20.0))])
+
+    assert result[0]["bbox"][2] == 0.0
+    assert result[0]["bbox"][3] == 0.0
+
+
+def test_frame_dimensions_are_carried_through() -> None:
+    from app.services.job_service import _build_quality_detection_dicts
+
+    result = _build_quality_detection_dicts(
+        [_FakeCandidate((0.0, 0.0, 10.0, 10.0), width=1280, height=720)]
+    )
+
+    assert result[0]["frame_width"] == 1280
+    assert result[0]["frame_height"] == 720
+
+
+def test_candidates_without_a_bbox_are_skipped() -> None:
+    """
+    Skipped rather than zero-filled: a zeroed box would be treated as a real
+    detection of area 0 and drag the quality score down.
+    """
+    from app.services.job_service import _build_quality_detection_dicts
+
+    result = _build_quality_detection_dicts(
+        [
+            _FakeCandidate((0.0, 0.0, 10.0, 10.0)),
+            _FakeCandidate(None),
+            _FakeCandidate((5.0, 5.0, 25.0, 15.0)),
+        ]
+    )
+
+    assert len(result) == 2
+
+
+def test_short_bbox_tuples_are_skipped() -> None:
+    from app.services.job_service import _build_quality_detection_dicts
+
+    assert _build_quality_detection_dicts([_FakeCandidate((1.0, 2.0))]) == []
+
+
+def test_empty_candidate_list_yields_empty_payload() -> None:
+    from app.services.job_service import _build_quality_detection_dicts
+
+    assert _build_quality_detection_dicts([]) == []
+
+
+def test_confidence_is_coerced_to_float() -> None:
+    from app.services.job_service import _build_quality_detection_dicts
+
+    result = _build_quality_detection_dicts(
+        [_FakeCandidate((0.0, 0.0, 10.0, 10.0), confidence=1)]
+    )
+
+    assert isinstance(result[0]["confidence"], float)
+    assert result[0]["confidence"] == 1.0

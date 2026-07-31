@@ -768,6 +768,51 @@ def _resolve_confirmed_species(job_id: str, species_slug_raw: object) -> dict:
     return species_info
 
 
+def _build_quality_detection_dicts(candidates: list) -> list[dict]:
+    """
+    Convert selected candidates into the payload ``evaluate_capture`` expects.
+
+    Note the coordinate convention change: detections carry ``bbox_xyxy``
+    (corner-to-corner) while the quality service expects ``[x, y, w, h]``
+    (origin plus extent). Getting this wrong does not raise — it silently
+    produces nonsensical area and centring scores — so the conversion is
+    isolated here and unit-tested.
+
+    Candidates whose detection has no usable bbox are skipped rather than
+    contributing zeroed geometry, which would drag the quality score down.
+
+    Args:
+        candidates: Selected :class:`FrameCandidate` objects.
+
+    Returns:
+        One dict per candidate with a usable bbox, carrying ``bbox`` in xywh
+        form plus the confidence and the source frame dimensions.
+    """
+    detection_dicts: list[dict] = []
+    for candidate in candidates:
+        bbox = _get_detection_bbox(candidate.detection)
+        if not bbox or len(bbox) < 4:
+            continue
+
+        x1, y1, x2, y2 = bbox[:4]
+        detection_dicts.append(
+            {
+                # xyxy -> xywh; clamped at 0 so an inverted box cannot yield a
+                # negative extent.
+                "bbox": [
+                    float(x1),
+                    float(y1),
+                    float(max(0.0, x2 - x1)),
+                    float(max(0.0, y2 - y1)),
+                ],
+                "confidence": float(candidate.confidence),
+                "frame_height": candidate.frame.shape[0],
+                "frame_width": candidate.frame.shape[1],
+            }
+        )
+    return detection_dicts
+
+
 def process_identification_job(
     job_id: str,
     force: bool = False,
@@ -1185,7 +1230,6 @@ def process_identification_job(
         )
 
         # --- Step 9: Resolve and validate the user-selected species ---
-        # --- Step 9: Resolve and validate the user-selected species ---
         species_info = _resolve_confirmed_species(job_id, job_doc.get("species_slug"))
         # Always use the canonical catalog slug for matching, storage and UI.
         species_slug = species_info["slug"]
@@ -1201,29 +1245,9 @@ def process_identification_job(
         # --- Step 10: Quality assessment (tracking already done in selection phase) ---
         _emit_progress(job_id, "analyzing_quality", 75, "Assessing capture quality and tracking")
 
-        detection_dicts_for_quality: list[dict] = []
-        selected_timestamps: list[float] = []
+        detection_dicts_for_quality = _build_quality_detection_dicts(selected_candidates)
+        selected_timestamps = [c.timestamp_seconds for c in selected_candidates]
 
-        for c in selected_candidates:
-            selected_timestamps.append(c.timestamp_seconds)
-            bbox = _get_detection_bbox(c.detection)
-            if bbox and len(bbox) >= 4:
-                x1, y1, x2, y2 = bbox
-                xywh = [
-                    float(x1),
-                    float(y1),
-                    float(max(0.0, x2 - x1)),
-                    float(max(0.0, y2 - y1)),
-                ]
-                det_dict = {
-                    "bbox": xywh,
-                    "confidence": float(c.confidence),
-                    "frame_height": c.frame.shape[0],
-                    "frame_width": c.frame.shape[1],
-                }
-                detection_dicts_for_quality.append(det_dict)
-
-        # Use tracking result from selection phase (already computed)
         if tracking_result is None:
             # Image input: the video path never ran tracking, so do it now.
             tracking_result = validate_single_fish(frame_detections_for_tracking)
