@@ -204,9 +204,10 @@ only in debug builds.
 ```sh
 cd ai-server
 pip install -r requirements.txt -r requirements-dev.txt
-pytest                                  # 787 tests
+pytest                                  # 1000 tests
 pytest --cov=app --cov-report=term      # with coverage
 pytest -m "not slow"                    # skip tests that load real weights
+pytest -p no:randomly                   # disable order randomisation while debugging
 ```
 
 ### Dataset tooling

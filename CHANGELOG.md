@@ -426,26 +426,39 @@ New suites, and the reason each matters:
 | `test_docstring_accuracy.py` | 65 | Documentation that names non-existent parameters |
 | `test_integration.py` | 26 | API authorisation regressions, rewritten to run without a live server |
 
-Per-module coverage of the security-critical and image-processing paths:
+Per-module coverage, highest first (modules with 40+ statements):
 
 | Module | Coverage |
 |--------|---------:|
 | `database.py` | 98% |
-| `model_fingerprint_service.py` | 99% |
-| `media_validation.py` | 97% |
-| `identity_scoring_service.py` | 97% |
-| `crop_utils.py` | 90% |
+| `routers/identify.py` | 97% |
+| `security.py` | 97% |
+| `utils/media_validation.py` | 97% |
+| `services/identity_scoring_service.py` | 97% |
+| `services/model_fingerprint_service.py` | 96% |
+| `routers/auth.py` | 95% |
+| `routers/websocket.py` | 94% |
+| `utils/crop_utils.py` | 90% |
+| `services/czech_area_service.py` | 89% |
+| `migrations/runner.py` | 89% |
+| `calibration/__init__.py` | 88% |
+| `routers/dashboard.py` | 87% |
 | `config.py` | 87% |
-| `storage_service.py` | 84% (was 7%) |
-| `matching_service.py` | 83% |
-| `result_cache.py` | 82% |
-| `identification_pipeline.py` | 80% |
-| `sightings.py` | 79% |
-| `obb_roi_service.py` | 77% (was 33%) |
-| `video.py` | 77% (was 47%) |
-| `security.py` | 71% |
-| `auth.py` | 71% |
-| `classifier_service.py` | 63% (was 0%) |
+| `services/fish_tracking_service.py` | 87% |
+| `services/capture_quality_service.py` | 87% |
+| `services/storage_service.py` | 84% |
+| `services/event_bus.py` | 84% |
+| `services/matching_service.py` | 83% |
+| `services/result_cache.py` | 82% |
+| `migrations/versions/005_embeddings_unique_index.py` | 81% |
+| `services/identification_pipeline.py` | 80% |
+| `services/classifier_service.py` | 79% |
+| `routers/sightings.py` | 79% |
+
+The remaining deficit is concentrated in three places, all documented under
+Known gaps: `job_service` (30%, 687 statements), `fish_encoder_model` (41% — the
+untested part requires a real checkpoint on disk) and `retry_service` (38% — the
+untested part is the async polling loop).
 
 Two modules also shrank substantially as dead code came out: `storage_service`
 515 → 251 lines, and 1 332 lines removed from the retired `/identify` chain.
@@ -454,7 +467,7 @@ Two modules also shrank substantially as dead code came out: `storage_service`
 
 | Check | Result |
 |-------|--------|
-| `pytest` (ai-server) | 787 passed, 0 failed (was 257 passed, 5 failed) |
+| `pytest` (ai-server) | 1000 passed, 0 failed (was 257 passed, 5 failed) |
 | `pytest` (scripts) | 13 passed |
 | `flutter analyze` | 0 errors, 0 warnings |
 | `flutter build bundle` | succeeds |
@@ -463,8 +476,8 @@ Two modules also shrank substantially as dead code came out: `storage_service`
 | `ruff` (correctness + security rules) | clean |
 | Docstring coverage | 100% functions, classes and modules (enforced by test) |
 | Type hints | 95% returns, 97% arguments |
-| Overall coverage | 63% (was 46%) |
-| Coverage of hardened modules | `database` 98%, `media_validation` 97%, `crop_utils` 90%, `storage_service` 84%, `matching_service` 83% |
+| Overall coverage | 69% (was 46%) |
+| Test-order stability | 1000 tests pass under randomised ordering (pytest-randomly) |
 
 ### Known gaps
 
